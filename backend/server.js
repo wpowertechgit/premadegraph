@@ -14,7 +14,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use('/graph-view', express.static(path.join(__dirname, 'output')));
 const backendDir = "C:\\Users\\karol\\OneDrive\\Dokumentumok\\Dolgozat\\src\\backend";
-const dbPath = path.resolve(__dirname, 'players.db');
+const dbPath = path.resolve(__dirname, 'players.db'); //raw adatbazis amit kesobb kiegeszetiunk , celja a jatekosok adatainak tarolasa , de csak a nev alapjan
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Nem sikerült megnyitni az adatbázist:', err.message);
