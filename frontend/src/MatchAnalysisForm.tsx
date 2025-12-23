@@ -155,13 +155,13 @@ const MatchAnalysisForm = () => {
           name: `${p.riotIdGameName || "?"}#${p.riotIdTagline || "?"}`,
         }));
         // const countries = await fetchCountriesByPlayers(players);
-        const countries = "Unknown";
+        const countries: Record<string, string> = {};
         const allPlayers: PlayerInfo[] = participants.map((p: any, i: number) => {
           const playerId = `player${i + 1}`;
           const name = `${p.riotIdGameName || "?"}#${p.riotIdTagline || "?"}`;
           const feedscore = p.deaths - (p.kills + p.assists) * 0.5;
           const opscore = p.kills + p.assists * 0.965 + p.goldEarned / 500;
-          const country = countries?.[playerId] || "Unknown";
+          const country = countries[playerId] || "Unknown";
           return {
             name,
             champion: p.championName,
@@ -177,30 +177,43 @@ const MatchAnalysisForm = () => {
           };
         });
 
-        const saveAllPlayers = async (allPlayers) => {
+        interface MinimalPlayer {
+          name: string;
+          kda: string;
+          feedscore: number;
+          opscore: number;
+          country: string;
+        }
+
+        interface SavePlayerResponse {
+          message?: string;
+          [key: string]: any;
+        }
+
+        const saveAllPlayers = async (allPlayers: PlayerInfo[]): Promise<SavePlayerResponse[]> => {
           try {
-            const savePromises = allPlayers.map(player => {
-              const minimalPlayer = {
-                name: player.name,
-                kda: player.kda,
-                feedscore: player.feedscore,
-                opscore: player.opscore,
-                country: player.country,
+            const savePromises = allPlayers.map((player: PlayerInfo) => {
+              const minimalPlayer: MinimalPlayer = {
+          name: player.name,
+          kda: player.kda,
+          feedscore: player.feedscore,
+          opscore: player.opscore,
+          country: player.country,
               };
 
               return fetch("http://localhost:3001/api/save-player", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(minimalPlayer),
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(minimalPlayer),
               })
-                .then(response => {
-                  if (!response.ok) {
-                    throw new Error(`Failed to save player ${player.name}: ${response.statusText}`);
-                  }
-                  return response.json();
-                });
+          .then((response: Response) => {
+            if (!response.ok) {
+              throw new Error(`Failed to save player ${player.name}: ${response.statusText}`);
+            }
+            return response.json() as Promise<SavePlayerResponse>;
+          });
             });
 
             const results = await Promise.all(savePromises);

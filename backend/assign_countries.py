@@ -10,7 +10,7 @@ load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = "google/gemini-2.0-flash-001"
+MODEL = "google/gemini-3-flash-preview"
 HEADERS = {
     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
     "Content-Type": "application/json",
@@ -28,15 +28,22 @@ def batch_clusters(clusters, batch_size):
 
 def build_prompt_for_clusters(cluster_batch):
     prompt_lines = [
-        "You will receive a list of clusters, each cluster has multiple player names separated by commas.",
-        "Analyze the names in each cluster and return a JSON object where keys are cluster IDs (e.g. cluster1) and values are the most likely country of origin for that entire cluster.",
-        "Clusters are from Eastern/Nordic Europe  or the Middle East (EUNE region).If a name looks too foreign try to look for clues in the batch, try to reason.",
-        "Excluded Countries(because they have their own region) : Turkey,Russia,Western Europe",
-        "Only return the JSON object.",
-        "The content is expected to be a JSON string like:",
-        '{ "cluster1": "Poland", "cluster2": "Greece" }',
-        ""
-    ]
+            "ACT AS an expert linguist and League of Legends EUNE region specialist.",
+            "GOAL: Identify the country of origin for player clusters based on their usernames.",
+            "",
+            "RULES:",
+            "1. For each cluster, you MUST provide a country name. 'Unknown', 'Undefined', or 'N/A' is STRICTLY FORBIDDEN.",
+            "2. Use linguistic clues (e.g., 'PL' = Poland, 'RO' = Romania, 'CZ' = Czech Republic, 'GR/EL' = Greece).",
+            "3. If names are generic (English), look for subtle cultural patterns or make your BEST EDUCATED GUESS based on EUNE demographics.",
+            "4. Focus on these countries: Poland, Romania, Greece, Hungary, Czech Republic, Serbia, Bulgaria, Sweden, Norway, Denmark, Finland, Israel, Egypt.",
+            "5. EXCLUDE: Turkey, Russia, and Western Europe (Germany, France, Spain, etc.) as they have separate servers.",
+            "",
+            "OUTPUT FORMAT:",
+            "Return ONLY a raw JSON object. No explanation, no markdown formatting.",
+            'Example: {"cluster1": "Poland", "cluster2": "Romania"}',
+            "",
+            "DATA TO ANALYZE:"
+        ]
     
     for idx, cluster in enumerate(cluster_batch, start=1):
         cluster_id = f"cluster{idx}"

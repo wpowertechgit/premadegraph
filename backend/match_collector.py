@@ -21,8 +21,8 @@ REQUESTS_PER_2MIN = 90    # Use 80 out of 100 available per 2 minutes to be safe
 DELAY_BETWEEN_REQUESTS = 1.0 / REQUESTS_PER_SECOND
 
 # Fetch settings
-MATCHES_PER_PLAYER = 15  # How many matches to fetch per player
-MAX_ITERATIONS = 50 # Maximum number of players to process
+MATCHES_PER_PLAYER = 10  # How many matches to fetch per player
+MAX_ITERATIONS = 1 # Maximum number of players to process
 QUEUE_TYPE = ""
 
 # === SPECIFIC PUUID OPTION ===
@@ -129,7 +129,7 @@ class MatchCollector:
             return 0
         return len([f for f in os.listdir(MATCHES_DIR) if f.endswith('.json')])
     
-    def fetch_match_ids(self, puuid, start=5, count=20):
+    def fetch_match_ids(self, puuid, start=0, count=20):
         """Fetch match IDs for a player"""
         url = f"https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids"
         params = {
