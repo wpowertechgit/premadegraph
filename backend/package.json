@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "saveMatch.js",
   "scripts": {
+    "start": "node server.js",
+    "normalize": "node normalize_players_by_puuid.js",
+    "add-players": "node add_new_players.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

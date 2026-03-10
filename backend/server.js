@@ -7,13 +7,13 @@ const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const PORT = 3001;
 const MATCHES_DIR = path.join(__dirname, "data");
-const { exec } = require("child_process");
+const { execFile } = require("child_process");
 const { normalizePlayersByPuuid } = require("./normalize_players_by_puuid");
 
 app.use(cors());
 app.use(bodyParser.json());
 app.use('/graph-view', express.static(path.join(__dirname, 'output')));
-const backendDir = "C:\\Users\\karol\\OneDrive\\Dokumentumok\\Dolgozat\\src\\backend";
+const backendDir = __dirname;
 const dbPath = path.resolve(__dirname, 'players.db'); //raw adatbazis amit kesobb kiegeszetiunk , celja a jatekosok adatainak tarolasa , de csak a nev alapjan
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
@@ -140,7 +140,7 @@ app.post('/api/save-player', (req, res) => {
 });
 
 app.post("/api/generate-graph", (req, res) => {
-  exec(`cd "${backendDir}" && python build_graph.py --connected-only --min-weight 2`, (error, stdout, stderr) => {
+  execFile("python", ["build_graph.py", "--connected-only", "--min-weight", "2"], { cwd: backendDir }, (error, stdout, stderr) => {
     if (error) {
       console.error("Python script error:", error);
       return res.status(500).json({ message: "Python script execution failed." });
@@ -159,8 +159,6 @@ app.get("/api/graph", (req, res) => {
   });
 });
 
-// Serve static HTML graph
-app.use("/graph-view", express.static(path.join(backendDir, "output")));
 app.post("/api/normalize-players", async (req, res) => {
   try {
     await normalizePlayersByPuuid();

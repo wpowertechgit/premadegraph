@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import MatchAnalysisForm from "./MatchAnalysisForm";
 import GraphPage from "./GraphPage";
+import PathfinderLabPage from "./PathfinderLabPage";
 import { FaSyncAlt } from "react-icons/fa";
 
 function Navbar() {
@@ -44,6 +45,9 @@ function Navbar() {
       </Link>
       <Link to="/graph" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
         Asszociációs Gráf
+      </Link>
+      <Link to="/pathfinder-lab" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
+        Pathfinder Lab
       </Link>
       <button onClick={async () => {
         setLoading(true);
@@ -111,6 +115,7 @@ function App() {
         <Routes>
           <Route path="/matchanalysis" element={<MatchAnalysisForm />} />
           <Route path="/graph" element={<GraphPage />} />
+          <Route path="/pathfinder-lab" element={<PathfinderLabPage />} />
         </Routes>
       </div>
     </Router>

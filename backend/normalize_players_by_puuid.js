@@ -2,7 +2,26 @@ const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 
-const dbFile = "../playersrefined.db";
+function resolveDbFile() {
+  if (process.env.DB_PATH) {
+    return path.isAbsolute(process.env.DB_PATH)
+      ? process.env.DB_PATH
+      : path.resolve(__dirname, process.env.DB_PATH);
+  }
+
+  const candidates = [
+    path.resolve(__dirname, "players.db"),
+    path.resolve(__dirname, "../playersrefined.db"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  return candidates[0];
+}
+
+const dbFile = resolveDbFile();
 const matchDir = path.join(__dirname, "data");
 
 // Normalize opscore to 0-10 scale using actual data thresholds
