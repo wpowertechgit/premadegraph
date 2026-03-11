@@ -4,6 +4,7 @@ import {
   type ComparisonRow,
   type GraphEdge,
   type GraphNode,
+  type GraphSnapshot,
   type PathEdge,
   type PathfinderRequest,
   type PathfinderRunResponse,
@@ -28,14 +29,30 @@ interface SearchResult {
 }
 
 const NODE_MAP: Record<string, GraphNode> = {
-  a: { id: "a", label: "Player A", x: 12, y: 52 },
-  b: { id: "b", label: "Player B", x: 28, y: 22 },
-  c: { id: "c", label: "Player C", x: 30, y: 58 },
-  d: { id: "d", label: "Player D", x: 48, y: 58 },
-  e: { id: "e", label: "Player E", x: 48, y: 24 },
-  f: { id: "f", label: "Player F", x: 68, y: 42 },
-  g: { id: "g", label: "Player G", x: 84, y: 58 },
-  h: { id: "h", label: "Player H", x: 84, y: 24 },
+  a: { id: "a", label: "Aster#EUNE", x: 10, y: 28 },
+  b: { id: "b", label: "Breach#EUNE", x: 17, y: 20 },
+  c: { id: "c", label: "Cipher#EUNE", x: 20, y: 36 },
+  d: { id: "d", label: "Drift#EUNE", x: 30, y: 30 },
+  e: { id: "e", label: "Ember#EUNE", x: 36, y: 18 },
+  f: { id: "f", label: "Flux#EUNE", x: 38, y: 41 },
+  g: { id: "g", label: "Glint#EUNE", x: 49, y: 18 },
+  h: { id: "h", label: "Halo#EUNE", x: 53, y: 31 },
+  i: { id: "i", label: "Ion#EUNE", x: 58, y: 12 },
+  j: { id: "j", label: "Jolt#EUNE", x: 61, y: 26 },
+  k: { id: "k", label: "Kite#EUNE", x: 72, y: 13 },
+  l: { id: "l", label: "Lumen#EUNE", x: 76, y: 26 },
+  m: { id: "m", label: "Myth#EUNE", x: 81, y: 10 },
+  n: { id: "n", label: "Nova#EUNE", x: 84, y: 22 },
+  o: { id: "o", label: "Onyx#EUNE", x: 88, y: 34 },
+  p: { id: "p", label: "Pulse#EUNE", x: 92, y: 18 },
+  q: { id: "q", label: "Quill#EUNE", x: 20, y: 66 },
+  r: { id: "r", label: "Rune#EUNE", x: 30, y: 56 },
+  s: { id: "s", label: "Shade#EUNE", x: 41, y: 69 },
+  t: { id: "t", label: "Talon#EUNE", x: 50, y: 57 },
+  u: { id: "u", label: "Umbra#EUNE", x: 61, y: 69 },
+  v: { id: "v", label: "Vex#EUNE", x: 71, y: 57 },
+  w: { id: "w", label: "Wisp#EUNE", x: 81, y: 67 },
+  x: { id: "x", label: "Xylo#EUNE", x: 90, y: 57 },
 };
 
 const ALL_NODES = Object.values(NODE_MAP);
@@ -43,17 +60,55 @@ const ALL_NODES = Object.values(NODE_MAP);
 const SIGNED_EDGES: GraphEdge[] = [
   { from: "a", to: "b", relation: "ally", weight: 2 },
   { from: "a", to: "c", relation: "ally", weight: 4 },
+  { from: "b", to: "d", relation: "ally", weight: 3 },
   { from: "b", to: "e", relation: "ally", weight: 5 },
   { from: "c", to: "d", relation: "ally", weight: 3 },
   { from: "d", to: "f", relation: "ally", weight: 2 },
   { from: "e", to: "f", relation: "ally", weight: 4 },
   { from: "g", to: "h", relation: "ally", weight: 3 },
+  { from: "g", to: "i", relation: "ally", weight: 4 },
+  { from: "h", to: "j", relation: "ally", weight: 3 },
+  { from: "i", to: "j", relation: "ally", weight: 2 },
+  { from: "k", to: "l", relation: "ally", weight: 5 },
+  { from: "k", to: "m", relation: "ally", weight: 2 },
+  { from: "l", to: "n", relation: "ally", weight: 4 },
+  { from: "m", to: "n", relation: "ally", weight: 3 },
+  { from: "n", to: "o", relation: "ally", weight: 3 },
+  { from: "o", to: "p", relation: "ally", weight: 4 },
+  { from: "l", to: "o", relation: "ally", weight: 2 },
+  { from: "q", to: "r", relation: "ally", weight: 5 },
+  { from: "r", to: "s", relation: "ally", weight: 3 },
+  { from: "s", to: "t", relation: "ally", weight: 2 },
+  { from: "t", to: "u", relation: "ally", weight: 4 },
+  { from: "u", to: "v", relation: "ally", weight: 3 },
+  { from: "v", to: "w", relation: "ally", weight: 2 },
+  { from: "w", to: "x", relation: "ally", weight: 4 },
+  { from: "q", to: "s", relation: "ally", weight: 2 },
+  { from: "r", to: "t", relation: "ally", weight: 2 },
   { from: "a", to: "e", relation: "enemy", weight: 1 },
   { from: "b", to: "g", relation: "enemy", weight: 1 },
   { from: "c", to: "f", relation: "enemy", weight: 1 },
   { from: "d", to: "g", relation: "enemy", weight: 2 },
   { from: "f", to: "g", relation: "enemy", weight: 1 },
+  { from: "c", to: "h", relation: "enemy", weight: 1 },
+  { from: "e", to: "j", relation: "enemy", weight: 1 },
+  { from: "h", to: "l", relation: "enemy", weight: 2 },
+  { from: "i", to: "k", relation: "enemy", weight: 1 },
+  { from: "j", to: "m", relation: "enemy", weight: 1 },
+  { from: "f", to: "q", relation: "enemy", weight: 1 },
+  { from: "e", to: "r", relation: "enemy", weight: 1 },
+  { from: "j", to: "t", relation: "enemy", weight: 1 },
+  { from: "n", to: "v", relation: "enemy", weight: 1 },
+  { from: "o", to: "w", relation: "enemy", weight: 2 },
+  { from: "p", to: "x", relation: "enemy", weight: 1 },
 ];
+
+export const mockDatasetSummary = {
+  players: ALL_NODES.length,
+  relationships: SIGNED_EDGES.length,
+  allyRelationships: SIGNED_EDGES.filter((edge) => edge.relation === "ally").length,
+  enemyRelationships: SIGNED_EDGES.filter((edge) => edge.relation === "enemy").length,
+};
 
 export const mockPlayers: PlayerOption[] = ALL_NODES.map((node) => ({
   id: node.id,
@@ -529,7 +584,11 @@ function makeRuntime(algorithm: AlgorithmId, traceLength: number, found: boolean
   return Number((base + traceCost + outcomeBias).toFixed(1));
 }
 
-function getGraphSnapshot(pathMode: PathMode, sourceId: string, targetId: string) {
+export function getMockGraphSnapshot(
+  pathMode: PathMode,
+  sourceId: string,
+  targetId: string,
+): GraphSnapshot {
   const edges = getAllowedEdges(pathMode);
   const visibleNodeIds = new Set<string>([sourceId, targetId]);
 
@@ -558,7 +617,7 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
       request: baseRequest,
       status: "invalid_input",
       summary: {
-        pathLength: 0,
+      pathLength: 0,
         nodesVisited: 0,
         edgesConsidered: 0,
         runtimeMs: 0,
@@ -586,7 +645,7 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
       },
       path: { nodes: [], edges: [] },
       trace: [],
-      graphSnapshot: getGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
+      graphSnapshot: getMockGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
       warnings: ["A* is planned, but not enabled in this prototype."],
     };
   }
@@ -625,7 +684,7 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
       edges: result.pathEdges,
     },
     trace: result.trace,
-    graphSnapshot: getGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
+    graphSnapshot: getMockGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
     warnings,
   };
 }

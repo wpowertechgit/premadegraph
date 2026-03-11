@@ -10,14 +10,14 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div
       style={{
-        background: "rgba(9, 16, 28, 0.85)",
-        border: "1px solid rgba(128, 181, 255, 0.14)",
+        background: "#20252c",
+        border: "1px solid #313842",
         borderRadius: "14px",
         padding: "0.75rem",
       }}
     >
-      <div style={{ fontSize: "0.75rem", color: "#9cb3d1", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ marginTop: "0.25rem", fontSize: "1.15rem", color: "#f5f9ff" }}>{value}</div>
+      <div style={{ fontSize: "0.75rem", color: "#9ca3af", textTransform: "uppercase" }}>{label}</div>
+      <div style={{ marginTop: "0.25rem", fontSize: "1.15rem", color: "#f3f4f6" }}>{value}</div>
     </div>
   );
 }
@@ -26,18 +26,17 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
   return (
     <section
       style={{
-        background:
-          "linear-gradient(140deg, rgba(19, 33, 52, 0.96), rgba(11, 18, 32, 0.98))",
-        border: "1px solid rgba(128, 181, 255, 0.2)",
+        background: "#1d2127",
+        border: "1px solid #303741",
         borderRadius: "18px",
         padding: "1rem",
-        color: "#f4f8ff",
+        color: "#f3f4f6",
       }}
     >
       <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Run Summary</div>
 
       {!run ? (
-        <div style={{ color: "#b5c7e3" }}>Select players and run a search to populate live stats.</div>
+        <div style={{ color: "#9ca3af" }}>Select players and run a search to populate live stats.</div>
       ) : (
         <>
           <div
@@ -62,12 +61,12 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
               marginTop: "0.9rem",
               padding: "0.8rem",
               borderRadius: "14px",
-              background: "rgba(12, 19, 33, 0.82)",
-              border: "1px solid rgba(128, 181, 255, 0.14)",
+              background: "#20252c",
+              border: "1px solid #313842",
             }}
           >
-            <div style={{ color: "#d6e3f5", fontWeight: 600 }}>Comparison Note</div>
-            <div style={{ color: "#a9bdd8", marginTop: "0.3rem" }}>{comparisonNote}</div>
+            <div style={{ color: "#f3f4f6", fontWeight: 600 }}>Comparison Note</div>
+            <div style={{ color: "#9ca3af", marginTop: "0.3rem" }}>{comparisonNote}</div>
           </div>
 
           {run.warnings.length > 0 ? (
@@ -76,9 +75,9 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
                 marginTop: "0.9rem",
                 padding: "0.8rem",
                 borderRadius: "14px",
-                background: "rgba(71, 32, 14, 0.3)",
-                border: "1px solid rgba(249, 115, 22, 0.22)",
-                color: "#fdc58f",
+                background: "#30261f",
+                border: "1px solid #62493a",
+                color: "#d9b08c",
               }}
             >
               {run.warnings.map((warning) => (

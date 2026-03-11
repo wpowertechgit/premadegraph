@@ -32,6 +32,11 @@ export interface GraphEdge {
   weight: number;
 }
 
+export interface GraphSnapshot {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 export interface PathEdge {
   from: string;
   to: string;
@@ -67,10 +72,7 @@ export interface PathfinderRunResponse {
     edges: PathEdge[];
   };
   trace: TraceStep[];
-  graphSnapshot: {
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-  };
+  graphSnapshot: GraphSnapshot;
   warnings: string[];
 }
 

@@ -23,13 +23,11 @@ interface PathfinderControlsProps {
 }
 
 const panelStyle: React.CSSProperties = {
-  background:
-    "linear-gradient(140deg, rgba(19, 33, 52, 0.96), rgba(11, 18, 32, 0.98))",
-  border: "1px solid rgba(128, 181, 255, 0.2)",
+  background: "#1d2127",
+  border: "1px solid #303741",
   borderRadius: "18px",
   padding: "1rem",
-  color: "#f4f8ff",
-  boxShadow: "0 18px 48px rgba(3, 10, 21, 0.35)",
+  color: "#f3f4f6",
 };
 
 const labelStyle: React.CSSProperties = {
@@ -39,15 +37,15 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: "0.05em",
   textTransform: "uppercase",
   marginBottom: "0.35rem",
-  color: "#b5c7e3",
+  color: "#9ca3af",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
   borderRadius: "12px",
-  border: "1px solid rgba(136, 173, 230, 0.28)",
-  background: "rgba(13, 21, 36, 0.85)",
-  color: "#f4f8ff",
+  border: "1px solid #39424d",
+  background: "#20252c",
+  color: "#f3f4f6",
   padding: "0.8rem 0.9rem",
 };
 
@@ -137,10 +135,10 @@ export default function PathfinderControls({
                     flex: 1,
                     borderRadius: "12px",
                     border: active
-                      ? "1px solid rgba(110, 184, 255, 0.65)"
-                      : "1px solid rgba(136, 173, 230, 0.2)",
-                    background: active ? "rgba(44, 104, 189, 0.35)" : "rgba(13, 21, 36, 0.85)",
-                    color: "#f4f8ff",
+                      ? "1px solid #5680a7"
+                      : "1px solid #39424d",
+                    background: active ? "#2c3540" : "#20252c",
+                    color: "#f3f4f6",
                     padding: "0.8rem 0.5rem",
                   }}
                 >
@@ -182,9 +180,10 @@ export default function PathfinderControls({
           disabled={loading}
           onClick={onRun}
           style={{
-            background: "linear-gradient(135deg, #0ea5e9, #2563eb)",
-            color: "#f4f8ff",
+            background: "#2f455b",
+            color: "#f3f4f6",
             minWidth: "144px",
+            border: "1px solid #4f677f",
           }}
         >
           {loading ? "Running..." : "Run Search"}
@@ -193,10 +192,10 @@ export default function PathfinderControls({
           type="button"
           onClick={onReset}
           style={{
-            background: "rgba(19, 31, 51, 0.9)",
-            color: "#dbe8ff",
+            background: "#20252c",
+            color: "#d1d5db",
             minWidth: "144px",
-            border: "1px solid rgba(136, 173, 230, 0.2)",
+            border: "1px solid #39424d",
           }}
         >
           Reset

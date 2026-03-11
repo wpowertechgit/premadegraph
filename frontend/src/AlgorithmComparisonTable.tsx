@@ -16,12 +16,11 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
   return (
     <section
       style={{
-        background:
-          "linear-gradient(140deg, rgba(19, 33, 52, 0.96), rgba(11, 18, 32, 0.98))",
-        border: "1px solid rgba(128, 181, 255, 0.2)",
+        background: "#1d2127",
+        border: "1px solid #303741",
         borderRadius: "18px",
         padding: "1rem",
-        color: "#f4f8ff",
+        color: "#f3f4f6",
         overflowX: "auto",
       }}
     >
@@ -30,7 +29,7 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
         <thead>
-          <tr style={{ color: "#9cb3d1", textAlign: "left" }}>
+          <tr style={{ color: "#9ca3af", textAlign: "left" }}>
             <th style={{ padding: "0.7rem 0.45rem" }}>Algorithm</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>Supported Now?</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>Path Found?</th>
@@ -42,7 +41,7 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.algorithm} style={{ borderTop: "1px solid rgba(128, 181, 255, 0.12)" }}>
+            <tr key={row.algorithm} style={{ borderTop: "1px solid #313842" }}>
               <td style={{ padding: "0.8rem 0.45rem", fontWeight: 600 }}>{row.label}</td>
               <td style={{ padding: "0.8rem 0.45rem" }}>
                 {row.supportedNow ? (
@@ -53,8 +52,8 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
                       display: "inline-block",
                       padding: "0.15rem 0.45rem",
                       borderRadius: "999px",
-                      background: "rgba(245, 158, 11, 0.14)",
-                      color: "#fcd34d",
+                      background: "#3a3122",
+                      color: "#d7b16a",
                     }}
                   >
                     Planned
@@ -67,7 +66,7 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
               <td style={{ padding: "0.8rem 0.45rem" }}>{formatValue(row.pathLength)}</td>
               <td style={{ padding: "0.8rem 0.45rem" }}>{formatValue(row.nodesVisited)}</td>
               <td style={{ padding: "0.8rem 0.45rem" }}>{formatValue(row.runtimeMs, " ms")}</td>
-              <td style={{ padding: "0.8rem 0.45rem", color: "#a9bdd8" }}>{row.relativeNote}</td>
+              <td style={{ padding: "0.8rem 0.45rem", color: "#9ca3af" }}>{row.relativeNote}</td>
             </tr>
           ))}
         </tbody>

@@ -27,12 +27,11 @@ export default function PlaybackControls({
   return (
     <section
       style={{
-        background:
-          "linear-gradient(140deg, rgba(19, 33, 52, 0.96), rgba(11, 18, 32, 0.98))",
-        border: "1px solid rgba(128, 181, 255, 0.2)",
+        background: "#1d2127",
+        border: "1px solid #303741",
         borderRadius: "18px",
         padding: "1rem",
-        color: "#f4f8ff",
+        color: "#f3f4f6",
       }}
     >
       <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -52,7 +51,7 @@ export default function PlaybackControls({
           Restart
         </button>
 
-        <label style={{ marginLeft: "auto", color: "#b5c7e3", fontSize: "0.88rem" }}>
+        <label style={{ marginLeft: "auto", color: "#9ca3af", fontSize: "0.88rem" }}>
           Speed{" "}
           <select
             value={playbackSpeed}
@@ -60,9 +59,9 @@ export default function PlaybackControls({
             style={{
               marginLeft: "0.45rem",
               borderRadius: "10px",
-              border: "1px solid rgba(136, 173, 230, 0.2)",
-              background: "rgba(13, 21, 36, 0.85)",
-              color: "#f4f8ff",
+              border: "1px solid #39424d",
+              background: "#20252c",
+              color: "#f3f4f6",
               padding: "0.45rem 0.6rem",
             }}
           >

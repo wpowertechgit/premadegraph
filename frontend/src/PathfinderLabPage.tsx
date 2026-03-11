@@ -2,9 +2,10 @@ import React, { useMemo, useState } from "react";
 import AlgorithmComparisonTable from "./AlgorithmComparisonTable";
 import PathfinderCanvas from "./PathfinderCanvas";
 import PathfinderControls from "./PathfinderControls";
+import PathfinderGraphOverlay from "./PathfinderGraphOverlay";
 import PlaybackControls from "./PlaybackControls";
 import RunSummaryPanel from "./RunSummaryPanel";
-import { getComparisonRows, mockPlayers, runPathfinderMock } from "./pathfinderMocks";
+import { getComparisonRows, getMockGraphSnapshot, mockDatasetSummary, mockPlayers, runPathfinderMock } from "./pathfinderMocks";
 import { usePathfinderPlayback } from "./usePathfinderPlayback";
 import { type AlgorithmId, type PathfinderRunResponse, type PathMode } from "./pathfinderTypes";
 
@@ -21,6 +22,7 @@ export default function PathfinderLabPage() {
   const [pathMode, setPathMode] = useState<PathMode>("social-path");
   const [loading, setLoading] = useState(false);
   const [run, setRun] = useState<PathfinderRunResponse | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const [comparisonNote, setComparisonNote] = useState(
     getDefaultComparisonNote("a", "f", "social-path"),
   );
@@ -30,6 +32,10 @@ export default function PathfinderLabPage() {
     [pathMode, sourcePlayerId, targetPlayerId],
   );
   const playback = usePathfinderPlayback(run);
+  const snapshot = useMemo(
+    () => run?.graphSnapshot ?? getMockGraphSnapshot(pathMode, sourcePlayerId, targetPlayerId),
+    [pathMode, run, sourcePlayerId, targetPlayerId],
+  );
 
   const resetPrototype = () => {
     setRun(null);
@@ -62,9 +68,8 @@ export default function PathfinderLabPage() {
         width: "100%",
         padding: "1.25rem",
         boxSizing: "border-box",
-        background:
-          "radial-gradient(circle at top left, rgba(16, 58, 110, 0.55), rgba(4, 10, 20, 1) 55%)",
-        color: "#f4f8ff",
+        background: "#15181d",
+        color: "#f3f4f6",
       }}
     >
       <div
@@ -78,23 +83,52 @@ export default function PathfinderLabPage() {
         <section
           style={{
             padding: "1.1rem 1.15rem",
-            borderRadius: "20px",
-            background: "linear-gradient(135deg, rgba(13, 24, 42, 0.95), rgba(8, 15, 27, 0.98))",
-            border: "1px solid rgba(128, 181, 255, 0.16)",
-            boxShadow: "0 18px 48px rgba(3, 10, 21, 0.35)",
+            borderRadius: "18px",
+            background: "#1d2127",
+            border: "1px solid #303741",
           }}
         >
-          <div style={{ color: "#7dd3fc", fontSize: "0.82rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          <div style={{ color: "#8b98a7", fontSize: "0.82rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Pathfinder Lab
           </div>
           <h1 style={{ margin: "0.4rem 0 0.55rem", fontSize: "clamp(2rem, 4vw, 3rem)" }}>
-            Search replay for player-to-player graph traversal
+            Build the graph tool first, then connect it to the backend
           </h1>
-          <p style={{ margin: 0, maxWidth: "760px", color: "#afc4df" }}>
-            This frontend-only prototype runs against a curated local graph and returns the same response
-            shape the future backend will use. Switch between social-path and battle-path to see how
-            enemy edges can reduce distance or create connectivity.
+          <p style={{ margin: 0, maxWidth: "860px", color: "#9ca3af" }}>
+            The immediate job is not backend integration. It is proving a denser mock dataset, an efficient
+            graph rendering surface, and a reusable overlay component that can survive close and reopen cycles
+            without resetting the active content.
           </p>
+        </section>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "0.75rem",
+          }}
+        >
+          {[
+            { label: "Mock Players", value: mockDatasetSummary.players },
+            { label: "Relationships", value: mockDatasetSummary.relationships },
+            { label: "Renderer", value: "Canvas overlay" },
+            { label: "Next backend step", value: "Graph snapshot API" },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                borderRadius: "16px",
+                border: "1px solid #303741",
+                background: "#1d2127",
+                padding: "0.9rem 1rem",
+              }}
+            >
+              <div style={{ color: "#8b98a7", fontSize: "0.78rem", textTransform: "uppercase" }}>{item.label}</div>
+              <div style={{ color: "#f3f4f6", fontSize: "1.2rem", fontWeight: 700, marginTop: "0.25rem" }}>
+                {item.value}
+              </div>
+            </div>
+          ))}
         </section>
 
         <PathfinderControls
@@ -135,7 +169,14 @@ export default function PathfinderLabPage() {
             gap: "1rem",
           }}
         >
-          <PathfinderCanvas run={run} frame={playback.frame} />
+          <PathfinderCanvas
+            snapshot={snapshot}
+            run={run}
+            frame={playback.frame}
+            sourcePlayerId={sourcePlayerId}
+            targetPlayerId={targetPlayerId}
+            onOpenOverlay={() => setOverlayOpen(true)}
+          />
           <RunSummaryPanel run={run} comparisonNote={comparisonNote} />
         </div>
 
@@ -153,6 +194,17 @@ export default function PathfinderLabPage() {
 
         <AlgorithmComparisonTable rows={comparisonRows} />
       </div>
+
+      <PathfinderGraphOverlay
+        open={overlayOpen}
+        onClose={() => setOverlayOpen(false)}
+        snapshot={snapshot}
+        run={run}
+        frame={playback.frame}
+        sourcePlayerId={sourcePlayerId}
+        targetPlayerId={targetPlayerId}
+        datasetSummary={mockDatasetSummary}
+      />
     </div>
   );
 }
