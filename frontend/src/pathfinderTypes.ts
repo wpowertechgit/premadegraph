@@ -5,6 +5,7 @@ export type RunStatus = "found" | "not_found" | "same_source_target" | "invalid_
 export type PlaybackState = "idle" | "ready" | "playing" | "paused" | "finished";
 export type TracePhase = "discover" | "expand" | "resolve" | "complete";
 export type EdgeHighlightState = "exploring" | "seen" | "resolved";
+export type ExecutionMode = "frontend-demo" | "backend-prototype" | "rust-backend-prototype";
 
 export interface PathfinderRequest {
   sourcePlayerId: string;
@@ -90,6 +91,36 @@ export interface ComparisonRow {
   nodesVisited: number | null;
   runtimeMs: number | null;
   relativeNote: string;
+}
+
+export interface DatasetSummary {
+  players: number;
+  relationships: number;
+  allyRelationships: number;
+  enemyRelationships: number;
+}
+
+export interface PathfinderOptionsResponse {
+  executionMode: "backend-prototype" | "rust-backend-prototype";
+  players: PlayerOption[];
+  datasetSummary: DatasetSummary;
+  supportedAlgorithms: AlgorithmId[];
+  previewSnapshot: GraphSnapshot;
+}
+
+export interface PathfinderCompareResponse {
+  rows: ComparisonRow[];
+}
+
+export interface PathfinderEngineSpecResponse {
+  executionMode: "backend-prototype" | "rust-backend-prototype";
+  requestContract: Record<string, unknown>;
+  responseContract: Record<string, unknown>;
+  signedGraphModel: Record<string, unknown>;
+  integrationPath: {
+    rust: string[];
+    go: string[];
+  };
 }
 
 export interface CanvasFrame {

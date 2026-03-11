@@ -3,6 +3,7 @@ import {
   ALGORITHM_LABELS,
   PATH_MODE_LABELS,
   type AlgorithmId,
+  type ExecutionMode,
   type PathMode,
   type PlayerOption,
 } from "./pathfinderTypes";
@@ -13,11 +14,13 @@ interface PathfinderControlsProps {
   targetPlayerId: string;
   algorithm: AlgorithmId;
   pathMode: PathMode;
+  executionMode: ExecutionMode;
   loading: boolean;
   onSourceChange: (value: string) => void;
   onTargetChange: (value: string) => void;
   onAlgorithmChange: (value: AlgorithmId) => void;
   onPathModeChange: (value: PathMode) => void;
+  onExecutionModeChange: (value: ExecutionMode) => void;
   onRun: () => void;
   onReset: () => void;
 }
@@ -55,11 +58,13 @@ export default function PathfinderControls({
   targetPlayerId,
   algorithm,
   pathMode,
+  executionMode,
   loading,
   onSourceChange,
   onTargetChange,
   onAlgorithmChange,
   onPathModeChange,
+  onExecutionModeChange,
   onRun,
   onReset,
 }: PathfinderControlsProps) {
@@ -67,6 +72,35 @@ export default function PathfinderControls({
 
   return (
     <section style={panelStyle}>
+      <div style={{ marginBottom: "0.95rem" }}>
+        <label style={labelStyle}>Execution Mode</label>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {([
+            { id: "frontend-demo", label: "Frontend Demo" },
+            { id: "backend-prototype", label: "Backend Prototype" },
+            { id: "rust-backend-prototype", label: "Rust Prototype" },
+          ] as { id: ExecutionMode; label: string }[]).map((mode) => {
+            const active = mode.id === executionMode;
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => onExecutionModeChange(mode.id)}
+                style={{
+                  borderRadius: "12px",
+                  border: active ? "1px solid #7d8fa1" : "1px solid #39424d",
+                  background: active ? "#303943" : "#20252c",
+                  color: "#f3f4f6",
+                  padding: "0.7rem 0.9rem",
+                }}
+              >
+                {mode.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>Source Player</label>

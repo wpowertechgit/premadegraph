@@ -9,6 +9,13 @@ const PORT = 3001;
 const MATCHES_DIR = path.join(__dirname, "data");
 const { execFile } = require("child_process");
 const { normalizePlayersByPuuid } = require("./normalize_players_by_puuid");
+const {
+  runSearch: runPrototypePathfinderSearch,
+  compareAlgorithms: comparePrototypeAlgorithms,
+  getOptions: getPrototypePathfinderOptions,
+  getEngineSpec: getPrototypeEngineSpec,
+} = require("./pathfinder/prototypeEngine");
+const { executeRustCommand } = require("./pathfinder/rustBridge");
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -166,6 +173,107 @@ app.post("/api/normalize-players", async (req, res) => {
   } catch (err) {
     console.error("Normalization error:", err);
     res.status(500).json({ error: "Normalization failed.", details: err.message });
+  }
+});
+
+app.get("/api/pathfinder/options", (req, res) => {
+  res.json(getPrototypePathfinderOptions());
+});
+
+app.get("/api/pathfinder/engine-spec", (req, res) => {
+  res.json(getPrototypeEngineSpec());
+});
+
+app.post("/api/pathfinder/run", (req, res) => {
+  try {
+    const payload = req.body || {};
+    const response = runPrototypePathfinderSearch({
+      sourcePlayerId: payload.sourcePlayerId,
+      targetPlayerId: payload.targetPlayerId,
+      algorithm: payload.algorithm,
+      pathMode: payload.pathMode,
+      weightedMode: payload.weightedMode,
+      options: {
+        includeTrace: payload.options?.includeTrace !== false,
+        maxSteps: payload.options?.maxSteps || 5000,
+      },
+    });
+    res.json(response);
+  } catch (error) {
+    console.error("Pathfinder prototype run failed:", error);
+    res.status(500).json({ error: "Pathfinder prototype run failed." });
+  }
+});
+
+app.post("/api/pathfinder/compare", (req, res) => {
+  try {
+    const payload = req.body || {};
+    res.json({
+      rows: comparePrototypeAlgorithms(
+        payload.sourcePlayerId,
+        payload.targetPlayerId,
+        payload.pathMode || "social-path",
+      ),
+    });
+  } catch (error) {
+    console.error("Pathfinder compare failed:", error);
+    res.status(500).json({ error: "Pathfinder compare failed." });
+  }
+});
+
+app.get("/api/pathfinder-rust/options", async (req, res) => {
+  try {
+    const response = await executeRustCommand("options");
+    res.json(response);
+  } catch (error) {
+    console.error("Rust pathfinder options failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/pathfinder-rust/engine-spec", async (req, res) => {
+  try {
+    const response = await executeRustCommand("spec");
+    res.json(response);
+  } catch (error) {
+    console.error("Rust pathfinder engine spec failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/run", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const response = await executeRustCommand("run", {
+      sourcePlayerId: payload.sourcePlayerId,
+      targetPlayerId: payload.targetPlayerId,
+      algorithm: payload.algorithm,
+      pathMode: payload.pathMode,
+      weightedMode: payload.weightedMode,
+      options: {
+        includeTrace: payload.options?.includeTrace !== false,
+        maxSteps: payload.options?.maxSteps || 5000,
+      },
+    });
+    res.json(response);
+  } catch (error) {
+    console.error("Rust pathfinder run failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/compare", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const response = await executeRustCommand("compare", {
+      sourcePlayerId: payload.sourcePlayerId,
+      targetPlayerId: payload.targetPlayerId,
+      pathMode: payload.pathMode || "social-path",
+    });
+    res.json(response);
+  } catch (error) {
+    console.error("Rust pathfinder compare failed:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
