@@ -86,7 +86,7 @@ export default function PathfinderGraphScene({
       }
       setDimensions({
         width: Math.floor(entry.contentRect.width),
-        height: Math.max(Math.floor(entry.contentRect.height), variant === "overlay" ? 660 : 360),
+        height: Math.max(Math.floor(entry.contentRect.height), variant === "overlay" ? 500 : 360),
       });
     });
 
@@ -291,6 +291,7 @@ export default function PathfinderGraphScene({
         position: "relative",
         width: "100%",
         height: variant === "overlay" ? "100%" : "390px",
+        minHeight: variant === "overlay" ? "500px" : "390px",
         borderRadius: "16px",
         overflow: "hidden",
         background: "#1f2328",

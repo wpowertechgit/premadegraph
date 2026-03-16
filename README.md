@@ -1,6 +1,12 @@
 # ⚠️ IMPORTANT ⚠️  
 ## Steps for Matchdata Crawling
 
+## Architecture Docs
+- [Unified Cluster Persistence And Exact A*](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/docs/unified-cluster-persistence-and-astar.md)
+
+## License
+This repository is licensed under the MIT License. See [LICENSE](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/LICENSE).
+
 ---
 
 ### ✅ Step 0 — Start the Dev Server
@@ -94,4 +100,3 @@ python fetch_clusters.py
 python assign_countries.py
 ```
 # Happy Crawling!
-

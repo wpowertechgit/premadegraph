@@ -5,7 +5,7 @@ export type RunStatus = "found" | "not_found" | "same_source_target" | "invalid_
 export type PlaybackState = "idle" | "ready" | "playing" | "paused" | "finished";
 export type TracePhase = "discover" | "expand" | "resolve" | "complete";
 export type EdgeHighlightState = "exploring" | "seen" | "resolved";
-export type ExecutionMode = "frontend-demo" | "backend-prototype" | "rust-backend-prototype";
+export type ExecutionMode = "frontend-demo" | "backend" | "rust-backend";
 
 export interface PathfinderRequest {
   sourcePlayerId: string;
@@ -24,6 +24,9 @@ export interface GraphNode {
   label: string;
   x: number;
   y: number;
+  clusterId?: string;
+  isBridge?: boolean;
+  isStar?: boolean;
 }
 
 export interface GraphEdge {
@@ -101,19 +104,27 @@ export interface DatasetSummary {
 }
 
 export interface PathfinderOptionsResponse {
-  executionMode: "backend-prototype" | "rust-backend-prototype";
+  executionMode: "backend" | "rust-backend";
   players: PlayerOption[];
   datasetSummary: DatasetSummary;
   supportedAlgorithms: AlgorithmId[];
   previewSnapshot: GraphSnapshot;
+  clusterSummaries?: ClusterSummary[];
 }
 
 export interface PathfinderCompareResponse {
   rows: ComparisonRow[];
 }
 
+export interface PathfinderCompareRequest {
+  sourcePlayerId: string;
+  targetPlayerId: string;
+  pathMode: "social-path" | "battle-path";
+  weightedMode: boolean;
+}
+
 export interface PathfinderEngineSpecResponse {
-  executionMode: "backend-prototype" | "rust-backend-prototype";
+  executionMode: "backend" | "rust-backend";
   requestContract: Record<string, unknown>;
   responseContract: Record<string, unknown>;
   signedGraphModel: Record<string, unknown>;
@@ -121,6 +132,18 @@ export interface PathfinderEngineSpecResponse {
     rust: string[];
     go: string[];
   };
+}
+
+export interface ClusterSummary {
+  clusterId: string;
+  clusterType: string;
+  algorithm: string;
+  size: number;
+  bestOp: string | null;
+  worstFeed: string | null;
+  centerX: number;
+  centerY: number;
+  highlightedMembers: string[];
 }
 
 export interface CanvasFrame {

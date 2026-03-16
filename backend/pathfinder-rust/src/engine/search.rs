@@ -1,4 +1,7 @@
-use super::graph::{allowed_neighbors, build_path, relation_for_path, GraphState};
+use super::graph::{
+    allowed_neighbors, build_path, heuristic_lower_bound, relation_for_path, tie_break_distance,
+    GraphState, ModeKey,
+};
 use crate::models::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
@@ -55,6 +58,42 @@ fn create_trace_step(
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
+struct AStarState {
+    total_cost: usize,
+    path_cost: usize,
+    heuristic_cost: usize,
+    tie_break: usize,
+    id: String,
+}
+
+impl Ord for AStarState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .total_cost
+            .cmp(&self.total_cost)
+            .then_with(|| other.heuristic_cost.cmp(&self.heuristic_cost))
+            .then_with(|| other.tie_break.cmp(&self.tie_break))
+            .then_with(|| self.id.cmp(&other.id))
+    }
+}
+
+impl PartialOrd for AStarState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn traversal_cost(request: &PathfinderRequest, neighbor: &super::graph::Neighbor) -> usize {
+    let weight = neighbor.weight_for_mode(&request.path_mode) as usize;
+    if !request.weighted_mode {
+        return 1000;
+    }
+
+    let safe = weight.max(1);
+    (1000 + safe - 1) / safe
+}
+
 pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> SearchResult {
     let mut queue = VecDeque::from([request.source_player_id.clone()]);
     let mut visited = HashSet::from([request.source_player_id.clone()]);
@@ -101,7 +140,7 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
                 vec![TraceHighlightedEdge {
                     from: current.clone(),
                     to: neighbor.id.clone(),
-                    relation: neighbor.relation.clone(),
+                    relation: neighbor.relation_for_mode(&request.path_mode),
                     state: if is_new {
                         "exploring".to_string()
                     } else {
@@ -208,7 +247,7 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
             }
 
             edges_considered += 1;
-            let next_cost = current.cost + 1;
+            let next_cost = current.cost + traversal_cost(request, &neighbor);
             let known = distances.get(&neighbor.id).copied();
             let improved = known.is_none() || next_cost < known.unwrap();
 
@@ -232,7 +271,7 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
                 vec![TraceHighlightedEdge {
                     from: current.id.clone(),
                     to: neighbor.id.clone(),
-                    relation: neighbor.relation.clone(),
+                    relation: neighbor.relation_for_mode(&request.path_mode),
                     state: if improved {
                         "exploring".to_string()
                     } else {
@@ -259,6 +298,140 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
     let (path_nodes, path_edges) =
         build_path(graph, &parents, &request.target_player_id, &request.path_mode);
 
+    trace.push(create_trace_step(
+        step,
+        "resolve",
+        Some(request.target_player_id.clone()),
+        vec![],
+        &visited,
+        path_edges
+            .iter()
+            .map(|edge| TraceHighlightedEdge {
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                relation: edge.relation.clone(),
+                state: "resolved".to_string(),
+            })
+            .collect(),
+    ));
+
+    SearchResult {
+        found: true,
+        path_nodes,
+        path_edges,
+        visited_count: visited.len(),
+        edges_considered,
+        trace,
+    }
+}
+
+pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> SearchResult {
+    let mode = ModeKey::from_request(&request.path_mode, request.weighted_mode);
+    let initial_heuristic =
+        heuristic_lower_bound(graph, &request.source_player_id, &request.target_player_id, mode);
+    let mut heap = BinaryHeap::from([AStarState {
+        total_cost: initial_heuristic,
+        path_cost: 0,
+        heuristic_cost: initial_heuristic,
+        tie_break: tie_break_distance(graph, &request.source_player_id, &request.target_player_id),
+        id: request.source_player_id.clone(),
+    }]);
+    let mut distances = HashMap::from([(request.source_player_id.clone(), 0usize)]);
+    let mut parents = HashMap::from([(request.source_player_id.clone(), None)]);
+    let mut visited = HashSet::new();
+    let mut trace = Vec::new();
+    let mut step = 1usize;
+    let mut edges_considered = 0usize;
+    let mut found = false;
+
+    while let Some(current) = heap.pop() {
+        if step > request.options.max_steps {
+            break;
+        }
+
+        if visited.contains(&current.id) {
+            continue;
+        }
+        visited.insert(current.id.clone());
+
+        let mut frontier: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
+        frontier.sort();
+        trace.push(create_trace_step(
+            step,
+            "expand",
+            Some(current.id.clone()),
+            frontier,
+            &visited,
+            vec![],
+        ));
+        step += 1;
+
+        if current.id == request.target_player_id {
+            found = true;
+            break;
+        }
+
+        for neighbor in allowed_neighbors(graph, &current.id, &request.path_mode) {
+            if step > request.options.max_steps {
+                break;
+            }
+
+            edges_considered += 1;
+            let next_path_cost = current.path_cost + traversal_cost(request, &neighbor);
+            let known = distances.get(&neighbor.id).copied();
+            let improved = known.is_none() || next_path_cost < known.unwrap();
+
+            if improved {
+                distances.insert(neighbor.id.clone(), next_path_cost);
+                parents.insert(neighbor.id.clone(), Some(current.id.clone()));
+                let heuristic =
+                    heuristic_lower_bound(graph, &neighbor.id, &request.target_player_id, mode);
+                heap.push(AStarState {
+                    total_cost: next_path_cost + heuristic,
+                    path_cost: next_path_cost,
+                    heuristic_cost: heuristic,
+                    tie_break: tie_break_distance(graph, &neighbor.id, &request.target_player_id),
+                    id: neighbor.id.clone(),
+                });
+            }
+
+            let mut frontier_after: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
+            frontier_after.sort();
+            trace.push(create_trace_step(
+                step,
+                "discover",
+                Some(current.id.clone()),
+                frontier_after,
+                &visited,
+                vec![TraceHighlightedEdge {
+                    from: current.id.clone(),
+                    to: neighbor.id.clone(),
+                    relation: neighbor.relation_for_mode(&request.path_mode),
+                    state: if improved {
+                        "exploring".to_string()
+                    } else {
+                        "seen".to_string()
+                    },
+                }],
+            ));
+            step += 1;
+        }
+    }
+
+    if !found {
+        trace.push(create_trace_step(step, "complete", None, vec![], &visited, vec![]));
+        return SearchResult {
+            found: false,
+            path_nodes: vec![],
+            path_edges: vec![],
+            visited_count: visited.len(),
+            edges_considered,
+            trace,
+        };
+    }
+
+    let (path_nodes, path_edges) =
+        build_path(graph, &parents, &request.target_player_id, &request.path_mode);
     trace.push(create_trace_step(
         step,
         "resolve",
@@ -341,7 +514,7 @@ fn expand_frontier(
             vec![TraceHighlightedEdge {
                 from: current.clone(),
                 to: neighbor.id.clone(),
-                relation: neighbor.relation.clone(),
+                relation: neighbor.relation_for_mode(&request.path_mode),
                 state: if is_new {
                     "exploring".to_string()
                 } else {

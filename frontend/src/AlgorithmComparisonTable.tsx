@@ -31,7 +31,7 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
         <thead>
           <tr style={{ color: "#9ca3af", textAlign: "left" }}>
             <th style={{ padding: "0.7rem 0.45rem" }}>Algorithm</th>
-            <th style={{ padding: "0.7rem 0.45rem" }}>Supported Now?</th>
+            <th style={{ padding: "0.7rem 0.45rem" }}>Available</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>Path Found?</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>Path Length</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>Nodes Visited</th>
@@ -56,7 +56,7 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
                       color: "#d7b16a",
                     }}
                   >
-                    Planned
+                    Coming later
                   </span>
                 )}
               </td>

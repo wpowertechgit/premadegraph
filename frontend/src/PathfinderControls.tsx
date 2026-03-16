@@ -10,16 +10,19 @@ import {
 
 interface PathfinderControlsProps {
   players: PlayerOption[];
+  supportedAlgorithms: AlgorithmId[];
   sourcePlayerId: string;
   targetPlayerId: string;
   algorithm: AlgorithmId;
   pathMode: PathMode;
+  weightedMode: boolean;
   executionMode: ExecutionMode;
   loading: boolean;
   onSourceChange: (value: string) => void;
   onTargetChange: (value: string) => void;
   onAlgorithmChange: (value: AlgorithmId) => void;
   onPathModeChange: (value: PathMode) => void;
+  onWeightedModeChange: (value: boolean) => void;
   onExecutionModeChange: (value: ExecutionMode) => void;
   onRun: () => void;
   onReset: () => void;
@@ -54,31 +57,32 @@ const inputStyle: React.CSSProperties = {
 
 export default function PathfinderControls({
   players,
+  supportedAlgorithms,
   sourcePlayerId,
   targetPlayerId,
   algorithm,
   pathMode,
+  weightedMode,
   executionMode,
   loading,
   onSourceChange,
   onTargetChange,
   onAlgorithmChange,
   onPathModeChange,
+  onWeightedModeChange,
   onExecutionModeChange,
   onRun,
   onReset,
 }: PathfinderControlsProps) {
-  const runnableAlgorithms = (["bfs", "dijkstra", "bidirectional"] as AlgorithmId[]);
-
   return (
     <section style={panelStyle}>
       <div style={{ marginBottom: "0.95rem" }}>
         <label style={labelStyle}>Execution Mode</label>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           {([
-            { id: "frontend-demo", label: "Frontend Demo" },
-            { id: "backend-prototype", label: "Backend Prototype" },
-            { id: "rust-backend-prototype", label: "Rust Prototype" },
+            { id: "frontend-demo", label: "Browser Replay" },
+            { id: "backend", label: "Node Backend" },
+            { id: "rust-backend", label: "Rust Backend" },
           ] as { id: ExecutionMode; label: string }[]).map((mode) => {
             const active = mode.id === executionMode;
             return (
@@ -147,7 +151,7 @@ export default function PathfinderControls({
             onChange={(event) => onAlgorithmChange(event.target.value as AlgorithmId)}
             style={inputStyle}
           >
-            {runnableAlgorithms.map((item) => (
+            {supportedAlgorithms.map((item) => (
               <option key={item} value={item}>
                 {ALGORITHM_LABELS[item]}
               </option>
@@ -187,16 +191,21 @@ export default function PathfinderControls({
           <label style={labelStyle}>Weighted Mode</label>
           <button
             type="button"
-            disabled
-            title="Coming later"
+            disabled={algorithm !== "dijkstra" && algorithm !== "astar"}
+            title={algorithm === "dijkstra" || algorithm === "astar" ? "Prioritize stronger match-history edges" : "Switch to Dijkstra or A* to use weighted mode"}
+            onClick={() => onWeightedModeChange(!weightedMode)}
             style={{
               ...inputStyle,
               textAlign: "left",
-              opacity: 0.65,
-              cursor: "not-allowed",
+              opacity: algorithm === "dijkstra" || algorithm === "astar" ? 1 : 0.65,
+              cursor: algorithm === "dijkstra" || algorithm === "astar" ? "pointer" : "not-allowed",
+              background: weightedMode && (algorithm === "dijkstra" || algorithm === "astar") ? "#263844" : "#20252c",
+              border: weightedMode && (algorithm === "dijkstra" || algorithm === "astar") ? "1px solid #5680a7" : "1px solid #39424d",
             }}
           >
-            Coming later
+            {weightedMode && (algorithm === "dijkstra" || algorithm === "astar")
+              ? "Enabled: prioritize stronger edges"
+              : "Off: treat every edge equally"}
           </button>
         </div>
       </div>

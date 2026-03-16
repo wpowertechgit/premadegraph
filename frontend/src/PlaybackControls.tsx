@@ -5,6 +5,7 @@ interface PlaybackControlsProps {
   playbackState: PlaybackState;
   playbackSpeed: number;
   canStep: boolean;
+  title?: string;
   onPlay: () => void;
   onPause: () => void;
   onRestart: () => void;
@@ -17,6 +18,7 @@ export default function PlaybackControls({
   playbackState,
   playbackSpeed,
   canStep,
+  title,
   onPlay,
   onPause,
   onRestart,
@@ -34,6 +36,9 @@ export default function PlaybackControls({
         color: "#f3f4f6",
       }}
     >
+      {title ? (
+        <div style={{ marginBottom: "0.8rem", fontWeight: 700, color: "#f3f4f6" }}>{title}</div>
+      ) : null}
       <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" disabled={!canStep || playbackState === "playing"} onClick={onPlay}>
           Play
@@ -68,6 +73,7 @@ export default function PlaybackControls({
             <option value={0.5}>0.5x</option>
             <option value={1}>1x</option>
             <option value={2}>2x</option>
+            <option value={3}>3x</option>
           </select>
         </label>
       </div>

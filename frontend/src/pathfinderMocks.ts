@@ -56,6 +56,7 @@ const NODE_MAP: Record<string, GraphNode> = {
 };
 
 const ALL_NODES = Object.values(NODE_MAP);
+const WEIGHT_COST_SCALE = 1000;
 
 const SIGNED_EDGES: GraphEdge[] = [
   { from: "a", to: "b", relation: "ally", weight: 2 },
@@ -159,6 +160,14 @@ function buildAdjacency(pathMode: PathMode): Record<string, Neighbor[]> {
   }
 
   return adjacency;
+}
+
+function getTraversalCost(weightedMode: boolean, edgeWeight: number): number {
+  if (!weightedMode) {
+    return WEIGHT_COST_SCALE;
+  }
+
+  return Math.ceil(WEIGHT_COST_SCALE / Math.max(edgeWeight, 1));
 }
 
 function createTraceStep(
@@ -328,7 +337,7 @@ function runDijkstra(request: PathfinderRequest): SearchResult {
       }
 
       edgesConsidered += 1;
-      const nextCost = current.cost + 1;
+      const nextCost = current.cost + getTraversalCost(request.weightedMode, neighbor.weight);
       const knownCost = distances.get(neighbor.id);
       const improved = knownCost === undefined || nextCost < knownCost;
 
@@ -627,7 +636,7 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
       path: { nodes: [], edges: [] },
       trace: [],
       graphSnapshot: { nodes: [], edges: [] },
-      warnings: ["The selected player does not exist in the prototype dataset."],
+      warnings: ["The selected player does not exist in the current dataset."],
     };
   }
 
@@ -646,7 +655,7 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
       path: { nodes: [], edges: [] },
       trace: [],
       graphSnapshot: getMockGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
-      warnings: ["A* is planned, but not enabled in this prototype."],
+      warnings: ["A* is not enabled yet for this search view."],
     };
   }
 
@@ -656,11 +665,14 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
 
   const warnings: string[] = [];
   if (scenarioId === "friend_only_disconnected") {
-    warnings.push("No friend-only route is available in this prototype graph.");
+    warnings.push("No friend-only route is available in the current graph.");
     warnings.push("Try battle-path to include enemy edges.");
   }
   if (scenarioId === "battle_path_shorter") {
     warnings.push("Enemy edges are enabled in this run and may shorten the route.");
+  }
+  if (request.algorithm === "dijkstra" && request.weightedMode) {
+    warnings.push("Weighted Dijkstra treats stronger repeated connections as cheaper edges.");
   }
 
   return {
@@ -724,6 +736,7 @@ export function getComparisonRows(
   sourcePlayerId: string,
   targetPlayerId: string,
   currentMode: PathMode,
+  weightedMode: boolean,
 ): ComparisonRow[] {
   const runnableAlgorithms: AlgorithmId[] = ["bfs", "dijkstra", "bidirectional"];
 
@@ -733,7 +746,7 @@ export function getComparisonRows(
       targetPlayerId,
       algorithm,
       pathMode: "social-path",
-      weightedMode: false,
+      weightedMode,
       options: {
         includeTrace: true,
         maxSteps: 5000,
@@ -744,7 +757,7 @@ export function getComparisonRows(
       targetPlayerId,
       algorithm,
       pathMode: "battle-path",
-      weightedMode: false,
+      weightedMode,
       options: {
         includeTrace: true,
         maxSteps: 5000,
@@ -772,7 +785,7 @@ export function getComparisonRows(
     pathLength: null,
     nodesVisited: null,
     runtimeMs: null,
-    relativeNote: "planned, pending heuristic",
+    relativeNote: "coming later, pending heuristic",
   });
 
   return rows;

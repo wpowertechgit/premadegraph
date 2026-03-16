@@ -5,6 +5,7 @@ import networkx as nx
 from pyvis.network import Network
 import sys
 import argparse
+from cluster_persistence import replace_clusters
 
 # === CONFIG ===
 MATCH_FOLDER = "./data"      # Folder with EUN1_*.json files
@@ -180,8 +181,27 @@ def identify_clusters_and_highlights(G, min_edge_weight=3):
     os.makedirs('clusters', exist_ok=True)
 
     # Save to JSON
-    with open('clusters/clusters.json', 'a', encoding='utf-8') as f:
+    with open('clusters/clusters.json', 'w', encoding='utf-8') as f:
         json.dump(result_json, f, indent=2)
+
+    persisted_clusters = []
+    for index, cluster in enumerate(cluster_data, start=1):
+        persisted_clusters.append({
+            "cluster_id": f"python_population:{index}",
+            "members": cluster["members"],
+            "best_op": cluster.get("best_op"),
+            "worst_feed": cluster.get("worst_feed"),
+            "center": {"x": None, "y": None},
+            "rolesByMember": {},
+        })
+
+    replace_clusters(
+        DB_PATH,
+        "python_population",
+        "connected_components",
+        persisted_clusters,
+        f"build_graph:min_weight={min_edge_weight}",
+    )
 
     return highlights
 
@@ -491,8 +511,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate network visualization of player connections')
     parser.add_argument('--connected-only', action='store_true', 
                        help='Show only connected nodes (hide standalone nodes)')
-    parser.add_argument('--min-weight', type=int, default=3,
-                       help='Minimum edge weight to display (default: 3)')
+    parser.add_argument('--min-weight', type=int, default=2,
+                       help='Minimum edge weight to display (default: 2)')
     
     args = parser.parse_args()
     

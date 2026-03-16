@@ -121,7 +121,8 @@ export function usePathfinderPlayback(run: PathfinderRunResponse | null) {
       return undefined;
     }
 
-    const delay = Math.max(240, Math.floor(900 / playbackSpeed));
+    const stepSize = playbackSpeed >= 3 ? 3 : playbackSpeed >= 1 ? 2 : 1;
+    const delay = playbackSpeed >= 3 ? 140 : playbackSpeed >= 2 ? 200 : playbackSpeed >= 1 ? 280 : 420;
     const timer = window.setTimeout(() => {
       setCurrentStepIndex((currentValue) => {
         const lastIndex = run.trace.length - 1;
@@ -129,12 +130,16 @@ export function usePathfinderPlayback(run: PathfinderRunResponse | null) {
           setPlaybackState("finished");
           return lastIndex;
         }
-        return currentValue + 1;
+        const nextValue = Math.min(currentValue + stepSize, lastIndex);
+        if (nextValue >= lastIndex) {
+          setPlaybackState("finished");
+        }
+        return nextValue;
       });
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [playbackSpeed, playbackState, run]);
+  }, [currentStepIndex, playbackSpeed, playbackState, run]);
 
   const frame = useMemo(
     () => buildFrame(run, currentStepIndex, playbackState),
@@ -146,6 +151,9 @@ export function usePathfinderPlayback(run: PathfinderRunResponse | null) {
   const play = () => {
     if (!run || run.trace.length === 0) {
       return;
+    }
+    if (currentStepIndex >= run.trace.length - 1) {
+      setCurrentStepIndex(0);
     }
     setPlaybackState("playing");
   };

@@ -213,6 +213,7 @@ app.post("/api/pathfinder/compare", (req, res) => {
         payload.sourcePlayerId,
         payload.targetPlayerId,
         payload.pathMode || "social-path",
+        Boolean(payload.weightedMode),
       ),
     });
   } catch (error) {
@@ -227,6 +228,16 @@ app.get("/api/pathfinder-rust/options", async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder options failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/pathfinder-rust/global-view", async (req, res) => {
+  try {
+    const response = await executeRustCommand("global-view");
+    res.json(response);
+  } catch (error) {
+    console.error("Rust pathfinder global view failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -269,10 +280,24 @@ app.post("/api/pathfinder-rust/compare", async (req, res) => {
       sourcePlayerId: payload.sourcePlayerId,
       targetPlayerId: payload.targetPlayerId,
       pathMode: payload.pathMode || "social-path",
+      weightedMode: Boolean(payload.weightedMode),
     });
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder compare failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/player-focus", async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const response = await executeRustCommand("player-focus", {
+      playerId: payload.playerId,
+    });
+    res.json(response);
+  } catch (error) {
+    console.error("Rust pathfinder player focus failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

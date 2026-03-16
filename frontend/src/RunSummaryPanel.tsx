@@ -36,7 +36,7 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
       <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Run Summary</div>
 
       {!run ? (
-        <div style={{ color: "#9ca3af" }}>Select players and run a search to populate live stats.</div>
+        <div style={{ color: "#9ca3af" }}>Choose players, path mode, and algorithm to populate the live route metrics.</div>
       ) : (
         <>
           <div

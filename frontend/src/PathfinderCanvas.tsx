@@ -43,8 +43,8 @@ export default function PathfinderCanvas({
         <div>
           <div style={{ fontSize: "1rem", fontWeight: 700 }}>Graph Preview</div>
           <div style={{ color: "#9ca3af", fontSize: "0.9rem", marginTop: "0.2rem", maxWidth: "640px" }}>
-            PyVis-style network preview with a denser mock graph bank. Open the overlay for the larger persistent
-            graph tool.
+            Use this view for a quick read of the network, then open the full overlay for player search,
+            algorithm switching, and detailed playback controls.
           </div>
         </div>
 
@@ -88,9 +88,9 @@ export default function PathfinderCanvas({
         }}
       >
         <span>Canvas renderer for larger networks</span>
-        <span>Neutral baseline matches backend graph direction</span>
+        <span>Playback highlights frontier growth and final route resolution</span>
         <span>Drag to pan, wheel to zoom</span>
-        <span>Overlay stays stateful when closed</span>
+        <span>Overlay keeps its state when closed</span>
       </div>
     </section>
   );

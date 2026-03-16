@@ -29,10 +29,25 @@ import {
   type PlayerOption,
 } from "./pathfinderTypes";
 
-function getDefaultComparisonNote(sourcePlayerId: string, targetPlayerId: string, pathMode: PathMode) {
-  const rows = getComparisonRows(sourcePlayerId, targetPlayerId, pathMode);
+function getDefaultComparisonNote(
+  sourcePlayerId: string,
+  targetPlayerId: string,
+  pathMode: PathMode,
+  weightedMode: boolean,
+) {
+  const rows = getComparisonRows(sourcePlayerId, targetPlayerId, pathMode, weightedMode);
   const firstRunnable = rows.find((row) => row.supportedNow);
   return firstRunnable?.relativeNote ?? "Run a search to compare path modes.";
+}
+
+function getExecutionLabel(executionMode: ExecutionMode) {
+  if (executionMode === "backend") {
+    return "Node Backend";
+  }
+  if (executionMode === "rust-backend") {
+    return "Rust Backend";
+  }
+  return "Browser Replay";
 }
 
 export default function PathfinderLabPage() {
@@ -41,21 +56,25 @@ export default function PathfinderLabPage() {
   const [targetPlayerId, setTargetPlayerId] = useState("f");
   const [algorithm, setAlgorithm] = useState<AlgorithmId>("bfs");
   const [pathMode, setPathMode] = useState<PathMode>("social-path");
+  const [weightedMode, setWeightedMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [run, setRun] = useState<PathfinderRunResponse | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [backendOptions, setBackendOptions] = useState<PathfinderOptionsResponse | null>(null);
   const [engineSpec, setEngineSpec] = useState<PathfinderEngineSpecResponse | null>(null);
   const [comparisonRows, setComparisonRows] = useState<ComparisonRow[]>(
-    getComparisonRows("a", "f", "social-path"),
+    getComparisonRows("a", "f", "social-path", false),
   );
   const [comparisonNote, setComparisonNote] = useState(
-    getDefaultComparisonNote("a", "f", "social-path"),
+    getDefaultComparisonNote("a", "f", "social-path", false),
   );
   const playback = usePathfinderPlayback(run);
   const players: PlayerOption[] = executionMode !== "frontend-demo" && backendOptions
     ? backendOptions.players
     : mockPlayers;
+  const supportedAlgorithms: AlgorithmId[] = executionMode !== "frontend-demo" && backendOptions
+    ? backendOptions.supportedAlgorithms
+    : ["bfs", "dijkstra", "bidirectional"];
   const datasetSummary: DatasetSummary = executionMode !== "frontend-demo" && backendOptions
     ? backendOptions.datasetSummary
     : mockDatasetSummary;
@@ -80,7 +99,7 @@ export default function PathfinderLabPage() {
       setEngineSpec(null);
 
       try {
-        const [optionsResponse, engineSpecResponse] = executionMode === "rust-backend-prototype"
+        const [optionsResponse, engineSpecResponse] = executionMode === "rust-backend"
           ? await Promise.all([
               fetchRustPathfinderOptions(),
               fetchRustPathfinderEngineSpec(),
@@ -106,9 +125,9 @@ export default function PathfinderLabPage() {
         if (!cancelled) {
           console.error("Failed to load backend pathfinder metadata:", error);
           setComparisonNote(
-            executionMode === "rust-backend-prototype"
-              ? "Rust prototype is configured, but no Rust binary is available yet."
-              : "Backend prototype metadata failed to load.",
+            executionMode === "rust-backend"
+              ? "Rust backend is selected, but its metadata could not be loaded."
+              : "Backend metadata failed to load.",
           );
         }
       }
@@ -124,18 +143,20 @@ export default function PathfinderLabPage() {
     let cancelled = false;
 
     async function refreshComparison() {
-      if (executionMode === "backend-prototype" || executionMode === "rust-backend-prototype") {
+      if (executionMode === "backend" || executionMode === "rust-backend") {
         try {
-          const response = executionMode === "rust-backend-prototype"
+          const response = executionMode === "rust-backend"
             ? await fetchRustPathfinderCompare({
                 sourcePlayerId,
                 targetPlayerId,
                 pathMode,
+                weightedMode,
               })
             : await fetchPathfinderCompare({
                 sourcePlayerId,
                 targetPlayerId,
                 pathMode,
+                weightedMode,
               });
 
           if (!cancelled) {
@@ -151,7 +172,7 @@ export default function PathfinderLabPage() {
         return;
       }
 
-      const nextRows = getComparisonRows(sourcePlayerId, targetPlayerId, pathMode);
+      const nextRows = getComparisonRows(sourcePlayerId, targetPlayerId, pathMode, weightedMode);
       if (!cancelled) {
         setComparisonRows(nextRows);
         const firstRunnable = nextRows.find((row) => row.supportedNow);
@@ -163,40 +184,58 @@ export default function PathfinderLabPage() {
     return () => {
       cancelled = true;
     };
-  }, [executionMode, pathMode, sourcePlayerId, targetPlayerId]);
+  }, [executionMode, pathMode, sourcePlayerId, targetPlayerId, weightedMode]);
 
   const resetPrototype = () => {
     setRun(null);
-    setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode));
+    setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode, weightedMode));
   };
 
-  const handleRun = async () => {
+  const runPathfinder = async (overrides?: {
+    sourcePlayerId?: string;
+    targetPlayerId?: string;
+    algorithm?: AlgorithmId;
+    pathMode?: PathMode;
+    weightedMode?: boolean;
+  }) => {
+    const nextSourcePlayerId = overrides?.sourcePlayerId ?? sourcePlayerId;
+    const nextTargetPlayerId = overrides?.targetPlayerId ?? targetPlayerId;
+    const nextAlgorithm = overrides?.algorithm ?? algorithm;
+    const nextPathMode = overrides?.pathMode ?? pathMode;
+    const nextWeightedMode = nextAlgorithm === "dijkstra" || nextAlgorithm === "astar"
+      ? (overrides?.weightedMode ?? weightedMode)
+      : false;
+
     setLoading(true);
     try {
       const request = {
-        sourcePlayerId,
-        targetPlayerId,
-        algorithm,
-        pathMode,
-        weightedMode: false,
+        sourcePlayerId: nextSourcePlayerId,
+        targetPlayerId: nextTargetPlayerId,
+        algorithm: nextAlgorithm,
+        pathMode: nextPathMode,
+        weightedMode: nextWeightedMode,
         options: {
           includeTrace: true,
           maxSteps: 5000,
         },
       };
 
-      const nextRun = executionMode === "backend-prototype"
+      const nextRun = executionMode === "backend"
         ? await runPathfinderBackend(request)
-        : executionMode === "rust-backend-prototype"
+        : executionMode === "rust-backend"
           ? await runRustPathfinderBackend(request)
           : await runPathfinderMock(request);
 
       setRun(nextRun);
-      const matchingRow = comparisonRows.find((row) => row.algorithm === algorithm);
+      const matchingRow = comparisonRows.find((row) => row.algorithm === nextAlgorithm);
       setComparisonNote(matchingRow?.relativeNote ?? "Comparison data unavailable.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRun = async () => {
+    await runPathfinder();
   };
 
   return (
@@ -230,12 +269,13 @@ export default function PathfinderLabPage() {
             Pathfinder Lab
           </div>
           <h1 style={{ margin: "0.4rem 0 0.55rem", fontSize: "clamp(2rem, 4vw, 3rem)" }}>
-            Build the graph tool first, then connect it to the backend
+            Explore player connections and search routes through the graph
           </h1>
           <p style={{ margin: 0, maxWidth: "860px", color: "#9ca3af" }}>
-            The immediate job is not backend integration. It is proving a denser mock dataset, an efficient
-            graph rendering surface, and a reusable overlay component that can survive close and reopen cycles
-            without resetting the active content.
+            Choose two players, select a search algorithm, and compare how social-only versus battle-enabled
+            traversal changes the route. Weighted Dijkstra uses match-count strength so repeated connections become
+            cheaper to traverse. The playback view shows how the frontier grows, which nodes were visited, and
+            when the final path resolves.
           </p>
         </section>
 
@@ -245,19 +285,14 @@ export default function PathfinderLabPage() {
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: "0.75rem",
           }}
-        >
+          >
           {[
-            { label: executionMode === "frontend-demo" ? "Mock Players" : "Backend Players", value: datasetSummary.players },
+            { label: "Available Players", value: datasetSummary.players },
             { label: "Relationships", value: datasetSummary.relationships },
             { label: "Renderer", value: "Canvas overlay" },
             {
               label: "Execution",
-              value:
-                executionMode === "backend-prototype"
-                  ? "Node backend demo"
-                  : executionMode === "rust-backend-prototype"
-                    ? "Rust backend demo"
-                    : "Frontend mock demo",
+              value: getExecutionLabel(executionMode),
             },
           ].map((item) => (
             <div
@@ -279,90 +314,107 @@ export default function PathfinderLabPage() {
 
         <PathfinderControls
           players={players}
+          supportedAlgorithms={supportedAlgorithms}
           sourcePlayerId={sourcePlayerId}
           targetPlayerId={targetPlayerId}
           algorithm={algorithm}
           pathMode={pathMode}
+          weightedMode={weightedMode}
           executionMode={executionMode}
           loading={loading}
           onSourceChange={(value) => {
             setSourcePlayerId(value);
             setRun(null);
-            setComparisonNote(getDefaultComparisonNote(value, targetPlayerId, pathMode));
+            setComparisonNote(getDefaultComparisonNote(value, targetPlayerId, pathMode, weightedMode));
           }}
           onTargetChange={(value) => {
             setTargetPlayerId(value);
             setRun(null);
-            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, value, pathMode));
+            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, value, pathMode, weightedMode));
           }}
           onAlgorithmChange={(value) => {
             setAlgorithm(value);
+            if (value !== "dijkstra" && value !== "astar") {
+              setWeightedMode(false);
+            }
             setRun(null);
-            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode));
+            setComparisonNote(
+              getDefaultComparisonNote(
+                sourcePlayerId,
+                targetPlayerId,
+                pathMode,
+                value === "dijkstra" || value === "astar" ? weightedMode : false,
+              ),
+            );
           }}
           onPathModeChange={(value) => {
             setPathMode(value);
             setRun(null);
-            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, value));
+            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, value, weightedMode));
+          }}
+          onWeightedModeChange={(value) => {
+            setWeightedMode(value);
+            setRun(null);
+            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode, value));
           }}
           onExecutionModeChange={(value) => {
             setExecutionMode(value);
             setRun(null);
-            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode));
+            setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode, weightedMode));
           }}
           onRun={handleRun}
           onReset={resetPrototype}
         />
 
-        {(executionMode === "backend-prototype" || executionMode === "rust-backend-prototype") && engineSpec ? (
-          <section
-            style={{
-              borderRadius: "18px",
-              border: "1px solid #303741",
-              background: "#1d2127",
-              padding: "1rem",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-              gap: "1rem",
-            }}
-          >
-            <div>
-              <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
-                Backend Prototype
-              </div>
-              <div style={{ marginTop: "0.4rem", color: "#f3f4f6", fontWeight: 700 }}>
-                {executionMode === "rust-backend-prototype"
-                  ? "Search logic now runs through the optional Rust backend bridge"
-                  : "Search logic now runs through Express on the backend"}
-              </div>
-              <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
-                The frontend still replays the result visually, but the path computation now goes through
-                {executionMode === "rust-backend-prototype"
-                  ? " `/api/pathfinder-rust/run` and `/api/pathfinder-rust/compare`."
-                  : " `/api/pathfinder/run` and `/api/pathfinder/compare` as an optional demo path."}
-              </div>
+        <section
+          style={{
+            borderRadius: "18px",
+            border: "1px solid #303741",
+            background: "#1d2127",
+            padding: "1rem",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "1rem",
+          }}
+        >
+          <div>
+            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+              What the graph shows
             </div>
-            <div>
-              <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
-                Signed Graph Model
-              </div>
-              <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
-                `allyWeight`, `enemyWeight`, `totalMatches`, and `dominantRelation` are modeled in the
-                backend prototype now so the response contract already matches the future engine split.
-              </div>
+            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+              Each node is a player. Edges represent repeated relationships. Ally edges reflect cooperative
+              matches, while enemy edges represent repeated opposition that can still connect the graph.
             </div>
-            <div>
-              <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
-                Faster Engine Path
-              </div>
-              <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
-                Rust path: {engineSpec.integrationPath.rust[0]}
-                <br />
-                Go path: {engineSpec.integrationPath.go[0]}
-              </div>
+          </div>
+          <div>
+            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+              Path modes
             </div>
-          </section>
-        ) : null}
+            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+              Social path searches through ally links only. Battle path also includes enemy links, which can
+              uncover shorter or otherwise unreachable routes between players.
+            </div>
+          </div>
+          <div>
+            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+              Algorithms and playback
+            </div>
+            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+              BFS gives an intuitive breadth-first expansion, Bidirectional grows from both ends, and Dijkstra can
+              optionally weight edges by repeated match history. In weighted mode, stronger ties become cheaper, so
+              the route favors more established connections instead of treating every hop equally.
+            </div>
+          </div>
+          <div>
+            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+              Active execution
+            </div>
+            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+              Current mode: {getExecutionLabel(executionMode)}.
+              {engineSpec ? " The response contract stays consistent across the available execution paths." : " Search results still use the same route and trace format across the interface."}
+            </div>
+          </div>
+        </section>
 
         <div
           style={{
@@ -400,11 +452,48 @@ export default function PathfinderLabPage() {
       <PathfinderGraphOverlay
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
+        players={players}
+        supportedAlgorithms={supportedAlgorithms}
         snapshot={snapshot}
         run={run}
         frame={playback.frame}
         sourcePlayerId={sourcePlayerId}
         targetPlayerId={targetPlayerId}
+        algorithm={algorithm}
+        pathMode={pathMode}
+        weightedMode={weightedMode}
+        loading={loading}
+        playbackState={playback.playbackState}
+        playbackSpeed={playback.playbackSpeed}
+        canStep={playback.canStep}
+        onPlay={playback.play}
+        onPause={playback.pause}
+        onRestart={playback.restart}
+        onStepForward={playback.stepForward}
+        onStepBackward={playback.stepBackward}
+        onSpeedChange={playback.setPlaybackSpeed}
+        onRunSearch={async (overrides) => {
+          setSourcePlayerId(overrides.sourcePlayerId);
+          setTargetPlayerId(overrides.targetPlayerId);
+            setAlgorithm(overrides.algorithm);
+            setPathMode(overrides.pathMode);
+            setWeightedMode(
+              overrides.algorithm === "dijkstra" || overrides.algorithm === "astar"
+                ? overrides.weightedMode
+                : false,
+            );
+            setComparisonNote(
+              getDefaultComparisonNote(
+                overrides.sourcePlayerId,
+                overrides.targetPlayerId,
+                overrides.pathMode,
+                overrides.algorithm === "dijkstra" || overrides.algorithm === "astar"
+                  ? overrides.weightedMode
+                  : false,
+              ),
+            );
+            await runPathfinder(overrides);
+        }}
         datasetSummary={datasetSummary}
       />
     </div>

@@ -1,5 +1,6 @@
 const { performance } = require("perf_hooks");
 const { nodes, edges, players, datasetSummary } = require("./prototypeData");
+const WEIGHT_COST_SCALE = 1000;
 
 function edgeKey(from, to) {
   return [from, to].sort().join("|");
@@ -96,6 +97,14 @@ function getAllowedNeighbors(nodeId, pathMode) {
     return neighbors;
   }
   return neighbors.filter((neighbor) => neighbor.relation === "ally");
+}
+
+function getTraversalCost(weightedMode, edgeWeight) {
+  if (!weightedMode) {
+    return WEIGHT_COST_SCALE;
+  }
+
+  return Math.ceil(WEIGHT_COST_SCALE / Math.max(edgeWeight, 1));
 }
 
 function buildPath(parents, targetId, pathMode) {
@@ -237,7 +246,7 @@ function runDijkstra(request) {
       }
 
       edgesConsidered += 1;
-      const nextCost = current.cost + 1;
+      const nextCost = current.cost + getTraversalCost(Boolean(request.weightedMode), neighbor.weight);
       const knownCost = distances.get(neighbor.id);
       const improved = knownCost === undefined || nextCost < knownCost;
 
@@ -458,7 +467,7 @@ function getGraphSnapshot(pathMode, sourcePlayerId, targetPlayerId) {
 
 function validateRequest(request) {
   if (!graph.nodeMap.has(request.sourcePlayerId) || !graph.nodeMap.has(request.targetPlayerId)) {
-    return "The selected player does not exist in the backend prototype dataset.";
+    return "The selected player does not exist in the current dataset.";
   }
   if (!["bfs", "dijkstra", "bidirectional", "astar"].includes(request.algorithm)) {
     return "Unsupported algorithm.";
@@ -513,7 +522,7 @@ function runSearch(request) {
       path: { nodes: [], edges: [] },
       trace: [],
       graphSnapshot: getGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
-      warnings: ["A* remains planned until a valid heuristic is chosen."],
+      warnings: ["A* is not enabled yet because it still needs a valid heuristic."],
     };
   }
 
@@ -549,10 +558,13 @@ function runSearch(request) {
 
   const warnings = [];
   if (!result.found && request.pathMode === "social-path") {
-    warnings.push("No friend-only route is available in the backend prototype graph.");
+    warnings.push("No friend-only route is available in the current graph.");
   }
   if (request.pathMode === "battle-path") {
-    warnings.push("Enemy edges are enabled in this backend prototype run.");
+    warnings.push("Enemy edges are enabled in this run.");
+  }
+  if (request.algorithm === "dijkstra" && request.weightedMode) {
+    warnings.push("Weighted Dijkstra treats stronger repeated connections as cheaper edges.");
   }
 
   return {
@@ -576,7 +588,7 @@ function runSearch(request) {
   };
 }
 
-function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode) {
+function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode, weightedMode = false) {
   const algorithms = ["bfs", "dijkstra", "bidirectional"];
   const rows = algorithms.map((algorithm) => {
     const socialRun = runSearch({
@@ -584,7 +596,7 @@ function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode) {
       targetPlayerId,
       algorithm,
       pathMode: "social-path",
-      weightedMode: false,
+      weightedMode,
       options: { includeTrace: false, maxSteps: 5000 },
     });
 
@@ -593,7 +605,7 @@ function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode) {
       targetPlayerId,
       algorithm,
       pathMode: "battle-path",
-      weightedMode: false,
+      weightedMode,
       options: { includeTrace: false, maxSteps: 5000 },
     });
 
@@ -633,7 +645,7 @@ function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode) {
     pathLength: null,
     nodesVisited: null,
     runtimeMs: null,
-    relativeNote: "planned, pending heuristic",
+    relativeNote: "coming later, pending heuristic",
   });
 
   return rows;
@@ -641,17 +653,17 @@ function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode) {
 
 function getOptions() {
   return {
-    executionMode: "backend-prototype",
+    executionMode: "backend",
     players,
     datasetSummary,
-    supportedAlgorithms: ["bfs", "dijkstra", "bidirectional", "astar"],
+    supportedAlgorithms: ["bfs", "dijkstra", "bidirectional"],
     previewSnapshot: getGraphSnapshot("battle-path", players[0].id, players[players.length - 1].id),
   };
 }
 
 function getEngineSpec() {
   return {
-    executionMode: "backend-prototype",
+    executionMode: "backend",
     requestContract: {
       sourcePlayerId: "string",
       targetPlayerId: "string",

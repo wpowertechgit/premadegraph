@@ -1,8 +1,11 @@
 mod graph;
 mod search;
 
-use self::graph::{graph_snapshot, GraphState};
-use self::search::{search_bfs, search_bidirectional, search_dijkstra, SearchResult};
+use self::graph::{
+    global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
+    GraphState,
+};
+use self::search::{search_astar, search_bfs, search_bidirectional, search_dijkstra, SearchResult};
 use crate::models::*;
 use std::time::Instant;
 
@@ -47,21 +50,8 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
     {
         return invalid_response(
             &request,
-            "The selected player does not exist in the Rust prototype dataset.",
+            "The selected player does not exist in the current Rust dataset.",
             None,
-        );
-    }
-
-    if request.algorithm == "astar" {
-        return invalid_response(
-            &request,
-            "A* remains planned until a valid heuristic is chosen.",
-            Some(graph_snapshot(
-                graph,
-                &request.path_mode,
-                &request.source_player_id,
-                &request.target_player_id,
-            )),
         );
     }
 
@@ -88,11 +78,12 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
                 edges: vec![],
             },
             trace: vec![],
-            graph_snapshot: graph_snapshot(
+            graph_snapshot: pathfinder_snapshot(
                 graph,
                 &request.path_mode,
                 &request.source_player_id,
                 &request.target_player_id,
+                &[request.source_player_id.clone()],
             ),
             warnings: vec![],
         };
@@ -103,6 +94,8 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         search_bfs(graph, &request)
     } else if request.algorithm == "dijkstra" {
         search_dijkstra(graph, &request)
+    } else if request.algorithm == "astar" {
+        search_astar(graph, &request)
     } else {
         search_bidirectional(graph, &request)
     };
@@ -124,10 +117,18 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
 
     let mut warnings = Vec::new();
     if !found && request.path_mode == "social-path" {
-        warnings.push("No friend-only route is available in the Rust prototype graph.".to_string());
+        warnings.push("No friend-only route is available in the current Rust graph.".to_string());
     }
     if request.path_mode == "battle-path" {
-        warnings.push("Enemy edges are enabled in this Rust prototype run.".to_string());
+        warnings.push("Enemy edges are enabled in this run.".to_string());
+    }
+    if request.algorithm == "dijkstra" && request.weighted_mode {
+        warnings.push(
+            "Weighted Dijkstra treats stronger repeated connections as cheaper edges.".to_string(),
+        );
+    }
+    if request.algorithm == "astar" {
+        warnings.push("A* uses landmark and cluster lower bounds while preserving exact shortest-path results.".to_string());
     }
 
     PathfinderResponse {
@@ -151,17 +152,18 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
             backend_runtime_ms: runtime_ms,
             trace_step_count: trace.len(),
         },
+        graph_snapshot: pathfinder_snapshot(
+            graph,
+            &request.path_mode,
+            &request.source_player_id,
+            &request.target_player_id,
+            &path_nodes,
+        ),
         path: PathfinderPath {
             nodes: path_nodes,
             edges: path_edges,
         },
         trace,
-        graph_snapshot: graph_snapshot(
-            graph,
-            &request.path_mode,
-            &request.source_player_id,
-            &request.target_player_id,
-        ),
         warnings,
     }
 }
@@ -169,7 +171,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
 pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> CompareResponse {
     let mut rows = Vec::new();
 
-    for algorithm in ["bfs", "dijkstra", "bidirectional"] {
+    for algorithm in ["bfs", "dijkstra", "bidirectional", "astar"] {
         let social = run_search(
             graph,
             PathfinderRequest {
@@ -177,7 +179,7 @@ pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> Compar
                 target_player_id: request.target_player_id.clone(),
                 algorithm: algorithm.to_string(),
                 path_mode: "social-path".to_string(),
-                weighted_mode: false,
+                weighted_mode: request.weighted_mode,
                 options: PathfinderOptions {
                     include_trace: false,
                     max_steps: 5000,
@@ -192,7 +194,7 @@ pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> Compar
                 target_player_id: request.target_player_id.clone(),
                 algorithm: algorithm.to_string(),
                 path_mode: "battle-path".to_string(),
-                weighted_mode: false,
+                weighted_mode: request.weighted_mode,
                 options: PathfinderOptions {
                     include_trace: false,
                     max_steps: 5000,
@@ -227,6 +229,8 @@ pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> Compar
                 "BFS".to_string()
             } else if algorithm == "dijkstra" {
                 "Dijkstra".to_string()
+            } else if algorithm == "astar" {
+                "A*".to_string()
             } else {
                 "Bidirectional".to_string()
             },
@@ -239,23 +243,12 @@ pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> Compar
         });
     }
 
-    rows.push(ComparisonRow {
-        algorithm: "astar".to_string(),
-        label: "A*".to_string(),
-        supported_now: false,
-        path_found: None,
-        path_length: None,
-        nodes_visited: None,
-        runtime_ms: None,
-        relative_note: "planned, pending heuristic".to_string(),
-    });
-
     CompareResponse { rows }
 }
 
 pub fn options_response(graph: &GraphState) -> OptionsResponse {
     OptionsResponse {
-        execution_mode: "rust-backend-prototype".to_string(),
+        execution_mode: "rust-backend".to_string(),
         players: graph
             .dataset
             .nodes
@@ -287,13 +280,47 @@ pub fn options_response(graph: &GraphState) -> OptionsResponse {
             "bidirectional".to_string(),
             "astar".to_string(),
         ],
-        preview_snapshot: graph_snapshot(graph, "battle-path", "a", "x"),
+        preview_snapshot: graph
+            .dataset
+            .nodes
+            .first()
+            .map(|node| player_focus_snapshot(graph, &node.id))
+            .unwrap_or_else(|| population_snapshot(graph)),
+        cluster_summaries: graph.cluster_summaries.clone(),
     }
+}
+
+pub fn global_view_response(graph: &GraphState) -> GlobalViewResponse {
+    GlobalViewResponse {
+        cluster_summaries: graph.cluster_summaries.clone(),
+        snapshot: global_view_snapshot(graph),
+    }
+}
+
+pub fn player_focus_response(graph: &GraphState, player_id: &str) -> Option<PlayerFocusResponse> {
+    let player = graph.node_map.get(player_id)?;
+    let cluster_id = graph.cluster_membership.get(player_id).cloned();
+    let related_clusters = graph
+        .cluster_summaries
+        .iter()
+        .filter(|cluster| cluster_id.as_deref() == Some(cluster.cluster_id.as_str()))
+        .cloned()
+        .collect();
+
+    Some(PlayerFocusResponse {
+        player: PlayerOption {
+            id: player.id.clone(),
+            label: player.label.clone(),
+        },
+        cluster_id,
+        snapshot: player_focus_snapshot(graph, player_id),
+        related_clusters,
+    })
 }
 
 pub fn engine_spec_response() -> EngineSpecResponse {
     EngineSpecResponse {
-        execution_mode: "rust-backend-prototype".to_string(),
+        execution_mode: "rust-backend".to_string(),
         request_contract: serde_json::json!({
             "sourcePlayerId": "string",
             "targetPlayerId": "string",
@@ -333,9 +360,9 @@ pub fn engine_spec_response() -> EngineSpecResponse {
         }),
         integration_path: serde_json::json!({
             "rust": [
-                "Move the search core from the Node prototype into this Rust crate.",
-                "Load offline-exported signed graph snapshots instead of the handcrafted demo dataset.",
-                "Keep Express as a thin orchestration shell or replace it with a dedicated Rust service later."
+                "Build real signed and population graph layers directly from raw match files and the player database.",
+                "Persist Rust pathfinding clusters into SQLite alongside Python-generated population clusters.",
+                "Keep Express as a thin orchestration shell while the Rust runtime owns graph construction and search."
             ],
             "go": [
                 "Go remains a valid alternative if service ergonomics matter more than a native Rust core.",
@@ -345,4 +372,4 @@ pub fn engine_spec_response() -> EngineSpecResponse {
     }
 }
 
-pub use self::graph::{build_graph_state, load_dataset};
+pub use self::graph::build_graph_state;

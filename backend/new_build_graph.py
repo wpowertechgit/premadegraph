@@ -8,10 +8,11 @@ import sys
 import argparse
 from collections import defaultdict
 from typing import Dict, Set, List, Tuple
+from cluster_persistence import replace_clusters
 
 # === CONFIG ===
 MATCH_FOLDER = "./data"
-DB_PATH = "../playersrefined.db"
+DB_PATH = os.environ.get("GRAPH_DB_PATH", "../playersrefined.db")
 OUTPUT_HTML = "output/premade_network.html"
 
 # === Load match data ===
@@ -212,7 +213,28 @@ def detect_communities_louvain(G: nx.Graph, min_weight: int) -> Tuple[Dict, Dict
     os.makedirs('clusters', exist_ok=True)
     with open('clusters/clusters.json', 'w', encoding='utf-8') as f:
         json.dump(result_json, f, indent=2)
-    
+
+    persisted_clusters = []
+    for cluster in cluster_data:
+        persisted_clusters.append({
+            "cluster_id": f"python_population:{cluster['community_id']}",
+            "members": cluster["members"],
+            "best_op": cluster.get("best_op"),
+            "worst_feed": cluster.get("worst_feed"),
+            "center": {"x": None, "y": None},
+            "rolesByMember": {},
+            "community_id": cluster["community_id"],
+            "modularity_class": cluster.get("modularity_class"),
+        })
+
+    replace_clusters(
+        DB_PATH,
+        "python_population",
+        "greedy_modularity_communities",
+        persisted_clusters,
+        f"new_build_graph:min_weight={min_weight}",
+    )
+
     print(f"Saved cluster data to clusters/clusters.json")
     
     return result_json, highlights

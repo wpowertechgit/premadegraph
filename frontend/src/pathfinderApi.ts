@@ -1,4 +1,5 @@
 import type {
+  PathfinderCompareRequest,
   PathfinderCompareResponse,
   PathfinderEngineSpecResponse,
   PathfinderOptionsResponse,
@@ -61,11 +62,9 @@ export async function runRustPathfinderBackend(request: PathfinderRequest): Prom
   return parseJsonResponse<PathfinderRunResponse>(response);
 }
 
-export async function fetchPathfinderCompare(request: {
-  sourcePlayerId: string;
-  targetPlayerId: string;
-  pathMode: "social-path" | "battle-path";
-}): Promise<PathfinderCompareResponse> {
+export async function fetchPathfinderCompare(
+  request: PathfinderCompareRequest,
+): Promise<PathfinderCompareResponse> {
   const response = await fetch(`${API_BASE}/compare`, {
     method: "POST",
     headers: {
@@ -77,11 +76,9 @@ export async function fetchPathfinderCompare(request: {
   return parseJsonResponse<PathfinderCompareResponse>(response);
 }
 
-export async function fetchRustPathfinderCompare(request: {
-  sourcePlayerId: string;
-  targetPlayerId: string;
-  pathMode: "social-path" | "battle-path";
-}): Promise<PathfinderCompareResponse> {
+export async function fetchRustPathfinderCompare(
+  request: PathfinderCompareRequest,
+): Promise<PathfinderCompareResponse> {
   const response = await fetch(`${RUST_API_BASE}/compare`, {
     method: "POST",
     headers: {
