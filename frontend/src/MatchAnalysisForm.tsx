@@ -17,6 +17,7 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
+import { translateBackendText, useI18n } from "./i18n";
 
 type PlayerInfo = {
   name: string;
@@ -55,13 +56,14 @@ const saveMatchToBackend = async (matchData: any) => {
 
 const feedermap: Record<string, number> = {};
 const MatchAnalysisForm = () => {
+  const { language, t } = useI18n();
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
   const [count, setCount] = useState("2");
   const [loading, setLoading] = useState(false);
   const [output, setOutput] = useState<MatchData[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [queueType, setQueueType] = useState("both");
+  const [queueType, setQueueType] = useState("all");
   const [start, setStart] = useState(0);
 
  const apiKey = import.meta.env.VITE_API_KEY;
@@ -97,20 +99,20 @@ const MatchAnalysisForm = () => {
 
       if (!puuidRes.ok) {
         const errorData = await puuidRes.json();
-        throw new Error(errorData.status?.message || "Nem található Riot ID!");
+          throw new Error(errorData.status?.message || t.matchAnalysis.errors.riotIdNotFound);
       }
 
       const puuidData = await puuidRes.json();
       const puuid = puuidData.puuid;
       let queueParam = "";
       if (queueType === "solo") {
-        queueParam = "&queue=420";    // Ranked Solo/Duo
+        queueParam = "&queue=420";
       } else if (queueType === "flex") {
-        queueParam = "&queue=440";    // Ranked Flex
+        queueParam = "&queue=440";
       } else if (queueType === "normal") {
-        queueParam = "&queue=430";    // Normal Draft
+        queueParam = "&queue=430";
       } else if (queueType === "all") {
-        queueParam = "";              // No filtering - all queues
+        queueParam = "";
       }
       const matchIdsRes = await fetch(
         `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}${queueParam}`,
@@ -123,7 +125,7 @@ const MatchAnalysisForm = () => {
 
       if (!matchIdsRes.ok) {
         const errorData = await matchIdsRes.json();
-        throw new Error(errorData.status?.message || "Nem sikerült meccs ID-ket lekérni!");
+        throw new Error(errorData.status?.message || t.matchAnalysis.errors.matchIdsFailed);
       }
 
       const matchIds: string[] = await matchIdsRes.json();
@@ -142,7 +144,7 @@ const MatchAnalysisForm = () => {
 
         if (!matchRes.ok) {
           const errorData = await matchRes.json();
-          throw new Error(errorData.status?.message || `Nem sikerült lekérni a meccset: ${matchId}`);
+          throw new Error(errorData.status?.message || `${t.matchAnalysis.errors.matchFetchFailed}: ${matchId}`);
         }
 
         const matchData = await matchRes.json();
@@ -161,7 +163,7 @@ const MatchAnalysisForm = () => {
           const name = `${p.riotIdGameName || "?"}#${p.riotIdTagline || "?"}`;
           const feedscore = p.deaths - (p.kills + p.assists) * 0.5;
           const opscore = p.kills + p.assists * 0.965 + p.goldEarned / 500;
-          const country = countries[playerId] || "Unknown";
+          const country = countries[playerId] || t.matchAnalysis.unknownCountry;
           return {
             name,
             champion: p.championName,
@@ -250,7 +252,7 @@ const MatchAnalysisForm = () => {
 
       setOutput(matches);
     } catch (err: any) {
-      setError(err.message || "Hiba történt");
+      setError(translateBackendText(language, err.message || t.matchAnalysis.errors.generic));
       setOutput([]);
     } finally {
       setLoading(false);
@@ -260,26 +262,26 @@ const MatchAnalysisForm = () => {
     <Container maxWidth="md" sx={{ mt: 4 }}>
       <Paper sx={{ p: 4, backgroundColor: "rgba(100,100,100)", color: "#fff" }} elevation={3}>
         <Typography variant="h5" align="center" gutterBottom>
-          League of Legends Feed Analyzer
+          {t.matchAnalysis.title}
         </Typography>
 
         <Box display="flex" justifyContent="center" gap={2} flexWrap="wrap" mb={3}>
           <TextField
-            label="Riot ID"
+            label={t.matchAnalysis.riotId}
             variant="filled"
             value={name}
             onChange={(e) => setName(e.target.value)}
             sx={{ input: { color: "#fff" } }}
           />
           <TextField
-            label="Tag"
+            label={t.matchAnalysis.tag}
             variant="filled"
             value={tag}
             onChange={(e) => setTag(e.target.value)}
             sx={{ input: { color: "#fff" } }}
           />
           <TextField
-            label="Match Count"
+            label={t.matchAnalysis.matchCount}
             variant="filled"
             type="number"
             inputProps={{ min: 1, max: 20 }}
@@ -288,10 +290,10 @@ const MatchAnalysisForm = () => {
             sx={{ input: { color: "#fff" } }}
           />
           <Button variant="contained" onClick={handleSubmit} disabled={loading}>
-            {loading ? <CircularProgress size={24} color="inherit" /> : "Submit"}
+            {loading ? <CircularProgress size={24} color="inherit" /> : t.matchAnalysis.submit}
           </Button>
           <TextField
-            label="Start index"
+            label={t.matchAnalysis.startIndex}
             variant="filled"
             type="number"
             inputProps={{ min: 0 }}
@@ -300,10 +302,10 @@ const MatchAnalysisForm = () => {
             sx={{ input: { color: "#fff" } }}
           />
           <Select value={queueType} sx={{ color: "white", fontWeight: "bold" }} onChange={(e) => setQueueType(e.target.value)} >
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="solo">SoloQ (Ranked Solo/Duo)</MenuItem>
-            <MenuItem value="flex">Flex (Ranked Flex)</MenuItem>
-            <MenuItem value="normal">Normal</MenuItem>
+            <MenuItem value="all">{t.matchAnalysis.queueAll}</MenuItem>
+            <MenuItem value="solo">{t.matchAnalysis.queueSolo}</MenuItem>
+            <MenuItem value="flex">{t.matchAnalysis.queueFlex}</MenuItem>
+            <MenuItem value="normal">{t.matchAnalysis.queueNormal}</MenuItem>
           </Select>
 
         </Box>
@@ -318,14 +320,14 @@ const MatchAnalysisForm = () => {
           output.map((match) => (
             <Box key={match.matchId} mb={4}>
               <Typography variant="h6" mb={1} color="white" textAlign="center">
-                Match ID: {match.matchId}
+                {t.matchAnalysis.matchId}: {match.matchId}
               </Typography>
               <TableContainer component={Paper} sx={{ backgroundColor: "#1e1e1e" }}>
                 <Table sx={{ minWidth: 650 }} aria-label="match table">
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>Blue Team</TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>Red Team</TableCell>
+                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>{t.matchAnalysis.blueTeam}</TableCell>
+                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>{t.matchAnalysis.redTeam}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -340,10 +342,10 @@ const MatchAnalysisForm = () => {
                             <br />
                             {bluePlayer?.champion} <br />
                             {bluePlayer?.summonerSpells} <br />
-                            KDA: {bluePlayer?.kda} <br />
-                            Gold: {bluePlayer?.gold} <br />
-                            FeedScore: {bluePlayer?.feedscore.toFixed(2)} <br />
-                            HasznosScore: {bluePlayer?.opscore.toFixed(2)}
+                            {t.matchAnalysis.kda}: {bluePlayer?.kda} <br />
+                            {t.matchAnalysis.gold}: {bluePlayer?.gold} <br />
+                            {t.matchAnalysis.feedScore}: {bluePlayer?.feedscore.toFixed(2)} <br />
+                            {t.matchAnalysis.usefulScore}: {bluePlayer?.opscore.toFixed(2)}
                           </TableCell>
                           <TableCell sx={{ color: "white", fontFamily: "monospace" }}>
                             {redPlayer?.name} {redPlayer?.country}
@@ -351,10 +353,10 @@ const MatchAnalysisForm = () => {
                             <br />
                             {redPlayer?.champion} <br />
                             {redPlayer?.summonerSpells} <br />
-                            KDA: {redPlayer?.kda} <br />
-                            Gold: {redPlayer?.gold} <br />
-                            FeedScore: {redPlayer?.feedscore.toFixed(2)} <br />
-                            HasznosScore: {redPlayer?.opscore.toFixed(2)}
+                            {t.matchAnalysis.kda}: {redPlayer?.kda} <br />
+                            {t.matchAnalysis.gold}: {redPlayer?.gold} <br />
+                            {t.matchAnalysis.feedScore}: {redPlayer?.feedscore.toFixed(2)} <br />
+                            {t.matchAnalysis.usefulScore}: {redPlayer?.opscore.toFixed(2)}
                           </TableCell>
                         </TableRow>
                       );
@@ -368,7 +370,7 @@ const MatchAnalysisForm = () => {
       </Paper>
       <Box>
         <div>
-          <h4>Feederek ország szerinti összesítése:</h4>
+          <h4>{t.matchAnalysis.countrySummary}</h4>
           <ul>
             {Object.entries(feedermap).map(([country, count]) => (
               <li key={country}>{country}: {count}</li>

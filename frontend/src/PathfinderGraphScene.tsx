@@ -6,6 +6,7 @@ import {
   type PathfinderRunResponse,
   type RelationType,
 } from "./pathfinderTypes";
+import { useI18n } from "./i18n";
 
 interface PathfinderGraphSceneProps {
   snapshot: GraphSnapshot;
@@ -28,8 +29,81 @@ function getNodeById(snapshot: GraphSnapshot) {
   return map;
 }
 
+function getSnapshotBounds(snapshot: GraphSnapshot) {
+  if (snapshot.nodes.length === 0) {
+    return {
+      minX: 0,
+      maxX: 1,
+      minY: 0,
+      maxY: 1,
+    };
+  }
+
+  const xs = snapshot.nodes.map((node) => node.x);
+  const ys = snapshot.nodes.map((node) => node.y);
+
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
+
 function getBaseEdgeColor(relation: RelationType) {
   return relation === "enemy" ? "#b85b2d" : "#5a6674";
+}
+
+function clampZoom(value: number) {
+  return Math.min(4.5, Math.max(0.18, Number(value.toFixed(2))));
+}
+
+function drawDirectionArrow(
+  context: CanvasRenderingContext2D,
+  point: { x: number; y: number },
+  dimensions: { width: number; height: number },
+  visible: boolean,
+) {
+  const margin = 26;
+  let arrowX = point.x;
+  let arrowY = point.y - 22;
+
+  if (!visible) {
+    const centerX = dimensions.width / 2;
+    const centerY = dimensions.height / 2;
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    const angle = Math.atan2(dy, dx);
+    const maxX = dimensions.width / 2 - margin;
+    const maxY = dimensions.height / 2 - margin;
+    const scaleX = dx === 0 ? Number.POSITIVE_INFINITY : maxX / Math.abs(dx);
+    const scaleY = dy === 0 ? Number.POSITIVE_INFINITY : maxY / Math.abs(dy);
+    const scale = Math.min(scaleX, scaleY);
+
+    arrowX = centerX + dx * scale;
+    arrowY = centerY + dy * scale;
+
+    context.save();
+    context.translate(arrowX, arrowY);
+    context.rotate(angle + Math.PI / 2);
+    context.fillStyle = "#ef4444";
+    context.beginPath();
+    context.moveTo(0, -12);
+    context.lineTo(-10, 10);
+    context.lineTo(10, 10);
+    context.closePath();
+    context.fill();
+    context.restore();
+    return;
+  }
+
+  context.fillStyle = "#ef4444";
+  context.beginPath();
+  context.moveTo(arrowX, arrowY);
+  context.lineTo(arrowX - 8, arrowY - 14);
+  context.lineTo(arrowX + 8, arrowY - 14);
+  context.closePath();
+  context.fill();
 }
 
 function getNodeFill(nodeId: string, frame: CanvasFrame, sourcePlayerId: string, targetPlayerId: string) {
@@ -62,6 +136,7 @@ export default function PathfinderGraphScene({
   targetPlayerId,
   variant,
 }: PathfinderGraphSceneProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [dimensions, setDimensions] = useState({ width: 960, height: variant === "overlay" ? 660 : 360 });
@@ -72,6 +147,11 @@ export default function PathfinderGraphScene({
     x: 0,
     y: 0,
   });
+
+  useEffect(() => {
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+  }, [snapshot]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -118,9 +198,14 @@ export default function PathfinderGraphScene({
 
     const nodeMap = getNodeById(snapshot);
     const padding = variant === "overlay" ? 72 : 46;
+    const bounds = getSnapshotBounds(snapshot);
+    const widthSpan = Math.max(bounds.maxX - bounds.minX, 1);
+    const heightSpan = Math.max(bounds.maxY - bounds.minY, 1);
     const project = (node: GraphNode) => {
-      const baseX = padding + (node.x / 100) * (dimensions.width - padding * 2);
-      const baseY = padding + (node.y / 100) * (dimensions.height - padding * 2);
+      const normalizedX = (node.x - bounds.minX) / widthSpan;
+      const normalizedY = (node.y - bounds.minY) / heightSpan;
+      const baseX = padding + normalizedX * (dimensions.width - padding * 2);
+      const baseY = padding + normalizedY * (dimensions.height - padding * 2);
       return {
         x: dimensions.width / 2 + (baseX - dimensions.width / 2) * zoom + offset.x,
         y: dimensions.height / 2 + (baseY - dimensions.height / 2) * zoom + offset.y,
@@ -222,6 +307,20 @@ export default function PathfinderGraphScene({
         context.textAlign = "center";
         context.fillText(node.label, point.x, point.y - radius - 10);
       }
+
+    }
+
+    if (frame.activeNodeId) {
+      const activeNode = nodeMap.get(frame.activeNodeId);
+      if (activeNode) {
+        const activePoint = project(activeNode);
+        const inView =
+          activePoint.x >= 18 &&
+          activePoint.x <= dimensions.width - 18 &&
+          activePoint.y >= 18 &&
+          activePoint.y <= dimensions.height - 18;
+        drawDirectionArrow(context, activePoint, dimensions, inView);
+      }
     }
   }, [dimensions, frame, offset.x, offset.y, run, snapshot, sourcePlayerId, targetPlayerId, variant, zoom]);
 
@@ -260,9 +359,22 @@ export default function PathfinderGraphScene({
 
   const handleWheel: React.WheelEventHandler<HTMLCanvasElement> = (event) => {
     event.preventDefault();
-    setZoom((currentValue) => {
-      const nextValue = event.deltaY < 0 ? currentValue * 1.08 : currentValue / 1.08;
-      return Math.min(2.8, Math.max(0.75, Number(nextValue.toFixed(2))));
+    const rect = event.currentTarget.getBoundingClientRect();
+    const cursorX = event.clientX - rect.left;
+    const cursorY = event.clientY - rect.top;
+    const centerX = dimensions.width / 2;
+    const centerY = dimensions.height / 2;
+
+    setZoom((currentZoom) => {
+      const nextZoom = clampZoom(event.deltaY < 0 ? currentZoom * 1.08 : currentZoom / 1.08);
+      const zoomRatio = nextZoom / currentZoom;
+
+      setOffset((currentOffset) => ({
+        x: cursorX - centerX - (cursorX - centerX - currentOffset.x) * zoomRatio,
+        y: cursorY - centerY - (cursorY - centerY - currentOffset.y) * zoomRatio,
+      }));
+
+      return nextZoom;
     });
   };
 
@@ -298,17 +410,24 @@ export default function PathfinderGraphScene({
       }}
     >
       <div style={controlsStyle}>
-        <button type="button" style={toolButtonStyle} onClick={() => setZoom((value) => Math.max(0.75, Number((value / 1.15).toFixed(2))))}>
+        <button type="button" style={toolButtonStyle} onClick={() => setZoom((value) => clampZoom(value / 1.15))}>
           -
         </button>
-        <button type="button" style={toolButtonStyle} onClick={() => setZoom(1)}>
-          Fit
+        <button
+          type="button"
+          style={toolButtonStyle}
+          onClick={() => {
+            setZoom(1);
+            setOffset({ x: 0, y: 0 });
+          }}
+        >
+          {t.common.fit}
         </button>
-        <button type="button" style={toolButtonStyle} onClick={() => setZoom((value) => Math.min(2.8, Number((value * 1.15).toFixed(2))))}>
+        <button type="button" style={toolButtonStyle} onClick={() => setZoom((value) => clampZoom(value * 1.15))}>
           +
         </button>
         <button type="button" style={toolButtonStyle} onClick={() => setOffset({ x: 0, y: 0 })}>
-          Center
+          {t.common.center}
         </button>
       </div>
 

@@ -3,8 +3,6 @@ import PlaybackControls from "./PlaybackControls";
 import PlayerLookupField from "./PlayerLookupField";
 import PathfinderGraphScene from "./PathfinderGraphScene";
 import {
-  ALGORITHM_LABELS,
-  PATH_MODE_LABELS,
   type AlgorithmId,
   type CanvasFrame,
   type GraphSnapshot,
@@ -13,6 +11,7 @@ import {
   type PlaybackState,
   type PlayerOption,
 } from "./pathfinderTypes";
+import { getAlgorithmLabel, getPathModeLabel, getPhaseLabel, useI18n } from "./i18n";
 
 interface PathfinderGraphOverlayProps {
   open: boolean;
@@ -31,6 +30,7 @@ interface PathfinderGraphOverlayProps {
   playbackState: PlaybackState;
   playbackSpeed: number;
   canStep: boolean;
+  currentStepIndex: number;
   onPlay: () => void;
   onPause: () => void;
   onRestart: () => void;
@@ -69,6 +69,7 @@ export default function PathfinderGraphOverlay({
   playbackState,
   playbackSpeed,
   canStep,
+  currentStepIndex,
   onPlay,
   onPause,
   onRestart,
@@ -78,6 +79,7 @@ export default function PathfinderGraphOverlay({
   onRunSearch,
   datasetSummary,
 }: PathfinderGraphOverlayProps) {
+  const { language, t } = useI18n();
   const [draftSourcePlayerId, setDraftSourcePlayerId] = useState(sourcePlayerId);
   const [draftTargetPlayerId, setDraftTargetPlayerId] = useState(targetPlayerId);
   const [draftAlgorithm, setDraftAlgorithm] = useState<AlgorithmId>(algorithm);
@@ -96,6 +98,11 @@ export default function PathfinderGraphOverlay({
     setDraftWeightedMode(weightedMode);
   }, [algorithm, open, pathMode, sourcePlayerId, targetPlayerId, weightedMode]);
 
+  const totalTraceSteps = run?.trace.length ?? 0;
+  const playbackProgressLabel = totalTraceSteps > 0
+    ? `${t.pathfinder.currentStep}: ${Math.min(currentStepIndex + 1, totalTraceSteps)} / ${totalTraceSteps}`
+    : `${t.pathfinder.currentStep}: 0 / 0`;
+
   return (
     <div
       style={{
@@ -112,11 +119,11 @@ export default function PathfinderGraphOverlay({
     >
       <div
         style={{
-          width: "min(1420px, calc(100vw - 1.5rem))",
-          height: "min(960px, calc(100vh - 1.5rem))",
+          width: "calc(100vw - 1.5rem)",
+          height: "calc(100vh - 1.5rem)",
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 340px)",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(520px, 620px)",
           gap: "0.85rem",
           background: "#171a1f",
           border: "1px solid #313740",
@@ -138,24 +145,30 @@ export default function PathfinderGraphOverlay({
           >
             <div>
               <div style={{ color: "#9ca3af", fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                Graph Explorer
+                {t.pathfinder.graphExplorer}
               </div>
               <div style={{ color: "#f3f4f6", fontSize: "1.4rem", fontWeight: 700 }}>
-                Full graph view with live controls
+                {t.pathfinder.fullGraphView}
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
               style={{
-                borderRadius: "12px",
+                borderRadius: "999px",
                 border: "1px solid #3a414a",
                 background: "#252a31",
                 color: "#e5e7eb",
-                padding: "0.65rem 0.9rem",
+                width: "2.4rem",
+                height: "2.4rem",
+                padding: 0,
+                display: "grid",
+                placeItems: "center",
+                fontWeight: 700,
+                lineHeight: 1,
               }}
             >
-              Close Overlay
+              X
             </button>
           </div>
 
@@ -185,24 +198,24 @@ export default function PathfinderGraphOverlay({
             overflowY: "auto",
           }}
         >
-          <div style={{ fontWeight: 700, color: "#f3f4f6" }}>Search Controls</div>
+          <div style={{ fontWeight: 700, color: "#f3f4f6" }}>{t.pathfinder.searchControls}</div>
 
           <div style={{ display: "grid", gap: "0.7rem" }}>
             <PlayerLookupField
-              label="Source Player"
+              label={t.pathfinder.sourcePlayer}
               players={players}
               selectedId={draftSourcePlayerId}
               onSelectedIdChange={setDraftSourcePlayerId}
             />
             <PlayerLookupField
-              label="Target Player"
+              label={t.pathfinder.targetPlayer}
               players={players}
               selectedId={draftTargetPlayerId}
               onSelectedIdChange={setDraftTargetPlayerId}
             />
             <div>
               <div style={{ color: "#9ca3af", fontSize: "0.82rem", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-                Algorithm
+                {t.pathfinder.algorithm}
               </div>
               <select
                 value={draftAlgorithm}
@@ -224,12 +237,12 @@ export default function PathfinderGraphOverlay({
               >
                 {supportedAlgorithms.map((item) => (
                   <option key={item} value={item}>
-                    {ALGORITHM_LABELS[item]}
+                    {getAlgorithmLabel(language, item)}
                   </option>
                 ))}
               </select>
             </div>
-            <div style={{ color: "#9ca3af", fontSize: "0.82rem", textTransform: "uppercase" }}>Path Mode</div>
+            <div style={{ color: "#9ca3af", fontSize: "0.82rem", textTransform: "uppercase" }}>{t.pathfinder.pathMode}</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.55rem" }}>
               <button
                 type="button"
@@ -244,7 +257,7 @@ export default function PathfinderGraphOverlay({
                   fontWeight: 700,
                 }}
               >
-                {PATH_MODE_LABELS["social-path"]}
+                {getPathModeLabel(language, "social-path")}
               </button>
               <button
                 type="button"
@@ -259,12 +272,12 @@ export default function PathfinderGraphOverlay({
                   fontWeight: 700,
                 }}
               >
-                {PATH_MODE_LABELS["battle-path"]}
+                {getPathModeLabel(language, "battle-path")}
               </button>
             </div>
             <div>
               <div style={{ color: "#9ca3af", fontSize: "0.82rem", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-                Weighted Mode
+                {t.pathfinder.weightedMode}
               </div>
               <button
                 type="button"
@@ -283,13 +296,12 @@ export default function PathfinderGraphOverlay({
                 }}
               >
                 {draftWeightedMode && (draftAlgorithm === "dijkstra" || draftAlgorithm === "astar")
-                  ? "Enabled: prioritize stronger repeated edges"
-                  : "Off: treat every edge as the same cost"}
+                  ? t.pathfinder.weightedEnabled
+                  : t.pathfinder.weightedOff}
               </button>
             </div>
             <div style={{ color: "#9ca3af", fontSize: "0.85rem", lineHeight: 1.5 }}>
-              Use player search, algorithm choice, path mode, and weighted Dijkstra together, then apply the
-              query from here.
+              {t.pathfinder.pageDescription}
             </div>
             <button
               type="button"
@@ -315,55 +327,91 @@ export default function PathfinderGraphOverlay({
                 fontWeight: 700,
               }}
             >
-              {loading ? "Updating..." : "Apply Search"}
+              {loading ? t.pathfinder.updating : t.pathfinder.applySearch}
             </button>
           </div>
 
           <div style={{ height: 1, background: "#323842", margin: "0.2rem 0" }} />
 
-          <PlaybackControls
-            title="Playback"
-            playbackState={playbackState}
-            playbackSpeed={playbackSpeed}
-            canStep={canStep}
-            onPlay={onPlay}
-            onPause={onPause}
-            onRestart={onRestart}
-            onStepForward={onStepForward}
-            onStepBackward={onStepBackward}
-            onSpeedChange={onSpeedChange}
-          />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.85rem" }}>
+            <PlaybackControls
+              title={t.pathfinder.playback}
+              progressLabel={playbackProgressLabel}
+              playbackState={playbackState}
+              playbackSpeed={playbackSpeed}
+              canStep={canStep}
+              onPlay={onPlay}
+              onPause={onPause}
+              onRestart={onRestart}
+              onStepForward={onStepForward}
+              onStepBackward={onStepBackward}
+              onSpeedChange={onSpeedChange}
+            />
 
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <div style={{ fontWeight: 700, color: "#f3f4f6" }}>Run Status</div>
-            <div>Source: {players.find((player) => player.id === sourcePlayerId)?.label ?? sourcePlayerId}</div>
-            <div>Target: {players.find((player) => player.id === targetPlayerId)?.label ?? targetPlayerId}</div>
-            <div>Algorithm: {ALGORITHM_LABELS[algorithm]}</div>
-            <div>Path Mode: {PATH_MODE_LABELS[pathMode]}</div>
-            <div>
-              Weighted Mode: {(algorithm === "dijkstra" || algorithm === "astar") && weightedMode
-                ? "Match-strength weighted"
-                : "Uniform edge cost"}
+            <div
+              style={{
+                background: "#1d2127",
+                border: "1px solid #303741",
+                borderRadius: "18px",
+                padding: "1rem",
+                display: "grid",
+                gap: "0.35rem",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#f3f4f6" }}>{t.pathfinder.runStatus}</div>
+              <div>{t.pathfinder.source}: {players.find((player) => player.id === sourcePlayerId)?.label ?? sourcePlayerId}</div>
+              <div>{t.pathfinder.target}: {players.find((player) => player.id === targetPlayerId)?.label ?? targetPlayerId}</div>
+              <div>{t.pathfinder.algorithm}: {getAlgorithmLabel(language, algorithm)}</div>
+              <div>{t.pathfinder.pathMode}: {getPathModeLabel(language, pathMode)}</div>
+              <div>
+                {t.pathfinder.weightedMode}: {(algorithm === "dijkstra" || algorithm === "astar") && weightedMode
+                  ? t.pathfinder.weightedEnabled
+                  : t.pathfinder.weightedOff}
+              </div>
+              <div>{t.pathfinder.phase}: {getPhaseLabel(language, frame.phase)}</div>
+              <div>{playbackProgressLabel}</div>
+              <div>{t.pathfinder.nodesVisited}: {frame.visitedNodeIds.length}</div>
+              <div>{t.pathfinder.revealedEdges}: {frame.revealedEdgeKeys.length}</div>
             </div>
-            <div>Phase: {frame.phase ?? "idle"}</div>
-            <div>Step: {frame.stepNumber}</div>
-            <div>Visited nodes: {frame.visitedNodeIds.length}</div>
-            <div>Revealed edges: {frame.revealedEdgeKeys.length}</div>
           </div>
 
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <div style={{ fontWeight: 700, color: "#f3f4f6" }}>Graph Summary</div>
-            <div>{datasetSummary.players} players</div>
-            <div>{datasetSummary.relationships} relationships</div>
-            <div>{datasetSummary.allyRelationships} ally edges</div>
-            <div>{datasetSummary.enemyRelationships} enemy edges</div>
-          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "0.85rem",
+              alignItems: "start",
+            }}
+          >
+            <div
+              style={{
+                background: "#1d2127",
+                border: "1px solid #303741",
+                borderRadius: "18px",
+                padding: "1rem",
+                display: "grid",
+                gap: "0.35rem",
+              }}
+            >
+              <div style={{ fontWeight: 700, color: "#f3f4f6" }}>{t.pathfinder.graphSummary}</div>
+              <div>{datasetSummary.players} {t.pathfinder.players}</div>
+              <div>{datasetSummary.relationships} {t.pathfinder.relationships.toLowerCase()}</div>
+              <div>{datasetSummary.allyRelationships} {t.pathfinder.allyEdges}</div>
+              <div>{datasetSummary.enemyRelationships} {t.pathfinder.enemyEdges}</div>
+            </div>
 
-          <div style={{ color: "#9ca3af", lineHeight: 1.5 }}>
-            Social path limits traversal to ally links. Battle path also allows enemy links, which can expose
-            shorter or otherwise unreachable routes. When weighted search is enabled, repeated connections are
-            cheaper, so stronger match-history edges are favored during the search. Playback reveals the visited
-            frontier and then resolves the final route when the search finishes.
+            <div
+              style={{
+                background: "#1d2127",
+                border: "1px solid #303741",
+                borderRadius: "18px",
+                padding: "1rem",
+                color: "#9ca3af",
+                lineHeight: 1.5,
+              }}
+            >
+              {t.pathfinder.overlayExplanation}
+            </div>
           </div>
         </aside>
       </div>

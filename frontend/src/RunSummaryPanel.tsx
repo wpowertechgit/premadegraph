@@ -1,9 +1,14 @@
 import React from "react";
-import { ALGORITHM_LABELS, PATH_MODE_LABELS, STATUS_LABELS, type PathfinderRunResponse } from "./pathfinderTypes";
+import { type PathfinderRunResponse } from "./pathfinderTypes";
+import { getAlgorithmLabel, getPathModeLabel, getStatusLabel, translateBackendText, useI18n } from "./i18n";
 
 interface RunSummaryPanelProps {
   run: PathfinderRunResponse | null;
   comparisonNote: string;
+}
+
+function formatRuntime(value: number) {
+  return `${value.toFixed(2)} ms`;
 }
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -23,6 +28,7 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 }
 
 export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanelProps) {
+  const { language, t } = useI18n();
   return (
     <section
       style={{
@@ -33,10 +39,10 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
         color: "#f3f4f6",
       }}
     >
-      <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Run Summary</div>
+      <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>{t.pathfinder.runSummary}</div>
 
       {!run ? (
-        <div style={{ color: "#9ca3af" }}>Choose players, path mode, and algorithm to populate the live route metrics.</div>
+        <div style={{ color: "#9ca3af" }}>{t.pathfinder.runSummaryEmpty}</div>
       ) : (
         <>
           <div
@@ -46,14 +52,14 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
               gap: "0.75rem",
             }}
           >
-            <StatCard label="Algorithm" value={ALGORITHM_LABELS[run.request.algorithm]} />
-            <StatCard label="Path Mode" value={PATH_MODE_LABELS[run.request.pathMode]} />
-            <StatCard label="Status" value={STATUS_LABELS[run.status]} />
-            <StatCard label="Path Length" value={run.summary.pathLength} />
-            <StatCard label="Nodes Visited" value={run.summary.nodesVisited} />
-            <StatCard label="Edges Considered" value={run.summary.edgesConsidered} />
-            <StatCard label="Runtime" value={`${run.summary.runtimeMs} ms`} />
-            <StatCard label="Trace Steps" value={run.summary.traceStepCount} />
+            <StatCard label={t.pathfinder.algorithm} value={getAlgorithmLabel(language, run.request.algorithm)} />
+            <StatCard label={t.pathfinder.pathMode} value={getPathModeLabel(language, run.request.pathMode)} />
+            <StatCard label={t.pathfinder.status} value={getStatusLabel(language, run.status)} />
+            <StatCard label={t.pathfinder.pathLength} value={run.summary.pathLength} />
+            <StatCard label={t.pathfinder.nodesVisited} value={run.summary.nodesVisited} />
+            <StatCard label={t.pathfinder.edgesConsidered} value={run.summary.edgesConsidered} />
+            <StatCard label={t.pathfinder.runtime} value={formatRuntime(run.summary.runtimeMs)} />
+            <StatCard label={t.pathfinder.traceSteps} value={run.summary.traceStepCount} />
           </div>
 
           <div
@@ -65,8 +71,8 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
               border: "1px solid #313842",
             }}
           >
-            <div style={{ color: "#f3f4f6", fontWeight: 600 }}>Comparison Note</div>
-            <div style={{ color: "#9ca3af", marginTop: "0.3rem" }}>{comparisonNote}</div>
+            <div style={{ color: "#f3f4f6", fontWeight: 600 }}>{t.pathfinder.comparisonNote}</div>
+            <div style={{ color: "#9ca3af", marginTop: "0.3rem" }}>{translateBackendText(language, comparisonNote)}</div>
           </div>
 
           {run.warnings.length > 0 ? (
@@ -81,7 +87,7 @@ export default function RunSummaryPanel({ run, comparisonNote }: RunSummaryPanel
               }}
             >
               {run.warnings.map((warning) => (
-                <div key={warning}>{warning}</div>
+                <div key={warning}>{translateBackendText(language, warning)}</div>
               ))}
             </div>
           ) : null}

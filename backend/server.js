@@ -17,6 +17,51 @@ const {
 } = require("./pathfinder/prototypeEngine");
 const { executeRustCommand } = require("./pathfinder/rustBridge");
 
+const rustResponseCache = {
+  options: null,
+  spec: null,
+  "global-view": null,
+};
+const rustInFlightRequests = new Map();
+
+async function getCachedRustResponse(command, { forceRefresh = false } = {}) {
+  if (!forceRefresh && rustResponseCache[command]) {
+    return rustResponseCache[command];
+  }
+
+  if (!forceRefresh && rustInFlightRequests.has(command)) {
+    return rustInFlightRequests.get(command);
+  }
+
+  const request = executeRustCommand(command)
+    .then((response) => {
+      rustResponseCache[command] = response;
+      rustInFlightRequests.delete(command);
+      return response;
+    })
+    .catch((error) => {
+      rustInFlightRequests.delete(command);
+      throw error;
+    });
+
+  rustInFlightRequests.set(command, request);
+  return request;
+}
+
+async function prewarmRustMetadata() {
+  try {
+    console.log("Prewarming Rust pathfinder metadata...");
+    await Promise.all([
+      getCachedRustResponse("options", { forceRefresh: true }),
+      getCachedRustResponse("spec", { forceRefresh: true }),
+      getCachedRustResponse("global-view", { forceRefresh: true }),
+    ]);
+    console.log("Rust pathfinder metadata cached.");
+  } catch (error) {
+    console.warn("Rust pathfinder metadata prewarm failed:", error.message);
+  }
+}
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use('/graph-view', express.static(path.join(__dirname, 'output')));
@@ -224,7 +269,7 @@ app.post("/api/pathfinder/compare", (req, res) => {
 
 app.get("/api/pathfinder-rust/options", async (req, res) => {
   try {
-    const response = await executeRustCommand("options");
+    const response = await getCachedRustResponse("options");
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder options failed:", error.message);
@@ -234,7 +279,7 @@ app.get("/api/pathfinder-rust/options", async (req, res) => {
 
 app.get("/api/pathfinder-rust/global-view", async (req, res) => {
   try {
-    const response = await executeRustCommand("global-view");
+    const response = await getCachedRustResponse("global-view");
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder global view failed:", error.message);
@@ -244,7 +289,7 @@ app.get("/api/pathfinder-rust/global-view", async (req, res) => {
 
 app.get("/api/pathfinder-rust/engine-spec", async (req, res) => {
   try {
-    const response = await executeRustCommand("spec");
+    const response = await getCachedRustResponse("spec");
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder engine spec failed:", error.message);
@@ -304,6 +349,7 @@ app.post("/api/pathfinder-rust/player-focus", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Backend listening at http://localhost:${PORT}`);
+  void prewarmRustMetadata();
 });
 app.get("/api/ping", (req, res) => {
   res.send("pong");

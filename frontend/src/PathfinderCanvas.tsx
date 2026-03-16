@@ -1,6 +1,7 @@
 import React from "react";
 import PathfinderGraphScene from "./PathfinderGraphScene";
 import { type CanvasFrame, type GraphSnapshot, type PathfinderRunResponse } from "./pathfinderTypes";
+import { useI18n } from "./i18n";
 
 interface PathfinderCanvasProps {
   snapshot: GraphSnapshot;
@@ -19,6 +20,11 @@ export default function PathfinderCanvas({
   targetPlayerId,
   onOpenOverlay,
 }: PathfinderCanvasProps) {
+  const { t } = useI18n();
+  const progressLabel = run && run.trace.length > 0
+    ? `${t.pathfinder.stepLabel} ${Math.min(frame.stepNumber || 1, run.trace.length)} / ${run.trace.length}`
+    : t.pathfinder.overviewMode;
+
   return (
     <section
       style={{
@@ -41,16 +47,15 @@ export default function PathfinderCanvas({
         }}
       >
         <div>
-          <div style={{ fontSize: "1rem", fontWeight: 700 }}>Graph Preview</div>
+          <div style={{ fontSize: "1rem", fontWeight: 700 }}>{t.pathfinder.graphPreview}</div>
           <div style={{ color: "#9ca3af", fontSize: "0.9rem", marginTop: "0.2rem", maxWidth: "640px" }}>
-            Use this view for a quick read of the network, then open the full overlay for player search,
-            algorithm switching, and detailed playback controls.
+            {t.pathfinder.graphPreviewText}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ color: "#9ca3af", fontSize: "0.88rem" }}>
-            {run ? `Step ${frame.stepNumber || 0}` : "Overview mode"}
+            {progressLabel}
           </span>
           <button
             type="button"
@@ -63,7 +68,7 @@ export default function PathfinderCanvas({
               padding: "0.65rem 0.9rem",
             }}
           >
-            Open Overlay
+            {t.pathfinder.openOverlay}
           </button>
         </div>
       </div>
@@ -87,10 +92,10 @@ export default function PathfinderCanvas({
           fontSize: "0.84rem",
         }}
       >
-        <span>Canvas renderer for larger networks</span>
-        <span>Playback highlights frontier growth and final route resolution</span>
-        <span>Drag to pan, wheel to zoom</span>
-        <span>Overlay keeps its state when closed</span>
+        <span>{t.pathfinder.canvasNote1}</span>
+        <span>{t.pathfinder.canvasNote2}</span>
+        <span>{t.pathfinder.canvasNote3}</span>
+        <span>{t.pathfinder.canvasNote4}</span>
       </div>
     </section>
   );

@@ -159,87 +159,108 @@ async function normalizePlayersByPuuid() {
           match_count INTEGER
         )`);
 
-        // Insert all players with NORMALIZED opscores in the opscore column
-        const stmt = db.prepare(`
-          INSERT OR REPLACE INTO players (puuid, names, feedscore, opscore, country, match_count)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `);
-
-        let insertedCount = 0;
-        const rawOpScores = [];
-        const normalizedOpScores = [];
-        
-        // Create log file for raw scores
-        const logFilePath = path.join(__dirname, "raw_scores_log.txt");
-        const logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
-        logStream.write("puuid;avgopscore_before_normalization\n");
-        
-        for (const [puuid, data] of playersMap) {
-          const avgFeed = data.feedscoreSum / data.match_count;
-          const avgRawOp = data.opscoreSum / data.match_count;
-          const normalizedOp = normalizeOpScore(avgRawOp);
-          
-          // Log to file
-          logStream.write(`${puuid};${avgRawOp.toFixed(2)}\n`);
-          
-          rawOpScores.push(avgRawOp);
-          normalizedOpScores.push(normalizedOp);
-
-          stmt.run(
-            puuid,
-            JSON.stringify([...data.names]),
-            avgFeed,
-            normalizedOp, // Store normalized score in opscore column
-            data.country,
-            data.match_count
-          );
-          insertedCount++;
-        }
-
-        // Close log stream
-        logStream.end();
-        console.log(`Raw scores logged to: ${logFilePath}`);
-
-        console.log(`Inserted ${insertedCount} players in database with normalized opscores`);
-
-        // Log normalization statistics
-        const avgRaw = rawOpScores.reduce((a, b) => a + b, 0) / rawOpScores.length;
-        const minRaw = Math.min(...rawOpScores);
-        const maxRaw = Math.max(...rawOpScores);
-        
-        const avgNormalized = normalizedOpScores.reduce((a, b) => a + b, 0) / normalizedOpScores.length;
-        const minNormalized = Math.min(...normalizedOpScores);
-        const maxNormalized = Math.max(...normalizedOpScores);
-        
-        console.log(`Raw opscore stats - Avg: ${avgRaw.toFixed(2)}, Min: ${minRaw.toFixed(2)}, Max: ${maxRaw.toFixed(2)}`);
-        console.log(`Normalized opscore stats - Avg: ${avgNormalized.toFixed(2)}, Min: ${minNormalized.toFixed(2)}, Max: ${maxNormalized.toFixed(2)}`);
-        
-        // Show distribution of normalized scores
-        const bins = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        const distribution = new Array(bins.length - 1).fill(0);
-        
-        for (const score of normalizedOpScores) {
-          for (let i = 0; i < bins.length - 1; i++) {
-            if (score >= bins[i] && score < bins[i + 1]) {
-              distribution[i]++;
-              break;
-            } else if (score === 10 && i === bins.length - 2) {
-              distribution[i]++;
-              break;
-            }
+        db.run("BEGIN TRANSACTION", (beginErr) => {
+          if (beginErr) {
+            db.close();
+            return reject(beginErr);
           }
-        }
-        
-        console.log('Normalized score distribution:');
-        for (let i = 0; i < distribution.length; i++) {
-          const range = i === distribution.length - 1 ? `${bins[i]}-${bins[i + 1]}` : `${bins[i]}-${bins[i + 1]}`;
-          console.log(`  ${range}: ${distribution[i]} players`);
-        }
 
-        stmt.finalize((err) => {
-          db.close();
-          if (err) reject(err);
-          else resolve();
+          const stmt = db.prepare(`
+            INSERT OR REPLACE INTO players (puuid, names, feedscore, opscore, country, match_count)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `);
+
+          let insertedCount = 0;
+          const rawOpScores = [];
+          const normalizedOpScores = [];
+          
+          // Create log file for raw scores
+          const logFilePath = path.join(__dirname, "raw_scores_log.txt");
+          const logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
+          logStream.write("puuid;avgopscore_before_normalization\n");
+          
+          for (const [puuid, data] of playersMap) {
+            const avgFeed = data.feedscoreSum / data.match_count;
+            const avgRawOp = data.opscoreSum / data.match_count;
+            const normalizedOp = normalizeOpScore(avgRawOp);
+            
+            logStream.write(`${puuid};${avgRawOp.toFixed(2)}\n`);
+            
+            rawOpScores.push(avgRawOp);
+            normalizedOpScores.push(normalizedOp);
+
+            stmt.run(
+              puuid,
+              JSON.stringify([...data.names]),
+              avgFeed,
+              normalizedOp,
+              data.country,
+              data.match_count
+            );
+            insertedCount++;
+          }
+
+          logStream.end();
+          console.log(`Raw scores logged to: ${logFilePath}`);
+
+          stmt.finalize((finalizeErr) => {
+            if (finalizeErr) {
+              db.run("ROLLBACK", () => {
+                db.close();
+                reject(finalizeErr);
+              });
+              return;
+            }
+
+            db.run("COMMIT", (commitErr) => {
+              if (commitErr) {
+                db.run("ROLLBACK", () => {
+                  db.close();
+                  reject(commitErr);
+                });
+                return;
+              }
+
+              console.log(`Inserted ${insertedCount} players in database with normalized opscores`);
+
+              const avgRaw = rawOpScores.reduce((a, b) => a + b, 0) / rawOpScores.length;
+              const minRaw = Math.min(...rawOpScores);
+              const maxRaw = Math.max(...rawOpScores);
+              
+              const avgNormalized = normalizedOpScores.reduce((a, b) => a + b, 0) / normalizedOpScores.length;
+              const minNormalized = Math.min(...normalizedOpScores);
+              const maxNormalized = Math.max(...normalizedOpScores);
+              
+              console.log(`Raw opscore stats - Avg: ${avgRaw.toFixed(2)}, Min: ${minRaw.toFixed(2)}, Max: ${maxRaw.toFixed(2)}`);
+              console.log(`Normalized opscore stats - Avg: ${avgNormalized.toFixed(2)}, Min: ${minNormalized.toFixed(2)}, Max: ${maxNormalized.toFixed(2)}`);
+              
+              const bins = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+              const distribution = new Array(bins.length - 1).fill(0);
+              
+              for (const score of normalizedOpScores) {
+                for (let i = 0; i < bins.length - 1; i++) {
+                  if (score >= bins[i] && score < bins[i + 1]) {
+                    distribution[i]++;
+                    break;
+                  } else if (score === 10 && i === bins.length - 2) {
+                    distribution[i]++;
+                    break;
+                  }
+                }
+              }
+              
+              console.log('Normalized score distribution:');
+              for (let i = 0; i < distribution.length; i++) {
+                const range = `${bins[i]}-${bins[i + 1]}`;
+                console.log(`  ${range}: ${distribution[i]} players`);
+              }
+
+              db.close((closeErr) => {
+                if (closeErr) reject(closeErr);
+                else resolve();
+              });
+            });
+          });
         });
 
       } catch (err) {

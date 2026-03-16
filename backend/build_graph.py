@@ -511,8 +511,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate network visualization of player connections')
     parser.add_argument('--connected-only', action='store_true', 
                        help='Show only connected nodes (hide standalone nodes)')
-    parser.add_argument('--min-weight', type=int, default=2,
-                       help='Minimum edge weight to display (default: 2)')
+    parser.add_argument('--min-weight', type=int, default=3,
+                       help='Minimum edge weight to display (default: 3)')
     
     args = parser.parse_args()
     

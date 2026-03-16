@@ -6,6 +6,10 @@ use crate::models::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
+const MAX_TRACE_STEPS_RESPONSE: usize = 900;
+const MAX_TRACE_FRONTIER_IDS: usize = 60;
+const MAX_TRACE_VISITED_IDS: usize = 160;
+
 #[derive(Debug, Clone)]
 pub(super) struct SearchResult {
     pub(super) found: bool,
@@ -37,6 +41,13 @@ impl PartialOrd for QueueState {
     }
 }
 
+fn truncate_ids(mut ids: Vec<String>, limit: usize) -> Vec<String> {
+    if ids.len() > limit {
+        ids.truncate(limit);
+    }
+    ids
+}
+
 fn create_trace_step(
     step: usize,
     phase: &str,
@@ -52,10 +63,33 @@ fn create_trace_step(
         step,
         phase: phase.to_string(),
         active_node_id: active,
-        frontier_node_ids: frontier,
-        visited_node_ids: visited_ids,
+        frontier_node_ids: truncate_ids(frontier, MAX_TRACE_FRONTIER_IDS),
+        visited_node_ids: truncate_ids(visited_ids, MAX_TRACE_VISITED_IDS),
         highlighted_edges,
     }
+}
+
+fn push_trace_step(
+    trace: &mut Vec<TraceStep>,
+    step: usize,
+    phase: &str,
+    active: Option<String>,
+    frontier: Vec<String>,
+    visited: &HashSet<String>,
+    highlighted_edges: Vec<TraceHighlightedEdge>,
+) {
+    if trace.len() >= MAX_TRACE_STEPS_RESPONSE && phase != "resolve" && phase != "complete" {
+        return;
+    }
+
+    trace.push(create_trace_step(
+        step,
+        phase,
+        active,
+        frontier,
+        visited,
+        highlighted_edges,
+    ));
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -108,14 +142,14 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
             break;
         }
 
-        trace.push(create_trace_step(
+        push_trace_step(&mut trace, 
             step,
             "expand",
             Some(current.clone()),
             queue.iter().cloned().collect(),
             &visited,
             vec![],
-        ));
+        );
         step += 1;
 
         for neighbor in allowed_neighbors(graph, &current, &request.path_mode) {
@@ -131,7 +165,7 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
                 queue.push_back(neighbor.id.clone());
             }
 
-            trace.push(create_trace_step(
+            push_trace_step(&mut trace, 
                 step,
                 "discover",
                 Some(current.clone()),
@@ -147,7 +181,7 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
                         "seen".to_string()
                     },
                 }],
-            ));
+            );
             step += 1;
 
             if is_new && neighbor.id == request.target_player_id {
@@ -159,7 +193,7 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
     }
 
     if !found {
-        trace.push(create_trace_step(step, "complete", None, vec![], &visited, vec![]));
+        push_trace_step(&mut trace, step, "complete", None, vec![], &visited, vec![]);
         return SearchResult {
             found: false,
             path_nodes: vec![],
@@ -173,7 +207,7 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
     let (path_nodes, path_edges) =
         build_path(graph, &parents, &request.target_player_id, &request.path_mode);
 
-    trace.push(create_trace_step(
+    push_trace_step(&mut trace, 
         step,
         "resolve",
         Some(request.target_player_id.clone()),
@@ -188,7 +222,7 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
                 state: "resolved".to_string(),
             })
             .collect(),
-    ));
+    );
 
     SearchResult {
         found: true,
@@ -226,14 +260,14 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
 
         let mut frontier: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
         frontier.sort();
-        trace.push(create_trace_step(
+        push_trace_step(&mut trace, 
             step,
             "expand",
             Some(current.id.clone()),
             frontier,
             &visited,
             vec![],
-        ));
+        );
         step += 1;
 
         if current.id == request.target_player_id {
@@ -262,7 +296,7 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
 
             let mut frontier_after: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
             frontier_after.sort();
-            trace.push(create_trace_step(
+            push_trace_step(&mut trace, 
                 step,
                 "discover",
                 Some(current.id.clone()),
@@ -278,13 +312,13 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
                         "seen".to_string()
                     },
                 }],
-            ));
+            );
             step += 1;
         }
     }
 
     if !found {
-        trace.push(create_trace_step(step, "complete", None, vec![], &visited, vec![]));
+        push_trace_step(&mut trace, step, "complete", None, vec![], &visited, vec![]);
         return SearchResult {
             found: false,
             path_nodes: vec![],
@@ -298,7 +332,7 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
     let (path_nodes, path_edges) =
         build_path(graph, &parents, &request.target_player_id, &request.path_mode);
 
-    trace.push(create_trace_step(
+    push_trace_step(&mut trace, 
         step,
         "resolve",
         Some(request.target_player_id.clone()),
@@ -313,7 +347,7 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
                 state: "resolved".to_string(),
             })
             .collect(),
-    ));
+    );
 
     SearchResult {
         found: true,
@@ -356,14 +390,14 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
 
         let mut frontier: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
         frontier.sort();
-        trace.push(create_trace_step(
+        push_trace_step(&mut trace, 
             step,
             "expand",
             Some(current.id.clone()),
             frontier,
             &visited,
             vec![],
-        ));
+        );
         step += 1;
 
         if current.id == request.target_player_id {
@@ -397,7 +431,7 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
 
             let mut frontier_after: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
             frontier_after.sort();
-            trace.push(create_trace_step(
+            push_trace_step(&mut trace, 
                 step,
                 "discover",
                 Some(current.id.clone()),
@@ -413,13 +447,13 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
                         "seen".to_string()
                     },
                 }],
-            ));
+            );
             step += 1;
         }
     }
 
     if !found {
-        trace.push(create_trace_step(step, "complete", None, vec![], &visited, vec![]));
+        push_trace_step(&mut trace, step, "complete", None, vec![], &visited, vec![]);
         return SearchResult {
             found: false,
             path_nodes: vec![],
@@ -432,7 +466,7 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
 
     let (path_nodes, path_edges) =
         build_path(graph, &parents, &request.target_player_id, &request.path_mode);
-    trace.push(create_trace_step(
+    push_trace_step(&mut trace, 
         step,
         "resolve",
         Some(request.target_player_id.clone()),
@@ -447,7 +481,7 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
                 state: "resolved".to_string(),
             })
             .collect(),
-    ));
+    );
 
     SearchResult {
         found: true,
@@ -480,14 +514,14 @@ fn expand_frontier(
     };
 
     let combined_visited: HashSet<String> = own_visited.union(other_visited).cloned().collect();
-    trace.push(create_trace_step(
+    push_trace_step(trace, 
         *step,
         "expand",
         Some(current.clone()),
         frontier_snapshot.clone(),
         &combined_visited,
         vec![],
-    ));
+    );
     *step += 1;
 
     for neighbor in allowed_neighbors(graph, &current, &request.path_mode) {
@@ -505,7 +539,7 @@ fn expand_frontier(
         }
 
         let combined_now: HashSet<String> = own_visited.union(other_visited).cloned().collect();
-        trace.push(create_trace_step(
+        push_trace_step(trace, 
             *step,
             "discover",
             Some(current.clone()),
@@ -521,7 +555,7 @@ fn expand_frontier(
                     "seen".to_string()
                 },
             }],
-        ));
+        );
         *step += 1;
 
         if other_visited.contains(&neighbor.id) {
@@ -594,7 +628,7 @@ pub(super) fn search_bidirectional(graph: &GraphState, request: &PathfinderReque
     let combined_visited: HashSet<String> = source_visited.union(&target_visited).cloned().collect();
 
     if meeting_node.is_none() {
-        trace.push(create_trace_step(step, "complete", None, vec![], &combined_visited, vec![]));
+        push_trace_step(&mut trace, step, "complete", None, vec![], &combined_visited, vec![]);
         return SearchResult {
             found: false,
             path_nodes: vec![],
@@ -633,7 +667,7 @@ pub(super) fn search_bidirectional(graph: &GraphState, request: &PathfinderReque
         });
     }
 
-    trace.push(create_trace_step(
+    push_trace_step(&mut trace, 
         step,
         "resolve",
         Some(meet),
@@ -648,7 +682,7 @@ pub(super) fn search_bidirectional(graph: &GraphState, request: &PathfinderReque
                 state: "resolved".to_string(),
             })
             .collect(),
-    ));
+    );
 
     SearchResult {
         found: true,
@@ -659,3 +693,4 @@ pub(super) fn search_bidirectional(graph: &GraphState, request: &PathfinderReque
         trace,
     }
 }
+

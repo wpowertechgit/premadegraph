@@ -1,102 +1,211 @@
-# ⚠️ IMPORTANT ⚠️  
-## Steps for Matchdata Crawling
+# Premade Graph
 
-## Architecture Docs
-- [Unified Cluster Persistence And Exact A*](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/docs/unified-cluster-persistence-and-astar.md)
+`premadegraph` is a thesis project for building, analyzing, and visualizing player relationship graphs from League of Legends match data.
 
-## License
-This repository is licensed under the MIT License. See [LICENSE](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/LICENSE).
+The repository combines:
 
----
+- match collection and player normalization
+- Python-based graph generation and clustering
+- a Node/Express backend
+- a React/Vite frontend
+- a Rust pathfinding engine for real graph search
 
-### ✅ Step 0 — Start the Dev Server
+## Overview
+
+The project turns repeated player co-occurrence into a graph and uses it for two related goals:
+
+- population analysis and cluster visualization
+- pathfinding between players with interactive frontend playback
+
+The current system supports:
+
+- filtered graph generation with `min_weight >= 2`
+- SQLite-backed cluster persistence
+- Rust-backed BFS, Dijkstra, Bidirectional search, and exact A*
+- global graph, player focus, and route-oriented runtime views
+
+## Repository Structure
+
+### Root
+
+- `package.json`: root dev entrypoint for frontend + backend
+- `docker-compose.yml`: containerized frontend/backend setup
+- `playersrefined.db`: enriched SQLite database used by graph generation and Rust runtime
+- `docs/`: technical documentation
+
+### Backend
+
+- `backend/server.js`: Express API shell
+- `backend/build_graph.py`: graph builder with connected-component style clustering
+- `backend/new_build_graph.py`: newer modularity/community-based graph builder
+- `backend/cluster_persistence.py`: shared SQLite cluster persistence helper
+- `backend/match_collector.py`: Riot API crawler
+- `backend/add_new_players.js`: raw player ingestion
+- `backend/normalize_players_by_puuid.js`: player normalization
+- `backend/pathfinder/`: Node pathfinder implementation and Rust bridge
+- `backend/pathfinder-rust/`: Rust graph runtime and search engine
+- `backend/data/`: raw match JSON files
+- `backend/clusters/`: exported cluster JSON files
+- `backend/output/`: generated HTML graph output
+
+### Frontend
+
+- `frontend/`: React + Vite application
+- `frontend/src/PathfinderLabPage.tsx`: main pathfinder view
+- `frontend/src/PathfinderGraphOverlay.tsx`: fullscreen graph exploration overlay
+
+## Graph And Cluster Model
+
+The project now stores clusters as first-class database entities.
+
+Two cluster families coexist:
+
+- `python_population`
+  - produced by the Python graph pipeline
+  - used for population analysis and country inference
+- `rust_pathfinding`
+  - produced by the Rust runtime
+  - used for filtered runtime graph structure, player focus, and A* heuristics
+
+Both are persisted in SQLite through:
+
+- `clusters`
+- `cluster_members`
+
+Weak one-off noise is filtered by default through repeated-tie thresholds, currently centered on `weight >= 2`.
+
+## Pathfinder Model
+
+The pathfinder currently supports:
+
+- `social-path`
+  - ally-only traversal
+- `battle-path`
+  - traversal across both ally and enemy relationships
+
+Weighted mode means stronger repeated relationships become cheaper to traverse.
+
+In practice:
+
+- unweighted mode treats every valid edge equally
+- weighted mode prefers stronger repeated ties
+
+Rust A* uses:
+
+- landmark-based lower bounds
+- cluster-hop lower bounds
+- layout distance only as a tie-break
+
+## Quick Start
+
+### Local Development
+
+From the repository root:
 
 ```bash
+npm install
 npm run dev
 ```
-### 🔍 Step 1 — Match Collecting
-python match_collector.py
 
-## 🔧 Arguments:
-API_KEY=<YOUR API KEY> — Note: This changes every 24 hours.
+This starts:
 
-REQUESTS_PER_SECOND = 15 — Use 15 out of the 20 allowed per second to stay safe.
+- frontend on `http://localhost:5173`
+- backend on `http://localhost:3001`
 
-REQUESTS_PER_2MIN = 90 — Use 90 out of 100 per 2 minutes for safety.
+### Docker
 
-DELAY_BETWEEN_REQUESTS = 1.0 / REQUESTS_PER_SECOND
-## 🎯 Fetch Settings:
-Deep exploration: Increase MATCHES_PER_PLAYER
+If Docker Desktop is running:
 
-Wide area exploration: Increase MAX_ITERATIONS
+```bash
+docker compose up --build
+```
+
+This starts the frontend and backend containers together.
+
+## Main Workflows
+
+### 1. Collect Match Data
+
+Run from `backend/`:
+
 ```bash
 python match_collector.py
 ```
 
-MATCHES_PER_PLAYER = 25     # Number of matches to fetch per player
-MAX_ITERATIONS = 6          # Number of players to process
-QUEUE_TYPE = ""             # 400 (ARAM), 440 (SoloQ), 420 (Flex), 430 (Normal Draft), "" for all
-## ⚙️ Riot API Rate Limits:
-20 requests every 1 second
+Important script-level settings include:
 
-100 requests every 2 minutes
+- `MATCHES_PER_PLAYER`
+- `MAX_ITERATIONS`
+- `QUEUE_TYPE`
+- Riot API pacing / rate limit controls
 
-### 👥 Step 2 — Add and Normalize Players
+### 2. Add And Normalize Players
 
-Process crawled data and normalize players using:
+Run from `backend/`:
 
 ```bash
 node add_new_players.js
 node normalize_players_by_puuid.js
 ```
-These scripts run through all JSON files in the matchdata folder.
 
-### 📈 Step 3 — Generate the Graph
+### 3. Generate The Filtered Graph
+
+Run from `backend/`:
+
 ```bash
-python fast_graph_test.py --connected-only --min-weight 2
+python new_build_graph.py --connected-only --min-weight 2
 ```
-## Arguments:
---connected-only — Only show connected nodes (exclude standalone players).
 
---min-weight <number> — Minimum number of times two players must have played together to appear as a connection.
-Example:
-```bash
-python fast_graph_test.py --connected-only --min-weight 2
-```
-### 🌎 Step 5(optional) - Predict the countries
+This will:
 
-In this step we can predict where each cluster originates from by sending the clustered data , that we received when we generated the graph
+- build the co-presence graph from real matches
+- enrich nodes from `playersrefined.db`
+- detect communities
+- write JSON artifacts into `backend/clusters/`
+- persist `python_population` clusters into SQLite
+- generate `backend/output/premade_network.html`
 
-The fetch_clusters parses the puuid and last name data in a new JSON
-The assign_country program uses an OpenRouter API endpoint that tries to predict the region of the members, by their username.
-🔧 Batching
-Clusters are processed in batches (e.g. 3 at a time) to reduce API load.
+### 4. Country Prediction Pipeline
 
-🧶 Prompt Construction
-A natural-language prompt is constructed for the LLM:
-
-It includes example output format
-Lists cluster names in the batch
-
-🤖 Response Handling
-The AI may return unwanted verbose explanations.
-
-To ensure clean data, we implemented a robust JSON extractor
-⚙ Database Update
-For each identified country, the program updates player records in the local SQLite DB
-
-
-### 🔐 .env Configuration
-```
-RIOT_API_KEY=riot-developer-api-key-here
-DB_PATH=path/to/your/database.db
-OPENROUTER_API_KEY=your-api-key-here
-```
-### 📝 NOTE: YOU CAN GET A TEMPORAL 24 HOUR API-KEY ON RIOT'S OFFICIAL DEVELOPER PORTAL
-https://developer.riotgames.com
+Optional scripts in `backend/`:
 
 ```bash
 python fetch_clusters.py
 python assign_countries.py
 ```
-# Happy Crawling!
+
+These use cluster exports plus player names to estimate regional origin and update player records in SQLite.
+
+### 5. Rust Pathfinder Runtime
+
+Run from `backend/pathfinder-rust/`:
+
+```bash
+cargo run -- options
+```
+
+To run a search:
+
+```bash
+echo '{"sourcePlayerId":"...","targetPlayerId":"...","algorithm":"astar","pathMode":"social-path","weightedMode":true,"options":{"includeTrace":false,"maxSteps":5000}}' | cargo run -- run
+```
+
+## Environment Variables
+
+Useful variables across the project:
+
+- `RIOT_API_KEY`
+- `GRAPH_DB_PATH`
+- `DB_PATH`
+- `OPENROUTER_API_KEY`
+- `PATHFINDER_MATCH_DIR`
+- `PATHFINDER_RUST_BIN`
+
+## Documentation
+
+- [Rust Backend Prototype Notes](docs/pathfinder-backend-prototype.md)
+- [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md)
+
+## License
+
+This repository is licensed under the [MIT License](LICENSE).

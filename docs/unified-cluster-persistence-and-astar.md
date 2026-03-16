@@ -1,6 +1,7 @@
 # Unified Cluster Persistence And Exact A*
 
 ## Overview
+
 This document describes the current graph architecture after the SQLite cluster persistence and Rust A* integration work.
 
 The project now has two cluster systems that coexist in the same database:
@@ -11,16 +12,19 @@ The project now has two cluster systems that coexist in the same database:
 They serve different purposes and do not replace each other.
 
 ## Main Goals
-- Persist clusters as first-class database entities instead of JSON-only artifacts
-- Keep Python clustering for population analysis and country inference
-- Build the runtime pathfinding graph directly in Rust from real match data and the player database
-- Support exact A* with admissible lower bounds
-- Keep the frontend contract stable enough to evolve without rewriting the whole UI
+
+- persist clusters as first-class database entities instead of JSON-only artifacts
+- keep Python clustering for population analysis and country inference
+- build the runtime pathfinding graph directly in Rust from real match data and the player database
+- support exact A* with admissible lower bounds
+- keep the frontend contract stable enough to evolve without rewriting the whole UI
 
 ## Database Schema
+
 Clusters are now stored in the same SQLite database as the player records.
 
 ### `clusters`
+
 Stores cluster-level metadata:
 
 - `cluster_id`
@@ -36,6 +40,7 @@ Stores cluster-level metadata:
 - `updated_at`
 
 ### `cluster_members`
+
 Stores normalized membership rows:
 
 - `cluster_id`
@@ -46,28 +51,30 @@ Stores normalized membership rows:
 - `is_worst_feed`
 - `role_json`
 
-The schema is created by [cluster_persistence.py](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/cluster_persistence.py) for Python writes and mirrored in the Rust runtime for Rust-side persistence.
+The schema is created by [cluster_persistence.py](../backend/cluster_persistence.py) for Python writes and mirrored in the Rust runtime for Rust-side persistence.
 
 ## Python Cluster Pipeline
+
 The Python side still owns the population-analysis cluster flow.
 
 Relevant files:
 
-- [build_graph.py](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/build_graph.py)
-- [new_build_graph.py](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/new_build_graph.py)
-- [fetch_clusters.py](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/fetch_clusters.py)
+- [build_graph.py](../backend/build_graph.py)
+- [new_build_graph.py](../backend/new_build_graph.py)
+- [fetch_clusters.py](../backend/fetch_clusters.py)
 
 Current behavior:
 
-- Builds a co-presence graph from real matches
-- Filters weak ties with `min_weight >= 2`
-- Detects communities or connected components depending on the script
-- Saves JSON artifacts in `backend/clusters/`
-- Upserts the resulting clusters into SQLite as `python_population`
+- builds a co-presence graph from real matches
+- filters weak ties with `min_weight >= 2`
+- detects communities or connected components depending on the script
+- saves JSON artifacts in `backend/clusters/`
+- upserts the resulting clusters into SQLite as `python_population`
 
 This keeps the country/presentation pipeline intact while making the DB the authoritative runtime store.
 
 ## Rust Runtime Graph
+
 The Rust engine no longer depends on the toy dataset for real execution. It now builds its graph directly from:
 
 - raw match JSON files in `backend/data` or `PATHFINDER_MATCH_DIR`
@@ -75,24 +82,26 @@ The Rust engine no longer depends on the toy dataset for real execution. It now 
 
 Relevant files:
 
-- [main.rs](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/pathfinder-rust/src/main.rs)
-- [engine.rs](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/pathfinder-rust/src/engine.rs)
-- [graph.rs](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/pathfinder-rust/src/engine/graph.rs)
-- [search.rs](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/pathfinder-rust/src/engine/search.rs)
+- [main.rs](../backend/pathfinder-rust/src/main.rs)
+- [engine.rs](../backend/pathfinder-rust/src/engine.rs)
+- [graph.rs](../backend/pathfinder-rust/src/engine/graph.rs)
+- [search.rs](../backend/pathfinder-rust/src/engine/search.rs)
 
 ### Graph Layers
+
 Rust builds two related graph views:
 
-- Population graph:
+- population graph
   - undirected co-presence graph
   - used for global rendering
   - filtered to repeated ties with `weight >= 2`
-- Pathfinder graph:
+- pathfinder graph
   - signed graph over the filtered node set
   - stores ally weight, total matches, and dominant relation
   - used for `social-path` and `battle-path` search
 
 ### Runtime Clusters
+
 Rust pathfinding clusters are connected components over the filtered co-presence graph.
 
 Current properties:
@@ -107,6 +116,7 @@ Current properties:
 Rust then persists these as `rust_pathfinding` rows in SQLite.
 
 ## Search Algorithms
+
 The runtime currently supports:
 
 - BFS
@@ -115,6 +125,7 @@ The runtime currently supports:
 - A*
 
 ### Weighted Mode
+
 Weighted mode means stronger repeated connections become cheaper to traverse.
 
 Cost rule:
@@ -128,6 +139,7 @@ Interpretation by path mode:
 - `battle-path`: uses total repeated matches
 
 ### Exact A*
+
 A* is implemented as an exact shortest-path algorithm, not a visual shortcut.
 
 Heuristic:
@@ -144,11 +156,12 @@ Tie-break only:
 That keeps A* admissible while still letting the visual cluster structure influence search order in a safe way.
 
 ## API Surface
+
 Express remains the orchestration shell.
 
 Relevant file:
 
-- [server.js](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/server.js)
+- [server.js](../backend/server.js)
 
 Rust-backed endpoints:
 
@@ -162,14 +175,15 @@ Rust-backed endpoints:
 Node-backed endpoints still exist for the older pathfinder path.
 
 ## Frontend Integration
+
 The frontend was updated so the execution modes and algorithm support stay consistent with the backend.
 
 Relevant files:
 
-- [PathfinderLabPage.tsx](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/frontend/src/PathfinderLabPage.tsx)
-- [PathfinderControls.tsx](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/frontend/src/PathfinderControls.tsx)
-- [PathfinderGraphOverlay.tsx](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/frontend/src/PathfinderGraphOverlay.tsx)
-- [pathfinderTypes.ts](c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/frontend/src/pathfinderTypes.ts)
+- [PathfinderLabPage.tsx](../frontend/src/PathfinderLabPage.tsx)
+- [PathfinderControls.tsx](../frontend/src/PathfinderControls.tsx)
+- [PathfinderGraphOverlay.tsx](../frontend/src/PathfinderGraphOverlay.tsx)
+- [pathfinderTypes.ts](../frontend/src/pathfinderTypes.ts)
 
 Current behavior:
 
@@ -179,6 +193,7 @@ Current behavior:
 - graph nodes can now carry cluster and role metadata in the response model
 
 ## Validation Performed
+
 The implementation was verified with:
 
 - `python -m py_compile backend/build_graph.py backend/new_build_graph.py backend/cluster_persistence.py backend/fetch_clusters.py`
@@ -193,6 +208,7 @@ Observed persisted cluster counts after validation:
 - `rust_pathfinding`: 268 clusters
 
 ## Notes
+
 - JSON cluster files are still useful as exports/debug artifacts, but they are no longer the main runtime source of truth.
-- The real runtime graph is now driven by match data plus the player DB.
-- The next logical frontend step is to consume the Rust `global-view` and `player-focus` endpoints directly instead of relying mainly on the preview snapshot path.
+- the real runtime graph is now driven by match data plus the player DB
+- the next logical frontend step is to consume the Rust `global-view` and `player-focus` endpoints directly instead of relying mainly on the preview snapshot path

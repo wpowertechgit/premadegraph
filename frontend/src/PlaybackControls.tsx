@@ -1,11 +1,13 @@
 import React from "react";
 import { type PlaybackState } from "./pathfinderTypes";
+import { useI18n } from "./i18n";
 
 interface PlaybackControlsProps {
   playbackState: PlaybackState;
   playbackSpeed: number;
   canStep: boolean;
   title?: string;
+  progressLabel?: string;
   onPlay: () => void;
   onPause: () => void;
   onRestart: () => void;
@@ -19,6 +21,7 @@ export default function PlaybackControls({
   playbackSpeed,
   canStep,
   title,
+  progressLabel,
   onPlay,
   onPause,
   onRestart,
@@ -26,6 +29,7 @@ export default function PlaybackControls({
   onStepBackward,
   onSpeedChange,
 }: PlaybackControlsProps) {
+  const { t } = useI18n();
   return (
     <section
       style={{
@@ -37,27 +41,39 @@ export default function PlaybackControls({
       }}
     >
       {title ? (
-        <div style={{ marginBottom: "0.8rem", fontWeight: 700, color: "#f3f4f6" }}>{title}</div>
+        <div
+          style={{
+            marginBottom: "0.8rem",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontWeight: 700, color: "#f3f4f6" }}>{title}</div>
+          {progressLabel ? <div style={{ color: "#9ca3af", fontSize: "0.88rem" }}>{progressLabel}</div> : null}
+        </div>
       ) : null}
       <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" disabled={!canStep || playbackState === "playing"} onClick={onPlay}>
-          Play
+          {t.pathfinder.play}
         </button>
         <button type="button" disabled={!canStep || playbackState !== "playing"} onClick={onPause}>
-          Pause
+          {t.pathfinder.pause}
         </button>
         <button type="button" disabled={!canStep} onClick={onStepBackward}>
-          Step Back
+          {t.pathfinder.stepBack}
         </button>
         <button type="button" disabled={!canStep} onClick={onStepForward}>
-          Step Forward
+          {t.pathfinder.stepForward}
         </button>
         <button type="button" disabled={!canStep} onClick={onRestart}>
-          Restart
+          {t.pathfinder.restart}
         </button>
 
         <label style={{ marginLeft: "auto", color: "#9ca3af", fontSize: "0.88rem" }}>
-          Speed{" "}
+          {t.pathfinder.speed}{" "}
           <select
             value={playbackSpeed}
             onChange={(event) => onSpeedChange(Number(event.target.value))}

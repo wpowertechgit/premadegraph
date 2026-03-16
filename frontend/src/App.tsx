@@ -4,8 +4,10 @@ import MatchAnalysisForm from "./MatchAnalysisForm";
 import GraphPage from "./GraphPage";
 import PathfinderLabPage from "./PathfinderLabPage";
 import { FaSyncAlt } from "react-icons/fa";
+import { useI18n } from "./i18n";
 
 function Navbar() {
+  const { language, setLanguage, t } = useI18n();
   const [loading, setLoading] = useState(false);
 
   const normalizePlayers = async () => {
@@ -19,14 +21,14 @@ function Navbar() {
 
       if (!response.ok) {
         console.error("Normalization failed:", result);
-        alert("Hiba: " + result.error);
+        alert(`${t.app.alerts.errorPrefix}: ${result.error}`);
       } else {
         console.log("Normalization successful:", result.message);
-        alert("Normalizálás sikeres!");
+        alert(t.app.alerts.normalizationSuccess);
       }
     } catch (error) {
       console.error("Request error:", error);
-      alert("Hiba történt a normalizálás során.");
+      alert(t.app.alerts.normalizationError);
     } finally {
       setLoading(false);
     }
@@ -41,13 +43,13 @@ function Navbar() {
       alignItems: "center"
     }}>
       <Link to="/matchanalysis" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
-        Meccselemzés
+        {t.app.nav.matchAnalysis}
       </Link>
       <Link to="/graph" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
-        Asszociációs Gráf
+        {t.app.nav.graph}
       </Link>
       <Link to="/pathfinder-lab" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
-        Pathfinder Lab
+        {t.app.nav.pathfinderLab}
       </Link>
       <button onClick={async () => {
         setLoading(true);
@@ -55,20 +57,32 @@ function Navbar() {
           const res = await fetch("http://localhost:3001/api/generate-graph", {
             method: "POST",
           });
-          if (!res.ok) throw new Error("Nem sikerült generálni a gráfot.");
-          alert("Gráf generálva! Frissítsd az oldalt a megtekintéshez.");
+          if (!res.ok) throw new Error(t.app.alerts.graphGenerationFailed);
+          alert(`${t.app.alerts.graphGenerated} ${t.app.alerts.refreshGraph}`);
         } catch (e: any) {
-          alert("Hiba történt: " + (e.message || "Ismeretlen"));
+          alert(`${t.app.alerts.genericError}: ${e.message || t.app.alerts.unknown}`);
         } finally {
           setLoading(false);
         }
       }}>
-        Gráf generálása
+        {t.app.nav.generateGraph}
       </button>
+
+      <label style={{ color: "white", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <span>{t.app.nav.language}</span>
+        <select
+          value={language}
+          onChange={(event) => setLanguage(event.target.value as "en" | "hu")}
+          style={{ borderRadius: "8px", padding: "0.35rem 0.5rem" }}
+        >
+          <option value="en">{t.app.nav.english}</option>
+          <option value="hu">{t.app.nav.hungarian}</option>
+        </select>
+      </label>
 
       <button
         onClick={normalizePlayers}
-        title="Normalizálás"
+        title={t.app.nav.normalizePlayers}
         disabled={loading}
         style={{
           background: "none",
@@ -108,6 +122,12 @@ style.textContent = `
 document.head.appendChild(style);
 
 function App() {
+  const { t } = useI18n();
+
+  React.useEffect(() => {
+    document.title = t.app.title;
+  }, [t.app.title]);
+
   return (
     <Router>
       <div style={{ background: "rgba(118, 118, 118, 0.8)" }}>

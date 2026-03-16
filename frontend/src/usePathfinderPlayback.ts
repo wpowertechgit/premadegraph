@@ -113,7 +113,7 @@ export function usePathfinderPlayback(run: PathfinderRunResponse | null) {
     }
 
     setCurrentStepIndex(0);
-    setPlaybackState(run.trace.length > 0 ? "ready" : "finished");
+    setPlaybackState(run.trace.length > 0 ? "playing" : "finished");
   }, [run]);
 
   useEffect(() => {

@@ -56,100 +56,111 @@ def replace_clusters(
     clusters: Sequence[Mapping],
     build_version: str,
 ) -> None:
-    ensure_cluster_schema(db_path)
+    conn = None
+    try:
+        ensure_cluster_schema(db_path)
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    timestamp = datetime.now(timezone.utc).isoformat()
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
-    existing_ids = [
-        row[0]
-        for row in cursor.execute(
-            "SELECT cluster_id FROM clusters WHERE cluster_type = ?",
-            (cluster_type,),
-        ).fetchall()
-    ]
+        existing_ids = [
+            row[0]
+            for row in cursor.execute(
+                "SELECT cluster_id FROM clusters WHERE cluster_type = ?",
+                (cluster_type,),
+            ).fetchall()
+        ]
 
-    if existing_ids:
-        placeholders = ",".join("?" for _ in existing_ids)
-        cursor.execute(
-            f"DELETE FROM cluster_members WHERE cluster_id IN ({placeholders})",
-            existing_ids,
-        )
-        cursor.execute(
-            "DELETE FROM clusters WHERE cluster_type = ?",
-            (cluster_type,),
-        )
+        if existing_ids:
+            placeholders = ",".join("?" for _ in existing_ids)
+            cursor.execute(
+                f"DELETE FROM cluster_members WHERE cluster_id IN ({placeholders})",
+                existing_ids,
+            )
+            cursor.execute(
+                "DELETE FROM clusters WHERE cluster_type = ?",
+                (cluster_type,),
+            )
 
-    for index, cluster in enumerate(clusters, start=1):
-        members = list(cluster.get("members", []))
-        cluster_id = cluster.get("cluster_id") or f"{cluster_type}:{index}"
-        best_op = cluster.get("best_op")
-        worst_feed = cluster.get("worst_feed")
-        center = cluster.get("center") or {}
-        roles_by_member = cluster.get("rolesByMember") or {}
+        for index, cluster in enumerate(clusters, start=1):
+            members = list(cluster.get("members", []))
+            cluster_id = cluster.get("cluster_id") or f"{cluster_type}:{index}"
+            best_op = cluster.get("best_op")
+            worst_feed = cluster.get("worst_feed")
+            center = cluster.get("center") or {}
+            roles_by_member = cluster.get("rolesByMember") or {}
 
-        summary_payload = {
-            key: value
-            for key, value in cluster.items()
-            if key not in {"members", "center", "rolesByMember"}
-        }
+            summary_payload = {
+                key: value
+                for key, value in cluster.items()
+                if key not in {"members", "center", "rolesByMember"}
+            }
 
-        cursor.execute(
-            """
-            INSERT INTO clusters (
-                cluster_id,
-                cluster_type,
-                algorithm,
-                size,
-                best_op,
-                worst_feed,
-                summary_json,
-                center_x,
-                center_y,
-                build_version,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                cluster_id,
-                cluster_type,
-                algorithm,
-                len(members),
-                best_op,
-                worst_feed,
-                json.dumps(summary_payload, ensure_ascii=False),
-                center.get("x"),
-                center.get("y"),
-                build_version,
-                timestamp,
-            ),
-        )
-
-        for member in members:
-            role_info = roles_by_member.get(member) or {}
             cursor.execute(
                 """
-                INSERT INTO cluster_members (
+                INSERT INTO clusters (
                     cluster_id,
-                    puuid,
-                    is_bridge,
-                    is_star,
-                    is_best_op,
-                    is_worst_feed,
-                    role_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    cluster_type,
+                    algorithm,
+                    size,
+                    best_op,
+                    worst_feed,
+                    summary_json,
+                    center_x,
+                    center_y,
+                    build_version,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     cluster_id,
-                    member,
-                    int(bool(role_info.get("is_bridge", False))),
-                    int(bool(role_info.get("is_star", False))),
-                    int(member == best_op),
-                    int(member == worst_feed),
-                    json.dumps(role_info, ensure_ascii=False) if role_info else None,
+                    cluster_type,
+                    algorithm,
+                    len(members),
+                    best_op,
+                    worst_feed,
+                    json.dumps(summary_payload, ensure_ascii=False),
+                    center.get("x"),
+                    center.get("y"),
+                    build_version,
+                    timestamp,
                 ),
             )
 
-    conn.commit()
-    conn.close()
+            for member in members:
+                role_info = roles_by_member.get(member) or {}
+                cursor.execute(
+                    """
+                    INSERT INTO cluster_members (
+                        cluster_id,
+                        puuid,
+                        is_bridge,
+                        is_star,
+                        is_best_op,
+                        is_worst_feed,
+                        role_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cluster_id,
+                        member,
+                        int(bool(role_info.get("is_bridge", False))),
+                        int(bool(role_info.get("is_star", False))),
+                        int(member == best_op),
+                        int(member == worst_feed),
+                        json.dumps(role_info, ensure_ascii=False) if role_info else None,
+                    ),
+                )
+
+        conn.commit()
+    except sqlite3.OperationalError as error:
+        if "readonly" in str(error).lower():
+            print(
+                f"Skipping cluster persistence for '{cluster_type}' because the database is read-only: {error}"
+            )
+            return
+        raise
+    finally:
+        if conn is not None:
+            conn.close()

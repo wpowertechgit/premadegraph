@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { type PlayerOption } from "./pathfinderTypes";
+import { useI18n } from "./i18n";
 
 interface PlayerLookupFieldProps {
   label: string;
@@ -34,8 +35,9 @@ export default function PlayerLookupField({
   players,
   selectedId,
   onSelectedIdChange,
-  placeholder = "Type at least 3 letters",
+  placeholder,
 }: PlayerLookupFieldProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
 
@@ -60,7 +62,7 @@ export default function PlayerLookupField({
       <label style={labelStyle}>{label}</label>
       <input
         value={query}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t.pathfinder.typeAtLeastThreeLetters}
         onChange={(event) => {
           const nextValue = event.target.value;
           setQuery(nextValue);

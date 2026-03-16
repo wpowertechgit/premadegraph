@@ -14,7 +14,7 @@ fn invalid_response(
     warning: &str,
     snapshot: Option<GraphSnapshot>,
 ) -> PathfinderResponse {
-    PathfinderResponse {
+    let response = PathfinderResponse {
         request: RequestEcho {
             source_player_id: request.source_player_id.clone(),
             target_player_id: request.target_player_id.clone(),
@@ -41,7 +41,9 @@ fn invalid_response(
             edges: vec![],
         }),
         warnings: vec![warning.to_string()],
-    }
+    };
+
+    response
 }
 
 pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderResponse {
@@ -131,7 +133,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         warnings.push("A* uses landmark and cluster lower bounds while preserving exact shortest-path results.".to_string());
     }
 
-    PathfinderResponse {
+    let response = PathfinderResponse {
         request: RequestEcho {
             source_player_id: request.source_player_id.clone(),
             target_player_id: request.target_player_id.clone(),
@@ -165,7 +167,18 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         },
         trace,
         warnings,
-    }
+    };
+
+    eprintln!(
+        "{} finished. status={}, path_length={}, nodes_visited={}, runtime_ms={:.2}",
+        response.request.algorithm.to_uppercase(),
+        response.status,
+        response.summary.path_length,
+        response.summary.nodes_visited,
+        response.summary.runtime_ms,
+    );
+
+    response
 }
 
 pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> CompareResponse {

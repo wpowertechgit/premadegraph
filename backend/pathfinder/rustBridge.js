@@ -3,6 +3,15 @@ const path = require("path");
 const { execFile } = require("child_process");
 
 const rustProjectDir = path.resolve(__dirname, "..", "pathfinder-rust");
+const DEFAULT_MAX_BUFFER = 64 * 1024 * 1024;
+
+function resolveMaxBuffer() {
+  const parsed = Number(process.env.PATHFINDER_RUST_MAX_BUFFER || "");
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return DEFAULT_MAX_BUFFER;
+}
 
 function getRustBinaryCandidates() {
   return [
@@ -45,12 +54,16 @@ function executeRustCommand(command, payload) {
       {
         cwd: rustProjectDir,
         windowsHide: true,
-        maxBuffer: 10 * 1024 * 1024,
+        maxBuffer: resolveMaxBuffer(),
       },
       (error, stdout, stderr) => {
         if (error) {
           reject(new Error(stderr?.trim() || error.message || "Rust pathfinder command failed."));
           return;
+        }
+
+        if (stderr?.trim()) {
+          console.log(stderr.trim());
         }
 
         try {

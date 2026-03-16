@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 const CLUSTER_TYPE_RUST_PATHFINDING: &str = "rust_pathfinding";
 const CLUSTER_ALGORITHM: &str = "strong_components";
 const MIN_CLUSTER_EDGE_WEIGHT: u32 = 2;
+const MAX_SNAPSHOT_CLUSTER_NODES: usize = 10;
 const MAX_LANDMARKS: usize = 6;
 const WEIGHT_COST_SCALE: usize = 1000;
 const INF_DISTANCE: usize = usize::MAX / 4;
@@ -938,6 +939,68 @@ pub(super) fn build_path(
     (path_nodes, path_edges)
 }
 
+fn node_strength(graph: &GraphState, node_id: &str) -> u32 {
+    graph.adjacency
+        .get(node_id)
+        .map(|neighbors| neighbors.iter().map(|neighbor| neighbor.total_matches).sum())
+        .unwrap_or(0)
+}
+
+fn select_cluster_nodes(
+    graph: &GraphState,
+    cluster_id: &str,
+    preferred_nodes: &HashSet<String>,
+    limit: usize,
+) -> Vec<String> {
+    let mut candidates: Vec<String> = graph
+        .dataset
+        .nodes
+        .iter()
+        .filter(|node| node.cluster_id.as_deref() == Some(cluster_id))
+        .map(|node| node.id.clone())
+        .collect();
+
+    candidates.sort_by(|left, right| {
+        let left_preferred = preferred_nodes.contains(left);
+        let right_preferred = preferred_nodes.contains(right);
+        right_preferred
+            .cmp(&left_preferred)
+            .then_with(|| {
+                graph
+                    .node_map
+                    .get(right)
+                    .and_then(|node| node.is_bridge)
+                    .unwrap_or(false)
+                    .cmp(
+                        &graph
+                            .node_map
+                            .get(left)
+                            .and_then(|node| node.is_bridge)
+                            .unwrap_or(false),
+                    )
+            })
+            .then_with(|| {
+                graph
+                    .node_map
+                    .get(right)
+                    .and_then(|node| node.is_star)
+                    .unwrap_or(false)
+                    .cmp(
+                        &graph
+                            .node_map
+                            .get(left)
+                            .and_then(|node| node.is_star)
+                            .unwrap_or(false),
+                    )
+            })
+            .then_with(|| node_strength(graph, right).cmp(&node_strength(graph, left)))
+            .then_with(|| left.cmp(right))
+    });
+
+    candidates.truncate(limit.max(preferred_nodes.len()));
+    candidates
+}
+
 pub(super) fn pathfinder_snapshot(
     graph: &GraphState,
     path_mode: &str,
@@ -945,26 +1008,38 @@ pub(super) fn pathfinder_snapshot(
     target_id: &str,
     path_nodes: &[String],
 ) -> GraphSnapshot {
-    let mut visible = HashSet::from([source_id.to_string(), target_id.to_string()]);
+    let mut preferred_nodes = HashSet::from([source_id.to_string(), target_id.to_string()]);
     for node_id in path_nodes {
-        visible.insert(node_id.clone());
+        preferred_nodes.insert(node_id.clone());
     }
+
+    let mut visible = preferred_nodes.clone();
     let mut visible_clusters = HashSet::new();
-    for node_id in &visible {
+    for node_id in &preferred_nodes {
         if let Some(cluster_id) = graph.cluster_membership.get(node_id) {
             visible_clusters.insert(cluster_id.clone());
         }
     }
-    for node in &graph.dataset.nodes {
-        if node
-            .cluster_id
-            .as_ref()
-            .map(|cluster_id| visible_clusters.contains(cluster_id))
-            .unwrap_or(false)
+
+    for cluster_id in visible_clusters {
+        for node_id in select_cluster_nodes(graph, &cluster_id, &preferred_nodes, MAX_SNAPSHOT_CLUSTER_NODES)
         {
-            visible.insert(node.id.clone());
+            visible.insert(node_id);
         }
     }
+
+    let path_edge_keys: HashSet<String> = path_nodes
+        .windows(2)
+        .map(|pair| edge_key(&pair[0], &pair[1]))
+        .collect();
+
+    let nodes = graph
+        .dataset
+        .nodes
+        .iter()
+        .filter(|node| visible.contains(&node.id))
+        .cloned()
+        .collect();
 
     let edges: Vec<GraphEdge> = graph
         .dataset
@@ -972,6 +1047,11 @@ pub(super) fn pathfinder_snapshot(
         .iter()
         .filter_map(|edge| {
             if !visible.contains(&edge.from) || !visible.contains(&edge.to) {
+                return None;
+            }
+            let edge_key_value = edge_key(&edge.from, &edge.to);
+            let same_cluster = graph.cluster_membership.get(&edge.from) == graph.cluster_membership.get(&edge.to);
+            if !same_cluster && !path_edge_keys.contains(&edge_key_value) {
                 return None;
             }
             let relation = graph.pair_relations.get(&edge_key(&edge.from, &edge.to))?;
@@ -993,14 +1073,6 @@ pub(super) fn pathfinder_snapshot(
                 None
             }
         })
-        .collect();
-
-    let nodes = graph
-        .dataset
-        .nodes
-        .iter()
-        .filter(|node| visible.contains(&node.id))
-        .cloned()
         .collect();
 
     GraphSnapshot { nodes, edges }
