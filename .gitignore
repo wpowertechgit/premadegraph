@@ -12,4 +12,4 @@ backend/analyze_raw.py
 backend/pathfinder-rust/target/
 backend/pathfinder-rust/Cargo.lock
 *.pyc
-__pycache__/
+__pycache__

@@ -1,5 +1,7 @@
 # Premade Graph
 
+[English](README.md) | [Magyar](README.hu.md)
+
 `premadegraph` is a thesis project for building, analyzing, and visualizing player relationship graphs from League of Legends match data.
 
 The repository combines:
