@@ -23,26 +23,29 @@ pub struct PrototypeDataset {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PathfinderOptions {
-    pub includeTrace: bool,
-    pub maxSteps: usize,
+    pub include_trace: bool,
+    pub max_steps: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PathfinderRequest {
-    pub sourcePlayerId: String,
-    pub targetPlayerId: String,
+    pub source_player_id: String,
+    pub target_player_id: String,
     pub algorithm: String,
-    pub pathMode: String,
-    pub weightedMode: bool,
+    pub path_mode: String,
+    pub weighted_mode: bool,
     pub options: PathfinderOptions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CompareRequest {
-    pub sourcePlayerId: String,
-    pub targetPlayerId: String,
-    pub pathMode: String,
+    pub source_player_id: String,
+    pub target_player_id: String,
+    pub path_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -52,11 +55,12 @@ pub struct PlayerOption {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DatasetSummary {
     pub players: usize,
     pub relationships: usize,
-    pub allyRelationships: usize,
-    pub enemyRelationships: usize,
+    pub ally_relationships: usize,
+    pub enemy_relationships: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,23 +79,25 @@ pub struct TraceHighlightedEdge {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TraceStep {
     pub step: usize,
     pub phase: String,
-    pub activeNodeId: Option<String>,
-    pub frontierNodeIds: Vec<String>,
-    pub visitedNodeIds: Vec<String>,
-    pub highlightedEdges: Vec<TraceHighlightedEdge>,
+    pub active_node_id: Option<String>,
+    pub frontier_node_ids: Vec<String>,
+    pub visited_node_ids: Vec<String>,
+    pub highlighted_edges: Vec<TraceHighlightedEdge>,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PathfinderSummary {
-    pub pathLength: usize,
-    pub nodesVisited: usize,
-    pub edgesConsidered: usize,
-    pub runtimeMs: f64,
-    pub backendRuntimeMs: f64,
-    pub traceStepCount: usize,
+    pub path_length: usize,
+    pub nodes_visited: usize,
+    pub edges_considered: usize,
+    pub runtime_ms: f64,
+    pub backend_runtime_ms: f64,
+    pub trace_step_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,35 +113,38 @@ pub struct GraphSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestEcho {
-    pub sourcePlayerId: String,
-    pub targetPlayerId: String,
+    pub source_player_id: String,
+    pub target_player_id: String,
     pub algorithm: String,
-    pub pathMode: String,
-    pub weightedMode: bool,
+    pub path_mode: String,
+    pub weighted_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PathfinderResponse {
     pub request: RequestEcho,
     pub status: String,
     pub summary: PathfinderSummary,
     pub path: PathfinderPath,
     pub trace: Vec<TraceStep>,
-    pub graphSnapshot: GraphSnapshot,
+    pub graph_snapshot: GraphSnapshot,
     pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComparisonRow {
     pub algorithm: String,
     pub label: String,
-    pub supportedNow: bool,
-    pub pathFound: Option<bool>,
-    pub pathLength: Option<usize>,
-    pub nodesVisited: Option<usize>,
-    pub runtimeMs: Option<f64>,
-    pub relativeNote: String,
+    pub supported_now: bool,
+    pub path_found: Option<bool>,
+    pub path_length: Option<usize>,
+    pub nodes_visited: Option<usize>,
+    pub runtime_ms: Option<f64>,
+    pub relative_note: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -144,19 +153,21 @@ pub struct CompareResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OptionsResponse {
-    pub executionMode: String,
+    pub execution_mode: String,
     pub players: Vec<PlayerOption>,
-    pub datasetSummary: DatasetSummary,
-    pub supportedAlgorithms: Vec<String>,
-    pub previewSnapshot: GraphSnapshot,
+    pub dataset_summary: DatasetSummary,
+    pub supported_algorithms: Vec<String>,
+    pub preview_snapshot: GraphSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EngineSpecResponse {
-    pub executionMode: String,
-    pub requestContract: serde_json::Value,
-    pub responseContract: serde_json::Value,
-    pub signedGraphModel: serde_json::Value,
-    pub integrationPath: serde_json::Value,
+    pub execution_mode: String,
+    pub request_contract: serde_json::Value,
+    pub response_contract: serde_json::Value,
+    pub signed_graph_model: serde_json::Value,
+    pub integration_path: serde_json::Value,
 }

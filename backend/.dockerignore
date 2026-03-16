@@ -6,3 +6,4 @@ README.md
 .env
 .DS_Store
 __pycache__
+pathfinder-rust/target

@@ -8,7 +8,7 @@ import argparse
 
 # === CONFIG ===
 MATCH_FOLDER = "./data"      # Folder with EUN1_*.json files
-DB_PATH = "../playersrefined.db"       # Path to your SQLite database 
+DB_PATH = os.environ.get("GRAPH_DB_PATH", "../playersrefined.db")       # Path to your SQLite database 
 OUTPUT_HTML = "output/premade_network.html"
 
 # === Load match data ===

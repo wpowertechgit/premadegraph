@@ -9,3 +9,5 @@ backend/clusters
 *.log
 *.txt
 backend/analyze_raw.py
+backend/pathfinder-rust/target/
+backend/pathfinder-rust/Cargo.lock
