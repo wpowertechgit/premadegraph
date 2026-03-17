@@ -4,7 +4,7 @@ import os
 OUTPUT_FILE = "teljes_projekt_kod.txt"
 
 # Csak ezeket a kiterjesztéseket veszi figyelembe (Whitelist)
-ALLOWED_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.sql', '.css', '.md', '.txt'}
+ALLOWED_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.sql', '.css', '.md', '.txt','.toml','.rs'}
 
 # Ezeket mindenképp KIZÁRJA (Blacklist - biztonsági háló)
 IGNORED_EXTENSIONS = {'.json', '.log', '.html', '.pyc','.txt','.css'}
