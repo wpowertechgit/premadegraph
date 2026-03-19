@@ -20,6 +20,8 @@ The main implementation lives in:
 - `frontend/src/pathfinderMocks.ts`
 - `frontend/src/signedBalanceMock.ts`
 
+![Mock dataset pathfinder run](assets/demo_shots/mock-test-pathfinder-end.png)
+
 ## Why The Project Uses Mocks At All
 
 The mock dataset solves several practical problems:
@@ -118,6 +120,8 @@ This is why the file includes warnings and scenario notes such as:
 - enemy edges create connectivity
 - shorter with enemy edges
 - no gain from enemy edges
+
+![Replay-oriented pathfinder panel on the mock graph](assets/demo_shots/pathfinder-replay-panel.png)
 
 Those are not cosmetic labels. They help explain what a given algorithm run is demonstrating.
 

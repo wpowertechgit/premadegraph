@@ -6,6 +6,7 @@ import PathfinderControls from "./PathfinderControls";
 import PathfinderGraphOverlay from "./PathfinderGraphOverlay";
 import PlaybackControls from "./PlaybackControls";
 import RunSummaryPanel from "./RunSummaryPanel";
+import SavedReplaysOverlay from "./SavedReplaysOverlay";
 import { getComparisonRows, getMockGraphSnapshot, mockDatasetSummary, mockPlayers, runPathfinderMock } from "./pathfinderMocks";
 import {
   deletePathfinderReplay,
@@ -133,6 +134,7 @@ export default function PathfinderLabPage() {
   const [loading, setLoading] = useState(false);
   const [run, setRun] = useState<PathfinderRunResponse | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [replayLibraryOpen, setReplayLibraryOpen] = useState(false);
   const [backendOptions, setBackendOptions] = useState<PathfinderOptionsResponse | null>(null);
   const [engineSpec, setEngineSpec] = useState<PathfinderEngineSpecResponse | null>(null);
   const [playersLoading, setPlayersLoading] = useState(false);
@@ -498,15 +500,38 @@ export default function PathfinderLabPage() {
             minWidth: 0,
           }}
         >
-          <div style={sectionLabelStyle()}>
-            {t.pathfinder.pageLabel}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "1rem",
+              alignItems: "start",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={sectionLabelStyle()}>
+                {t.pathfinder.pageLabel}
+              </div>
+              <h1 style={{ margin: "0.4rem 0 0.55rem", fontSize: "clamp(2rem, 4vw, 3rem)" }}>
+                {t.pathfinder.pageTitle}
+              </h1>
+              <p style={{ margin: 0, maxWidth: "860px", color: "var(--text-muted)" }}>
+                {t.pathfinder.pageDescription}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplayLibraryOpen(true)}
+              style={{ ...surfaceCardStyle(), padding: "0.85rem 1rem", minWidth: "220px", textAlign: "left", cursor: "pointer" }}
+            >
+              <div style={sectionLabelStyle()}>{t.pathfinder.cachedReplays}</div>
+              <div style={{ marginTop: "0.28rem", fontWeight: 700 }}>{t.pathfinder.openReplayLibrary}</div>
+              <div style={{ marginTop: "0.22rem", color: "var(--text-muted)", fontSize: "0.88rem" }}>
+                {savedReplays.length} {savedReplays.length === 1 ? t.pathfinder.replayCountSingle : t.pathfinder.replayCountPlural}
+              </div>
+            </button>
           </div>
-          <h1 style={{ margin: "0.4rem 0 0.55rem", fontSize: "clamp(2rem, 4vw, 3rem)" }}>
-            {t.pathfinder.pageTitle}
-          </h1>
-          <p style={{ margin: 0, maxWidth: "860px", color: "var(--text-muted)" }}>
-            {t.pathfinder.pageDescription}
-          </p>
         </section>
 
         <section
@@ -725,6 +750,7 @@ export default function PathfinderLabPage() {
           onRestart={playback.restart}
           onStepForward={playback.stepForward}
           onStepBackward={playback.stepBackward}
+          onJumpToEnd={playback.jumpToEnd}
           onSpeedChange={playback.setPlaybackSpeed}
         />
 
@@ -762,6 +788,7 @@ export default function PathfinderLabPage() {
         onRestart={playback.restart}
         onStepForward={playback.stepForward}
         onStepBackward={playback.stepBackward}
+        onJumpToEnd={playback.jumpToEnd}
         onSpeedChange={playback.setPlaybackSpeed}
         onRunSearch={async (overrides) => {
           setSourcePlayerId(overrides.sourcePlayerId);
@@ -787,6 +814,37 @@ export default function PathfinderLabPage() {
             await runPathfinder(overrides);
         }}
         datasetSummary={datasetSummary}
+      />
+      <SavedReplaysOverlay
+        open={replayLibraryOpen}
+        savedReplays={savedReplays}
+        onClose={() => setReplayLibraryOpen(false)}
+        onLoadReplay={(savedReplay) => {
+          const selectedRun = savedReplay.algorithmRuns.find((item) => item.request.algorithm === savedReplay.selectedAlgorithm)
+            ?? savedReplay.algorithmRuns[0];
+          if (!selectedRun) {
+            return;
+          }
+          setSourcePlayerId(savedReplay.sourcePlayerId);
+          setTargetPlayerId(savedReplay.targetPlayerId);
+          setAlgorithm(selectedRun.request.algorithm);
+          setPathMode(savedReplay.pathMode);
+          setWeightedMode(savedReplay.weightedMode);
+          setComparisonRows(savedReplay.comparisonRows);
+          setRun(decorateRun(selectedRun, savedReplay, true));
+          const matchingRow = savedReplay.comparisonRows.find((row) => row.algorithm === selectedRun.request.algorithm);
+          setComparisonNote(matchingRow?.relativeNote ?? t.pathfinder.comparisonUnavailable);
+        }}
+        onDeleteReplay={async (savedReplay) => {
+          await deletePathfinderReplay(savedReplay.id);
+          replayCacheRef.current.delete(savedReplay.cacheKey);
+          setSavedReplays((current) => current.filter((item) => item.id !== savedReplay.id));
+          setRun((current) => (
+            current?.replayMeta?.cacheKey === savedReplay.cacheKey && current.replayMeta.loadedFromSave
+              ? null
+              : current
+          ));
+        }}
       />
     </div>
   );

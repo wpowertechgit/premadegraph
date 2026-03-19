@@ -12,6 +12,10 @@
 
 **Premade Graph** is a League of Legends player-network thesis project for collecting match history, building repeated co-play graphs, analyzing signed relationships, and exploring the result through a polished interactive frontend.
 
+![Match analysis surface](docs/assets/demo_shots/match-analysis-page.png)
+
+![3D bird's-eye sphere](docs/assets/demo_shots/birds-eye-current-state.png)
+
 It combines:
 
 - match collection and player normalization
@@ -53,6 +57,10 @@ The current build now includes a much richer 3D graph presentation and analysis 
 | `Full 3D Graph Sphere` | bird's-eye exploration of the whole named-player network |
 | `Signed Balance` | structural-balance experiment over ally/enemy relationships |
 | player focus / global graph views | runtime graph inspection from the Rust engine |
+
+The current frontend includes both analysis-heavy data surfaces and more visual graph exploration views:
+
+![Pathfinder replay panel](docs/assets/demo_shots/pathfinder-replay-panel.png)
 
 ## Architecture Snapshot
 

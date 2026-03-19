@@ -5,6 +5,7 @@ import {
   RiRestartLine,
   RiSkipBackFill,
   RiSkipForwardFill,
+  RiSkipRightLine,
 } from "react-icons/ri";
 import { type PlaybackState } from "./pathfinderTypes";
 import { useI18n } from "./i18n";
@@ -21,6 +22,7 @@ interface PlaybackControlsProps {
   onRestart: () => void;
   onStepForward: () => void;
   onStepBackward: () => void;
+  onJumpToEnd: () => void;
   onSpeedChange: (value: number) => void;
 }
 
@@ -74,6 +76,7 @@ export default function PlaybackControls({
   onRestart,
   onStepForward,
   onStepBackward,
+  onJumpToEnd,
   onSpeedChange,
 }: PlaybackControlsProps) {
   const { t } = useI18n();
@@ -129,6 +132,12 @@ export default function PlaybackControls({
             disabled={!canStep}
             onClick={onStepForward}
             icon={<RiSkipForwardFill size={18} aria-hidden="true" />}
+          />
+          <PlaybackIconButton
+            label={t.pathfinder.jumpToEnd}
+            disabled={!canStep}
+            onClick={onJumpToEnd}
+            icon={<RiSkipRightLine size={18} aria-hidden="true" />}
           />
           <PlaybackIconButton
             label={t.pathfinder.restart}

@@ -199,6 +199,15 @@ export function usePathfinderPlayback(run: PathfinderRunResponse | null) {
     });
   };
 
+  const jumpToEnd = () => {
+    if (!run || run.trace.length === 0) {
+      return;
+    }
+
+    setCurrentStepIndex(run.trace.length - 1);
+    setPlaybackState("finished");
+  };
+
   return {
     playbackState,
     currentStepIndex,
@@ -210,6 +219,7 @@ export function usePathfinderPlayback(run: PathfinderRunResponse | null) {
     restart,
     stepForward,
     stepBackward,
+    jumpToEnd,
     canStep,
   };
 }

@@ -26,17 +26,22 @@ const rustInFlightRequests = new Map();
 let signedBalanceQueue = Promise.resolve();
 let signedBalanceActivePromise = null;
 let signedBalanceActiveKey = null;
-const birdseyeCacheDir = path.resolve(__dirname, "pathfinder-rust", "cache", "birdseye-3d-v4");
-const birdseyeArtifactPaths = {
-  manifest: path.join(birdseyeCacheDir, "manifest.json"),
-  nodeMeta: path.join(birdseyeCacheDir, "node_meta.json"),
-  nodePositions: path.join(birdseyeCacheDir, "node_positions.f32"),
-  nodeMetrics: path.join(birdseyeCacheDir, "node_metrics.u32"),
-  edgePairs: path.join(birdseyeCacheDir, "edge_pairs.u32"),
-  edgeProps: path.join(birdseyeCacheDir, "edge_props.u32"),
-};
+const birdseyeCurrentCacheDir = path.resolve(__dirname, "pathfinder-rust", "cache", "birdseye-3d-v2");
 let birdseyeCachePromise = null;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
+
+function getBirdseyeArtifactPaths(cacheDir) {
+  return {
+    manifest: path.join(cacheDir, "manifest.json"),
+    nodeMeta: path.join(cacheDir, "node_meta.json"),
+    nodePositions: path.join(cacheDir, "node_positions.f32"),
+    nodeMetrics: path.join(cacheDir, "node_metrics.u32"),
+    edgePairs: path.join(cacheDir, "edge_pairs.u32"),
+    edgeProps: path.join(cacheDir, "edge_props.u32"),
+  };
+}
+
+const birdseyeArtifactPaths = getBirdseyeArtifactPaths(birdseyeCurrentCacheDir);
 
 async function getCachedRustResponse(command, { forceRefresh = false } = {}) {
   if (!forceRefresh && rustResponseCache[command]) {
@@ -63,13 +68,14 @@ async function getCachedRustResponse(command, { forceRefresh = false } = {}) {
 }
 
 async function prewarmRustMetadata() {
+  if (process.env.PATHFINDER_PREWARM_METADATA === "0") {
+    console.log("Rust pathfinder metadata prewarm disabled.");
+    return;
+  }
+
   try {
     console.log("Prewarming Rust pathfinder metadata...");
-    await Promise.all([
-      getCachedRustResponse("options", { forceRefresh: true }),
-      getCachedRustResponse("spec", { forceRefresh: true }),
-      getCachedRustResponse("global-view", { forceRefresh: true }),
-    ]);
+    await getCachedRustResponse("spec", { forceRefresh: true });
     console.log("Rust pathfinder metadata cached.");
   } catch (error) {
     console.warn("Rust pathfinder metadata prewarm failed:", error.message);
@@ -122,21 +128,27 @@ function hasBirdseyeArtifacts() {
   return Object.values(birdseyeArtifactPaths).every((artifactPath) => fs.existsSync(artifactPath));
 }
 
-async function ensureBirdseyeArtifacts() {
-  if (hasBirdseyeArtifacts()) {
-    return birdseyeArtifactPaths;
-  }
+function startBirdseyeExportIfNeeded() {
+  console.log(`[birdseye] ensure requested. cacheDir=${birdseyeCurrentCacheDir}`);
 
   if (birdseyeCachePromise) {
+    console.log("[birdseye] cache build already in flight. Reusing active promise.");
     return birdseyeCachePromise;
   }
 
+  const startedAt = Date.now();
+  console.log("[birdseye] cache miss. Starting Rust export...");
   birdseyeCachePromise = executeRustCommandRaw("birdseye-3d-export")
     .then(() => {
       if (!hasBirdseyeArtifacts()) {
         throw new Error("Birdseye 3D artifact export completed, but required files are missing.");
       }
+      console.log(`[birdseye] Rust export finished in ${Date.now() - startedAt}ms.`);
       return birdseyeArtifactPaths;
+    })
+    .catch((error) => {
+      console.error(`[birdseye] Rust export failed after ${Date.now() - startedAt}ms:`, error.message);
+      throw error;
     })
     .finally(() => {
       birdseyeCachePromise = null;
@@ -145,11 +157,35 @@ async function ensureBirdseyeArtifacts() {
   return birdseyeCachePromise;
 }
 
-async function streamBirdseyeArtifact(res, artifactPath, contentType) {
-  await ensureBirdseyeArtifacts();
+async function ensureBirdseyeArtifacts() {
+  if (hasBirdseyeArtifacts()) {
+    console.log("[birdseye] cache hit. Artifacts already exist on disk.");
+    return birdseyeArtifactPaths;
+  }
+
+  await startBirdseyeExportIfNeeded();
+  return birdseyeArtifactPaths;
+}
+
+async function streamBirdseyeArtifact(res, artifactKey, contentType) {
+  const startedAt = Date.now();
+  const artifactPaths = await ensureBirdseyeArtifacts();
+  const artifactPath = artifactPaths[artifactKey];
+  console.log(`[birdseye] request for ${path.basename(artifactPath)} started.`);
+  const stats = fs.statSync(artifactPath);
+  console.log(
+    `[birdseye] streaming ${path.basename(artifactPath)} size=${stats.size} bytes contentType="${contentType}"`,
+  );
   res.setHeader("Content-Type", contentType);
   res.setHeader("Cache-Control", "no-store");
-  fs.createReadStream(artifactPath).pipe(res);
+  const stream = fs.createReadStream(artifactPath);
+  stream.on("error", (error) => {
+    console.error(`[birdseye] stream error for ${path.basename(artifactPath)}:`, error.message);
+  });
+  stream.on("end", () => {
+    console.log(`[birdseye] finished ${path.basename(artifactPath)} in ${Date.now() - startedAt}ms.`);
+  });
+  stream.pipe(res);
 }
 
 app.use(cors());
@@ -775,7 +811,7 @@ app.delete("/api/pathfinder-replays/:id", async (req, res) => {
 
 app.get("/api/pathfinder-rust/birdseye-3d/manifest", async (req, res) => {
   try {
-    await streamBirdseyeArtifact(res, birdseyeArtifactPaths.manifest, "application/json; charset=utf-8");
+    await streamBirdseyeArtifact(res, "manifest", "application/json; charset=utf-8");
   } catch (error) {
     console.error("Rust birdseye manifest failed:", error.message);
     res.status(500).json({ error: error.message });
@@ -784,7 +820,7 @@ app.get("/api/pathfinder-rust/birdseye-3d/manifest", async (req, res) => {
 
 app.get("/api/pathfinder-rust/birdseye-3d/node-meta", async (req, res) => {
   try {
-    await streamBirdseyeArtifact(res, birdseyeArtifactPaths.nodeMeta, "application/json; charset=utf-8");
+    await streamBirdseyeArtifact(res, "nodeMeta", "application/json; charset=utf-8");
   } catch (error) {
     console.error("Rust birdseye node metadata failed:", error.message);
     res.status(500).json({ error: error.message });
@@ -793,7 +829,7 @@ app.get("/api/pathfinder-rust/birdseye-3d/node-meta", async (req, res) => {
 
 app.get("/api/pathfinder-rust/birdseye-3d/node-positions", async (req, res) => {
   try {
-    await streamBirdseyeArtifact(res, birdseyeArtifactPaths.nodePositions, "application/octet-stream");
+    await streamBirdseyeArtifact(res, "nodePositions", "application/octet-stream");
   } catch (error) {
     console.error("Rust birdseye node positions failed:", error.message);
     res.status(500).json({ error: error.message });
@@ -802,7 +838,7 @@ app.get("/api/pathfinder-rust/birdseye-3d/node-positions", async (req, res) => {
 
 app.get("/api/pathfinder-rust/birdseye-3d/node-metrics", async (req, res) => {
   try {
-    await streamBirdseyeArtifact(res, birdseyeArtifactPaths.nodeMetrics, "application/octet-stream");
+    await streamBirdseyeArtifact(res, "nodeMetrics", "application/octet-stream");
   } catch (error) {
     console.error("Rust birdseye node metrics failed:", error.message);
     res.status(500).json({ error: error.message });
@@ -811,7 +847,7 @@ app.get("/api/pathfinder-rust/birdseye-3d/node-metrics", async (req, res) => {
 
 app.get("/api/pathfinder-rust/birdseye-3d/edge-pairs", async (req, res) => {
   try {
-    await streamBirdseyeArtifact(res, birdseyeArtifactPaths.edgePairs, "application/octet-stream");
+    await streamBirdseyeArtifact(res, "edgePairs", "application/octet-stream");
   } catch (error) {
     console.error("Rust birdseye edge pairs failed:", error.message);
     res.status(500).json({ error: error.message });
@@ -820,7 +856,7 @@ app.get("/api/pathfinder-rust/birdseye-3d/edge-pairs", async (req, res) => {
 
 app.get("/api/pathfinder-rust/birdseye-3d/edge-props", async (req, res) => {
   try {
-    await streamBirdseyeArtifact(res, birdseyeArtifactPaths.edgeProps, "application/octet-stream");
+    await streamBirdseyeArtifact(res, "edgeProps", "application/octet-stream");
   } catch (error) {
     console.error("Rust birdseye edge props failed:", error.message);
     res.status(500).json({ error: error.message });

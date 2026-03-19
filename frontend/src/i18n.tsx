@@ -161,6 +161,7 @@ type TranslationTree = {
     pause: string;
     stepBack: string;
     stepForward: string;
+    jumpToEnd: string;
     restart: string;
     speed: string;
     algorithmComparison: string;
@@ -195,6 +196,14 @@ type TranslationTree = {
     loadReplay: string;
     loadedFromMemory: string;
     deleteReplay: string;
+    openReplayLibrary: string;
+    replayLibraryTitle: string;
+    replayLibraryDescription: string;
+    closeReplayLibrary: string;
+    noSavedReplays: string;
+    savedAt: string;
+    replayCountSingle: string;
+    replayCountPlural: string;
     selectedNode: string;
     selectedNodeHint: string;
     useAsSource: string;
@@ -206,6 +215,13 @@ type TranslationTree = {
       pageLabel: string;
       pageTitle: string;
       pageDescription: string;
+      datasetMode: string;
+      datasetModeHelp: string;
+      datasetModeEffect: string;
+      fullDataset: string;
+      mockDataset: string;
+      mockDatasetActiveEffect: string;
+      mockModeBadge: string;
       showPanel: string;
       hidePanel: string;
       renderer: string;
@@ -495,6 +511,7 @@ const translations: Record<Language, TranslationTree> = {
       pause: "Pause",
       stepBack: "Step Back",
       stepForward: "Step Forward",
+      jumpToEnd: "Jump to End",
       restart: "Restart",
       speed: "Speed",
       algorithmComparison: "Algorithm Comparison",
@@ -529,6 +546,14 @@ const translations: Record<Language, TranslationTree> = {
       loadReplay: "Load Replay",
       loadedFromMemory: "Loaded from saved replay.",
       deleteReplay: "Delete replay",
+      openReplayLibrary: "Open replay library",
+      replayLibraryTitle: "Saved pathfinder replays",
+      replayLibraryDescription: "Browse the replay records saved after pathfinder runs, then load any run back into the canvas and playback controls.",
+      closeReplayLibrary: "Close replay library",
+      noSavedReplays: "No saved pathfinder replays yet.",
+      savedAt: "Saved at",
+      replayCountSingle: "saved replay",
+      replayCountPlural: "saved replays",
       selectedNode: "Selected Node",
       selectedNodeHint: "Use the clicked graph node to populate either endpoint in the search controls.",
       useAsSource: "Use as Source",
@@ -540,6 +565,13 @@ const translations: Record<Language, TranslationTree> = {
       pageLabel: "Experimental Graph",
       pageTitle: "Full 3D graph sphere",
       pageDescription: "Explore the full named-player network like a static star map. The layout is precomputed so clusters stay tighter locally and the browser can stay focused on navigation instead of physics.",
+      datasetMode: "Dataset mode",
+      datasetModeHelp: "Switch between the full exported birdseye graph and the smaller built-in mock dataset for demos and fresh clones.",
+      datasetModeEffect: "Mock mode gives the 3D sphere an instant demo dataset, while full mode loads the exported real-player graph.",
+      fullDataset: "Full dataset",
+      mockDataset: "Mock dataset",
+      mockDatasetActiveEffect: "Mock mode is active, so this sphere is rendered from the smaller built-in demo graph and should load instantly on any clone.",
+      mockModeBadge: "Mock sphere mode is enabled for a faster demo-friendly 3D graph.",
       showPanel: "Show controls",
       hidePanel: "Hide controls",
       renderer: "Three.js WebGL",
@@ -827,6 +859,7 @@ const translations: Record<Language, TranslationTree> = {
       pause: "Szünet",
       stepBack: "Vissza lépés",
       stepForward: "Előre lépés",
+      jumpToEnd: "Ugrás a végére",
       restart: "Újraindítás",
       speed: "Sebesség",
       algorithmComparison: "Algoritmus összehasonlítás",
@@ -861,6 +894,14 @@ const translations: Record<Language, TranslationTree> = {
       loadReplay: "Visszajátszás betöltése",
       loadedFromMemory: "Mentett visszajátszásból betöltve.",
       deleteReplay: "Visszajátszás törlése",
+      openReplayLibrary: "Visszajátszás könyvtár megnyitása",
+      replayLibraryTitle: "Mentett pathfinder visszajátszások",
+      replayLibraryDescription: "Itt böngészhetők a pathfinder futások után elmentett visszajátszások, és bármelyik közvetlenül visszatölthető a vászonra és a lejátszásvezérlőkbe.",
+      closeReplayLibrary: "Visszajátszás könyvtár bezárása",
+      noSavedReplays: "Még nincs mentett pathfinder visszajátszás.",
+      savedAt: "Mentve",
+      replayCountSingle: "mentett visszajátszás",
+      replayCountPlural: "mentett visszajátszás",
       selectedNode: "Kijelölt csomópont",
       selectedNodeHint: "A kattintott gráfcsomóponttal közvetlenül kitöltheted bármelyik útvégpont mezőt.",
       useAsSource: "Beállítás forrásként",
@@ -872,6 +913,13 @@ const translations: Record<Language, TranslationTree> = {
       pageLabel: "Kísérleti gráf",
       pageTitle: "Teljes 3D gráfgömb",
       pageDescription: "A teljes névvel rendelkező játékoshálózat itt egy statikus csillagtérként böngészhető. Az elrendezés előre ki van számolva, így a klaszterek lokálisan közelebb maradnak egymáshoz, a böngésző pedig a navigációra koncentrálhat fizika helyett.",
+      datasetMode: "Adathalmaz mód",
+      datasetModeHelp: "Váltás a teljes exportált birdseye gráf és a kisebb beépített mock adathalmaz között demohoz és friss klónozásokhoz.",
+      datasetModeEffect: "A mock mód azonnali demo adathalmazt ad a 3D gömbhöz, míg a teljes mód az exportált valódi játékosgráfot tölti be.",
+      fullDataset: "Teljes adathalmaz",
+      mockDataset: "Mock adathalmaz",
+      mockDatasetActiveEffect: "A mock mód aktív, ezért ez a gömb a kisebb beépített demo gráfból renderelődik, és bármelyik klónon azonnal betöltődik.",
+      mockModeBadge: "Mock gömb mód aktív egy gyorsabban bemutatható 3D gráfhoz.",
       showPanel: "Vezérlők mutatása",
       hidePanel: "Vezérlők elrejtése",
       renderer: "Three.js WebGL",

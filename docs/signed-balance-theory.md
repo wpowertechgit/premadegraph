@@ -22,6 +22,8 @@ Relevant implementation surfaces include:
 - `frontend/src/signedBalanceTypes.ts`
 - `frontend/src/signedBalanceMock.ts`
 
+![Signed balance theory page](assets/demo_shots/sign-page.png)
+
 ## Core Research Question
 
 The feature asks whether the observed player relationship graph exhibits balanced signed triads more often than unbalanced ones.

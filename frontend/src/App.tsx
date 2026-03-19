@@ -3,16 +3,17 @@ import type { Location } from "react-router-dom";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useI18n } from "./i18n";
 import AppNavbar from "./AppNavbar";
+import GraphSpherePage from "./GraphSpherePage";
 import RouteTransitionOverlay from "./RouteTransitionOverlay";
 
 const MatchAnalysisPage = lazy(() => import("./MatchAnalysisForm"));
 const GraphPage = lazy(() => import("./GraphPage"));
-const GraphSpherePage = lazy(() => import("./GraphSpherePage"));
 const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
 const TRANSITION_TOTAL_MS = 3000;
 const TRANSITION_SWAP_MS = 1500;
+const INSTANT_ROUTE_PATHS = new Set(["/graph-sphere"]);
 
 function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
   const { t } = useI18n();
@@ -26,8 +27,16 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
       return;
     }
 
+    const useInstantSwap = INSTANT_ROUTE_PATHS.has(location.pathname) || INSTANT_ROUTE_PATHS.has(displayedLocation.pathname);
+
     timeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     timeoutsRef.current = [];
+
+    if (useInstantSwap) {
+      setDisplayedLocation(location);
+      setTransitionPhase("idle");
+      return;
+    }
 
     setTransitionPhase("outro");
 
@@ -77,11 +86,7 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
           />
           <Route
             path="/graph-sphere"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <GraphSpherePage />
-              </Suspense>
-            )}
+            element={<GraphSpherePage />}
           />
           <Route
             path="/signed-balance"

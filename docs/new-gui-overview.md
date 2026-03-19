@@ -21,6 +21,8 @@ The current GUI is no longer a single-purpose graph page. It has evolved into a 
 - a full 3D bird's-eye sphere
 - a signed-balance analysis page
 
+![Match analysis page](assets/demo_shots/match-analysis-page.png)
+
 The main implementation lives in:
 
 - `frontend/src/App.tsx`
@@ -49,13 +51,19 @@ The match-analysis view remains the data-entry and raw-match exploration surface
 
 The pathfinder page is the algorithm-comparison surface. It focuses on route computation, playback, and algorithm behavior rather than on global graph aesthetics.
 
+![Pathfinder replay and control surface](assets/demo_shots/pathfinder-replay-panel.png)
+
 ### Full 3D Graph Sphere
 
 The graph sphere is the immersive overview surface. It is meant to make the entire network feel explorable at a glance while still supporting node inspection and search.
 
+![Bird's-eye sphere](assets/demo_shots/birds-eye-current-state.png)
+
 ### Signed Balance
 
 The signed-balance page is the research-style analysis surface. It presents structural-balance results with controls, charts, interpretation text, and optional cluster summaries.
+
+![Signed balance analysis page](assets/demo_shots/sign-page.png)
 
 ## App Shell And Routing
 

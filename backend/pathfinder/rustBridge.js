@@ -48,6 +48,10 @@ function executeRustProcess(command, payload, { parseJson = true } = {}) {
   }
 
   return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    console.log(
+      `[rustBridge] starting command="${command}" parseJson=${parseJson} executable="${resolved.executable}"`,
+    );
     const child = execFile(
       resolved.executable,
       resolved.args,
@@ -57,14 +61,22 @@ function executeRustProcess(command, payload, { parseJson = true } = {}) {
         maxBuffer: resolveMaxBuffer(),
       },
       (error, stdout, stderr) => {
+        const elapsedMs = Date.now() - startedAt;
         if (error) {
+          console.error(
+            `[rustBridge] command="${command}" failed after ${elapsedMs}ms: ${stderr?.trim() || error.message}`,
+          );
           reject(new Error(stderr?.trim() || error.message || "Rust pathfinder command failed."));
           return;
         }
 
         if (stderr?.trim()) {
-          console.log(stderr.trim());
+          console.log(`[rustBridge][stderr][${command}] ${stderr.trim()}`);
         }
+
+        console.log(
+          `[rustBridge] command="${command}" completed in ${elapsedMs}ms stdoutBytes=${Buffer.byteLength(stdout || "", "utf8")}`,
+        );
 
         if (!parseJson) {
           resolve(stdout);

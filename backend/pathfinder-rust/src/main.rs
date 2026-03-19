@@ -3,8 +3,7 @@ mod models;
 
 use engine::{
     build_graph_state, compare_algorithms, engine_spec_response, export_birdseye_bundle,
-    global_view_response, options_response, player_focus_response, run_search,
-    signed_balance_analysis,
+    global_view_response, options_response, player_focus_response, run_search, signed_balance_analysis,
 };
 use models::{CompareRequest, PathfinderRequest, SignedBalanceRequest};
 use std::env;
@@ -22,6 +21,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let command = args.get(1).map(String::as_str).unwrap_or("spec");
     let mut graph = None;
+    eprintln!("[pathfinder_rust] command={} started", command);
 
     let output = match command {
         "options" => serde_json::to_string(&options_response(
@@ -83,6 +83,7 @@ fn main() {
         _ => serde_json::to_string(&engine_spec_response()).unwrap(),
     };
 
+    eprintln!("[pathfinder_rust] command={} finished", command);
     if !output.is_empty() {
         println!("{}", output);
     }

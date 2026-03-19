@@ -9,9 +9,9 @@ use std::time::Instant;
 
 const UNKNOWN_LABEL: &str = "Unknown#Unknown";
 const SPHERE_RADIUS: f32 = 420.0;
-const LAYOUT_VERSION: &str = "birdseye-static-v4";
+const LAYOUT_VERSION: &str = "birdseye-static-v2";
 const LAYOUT_CLUSTER_SUPPORT_THRESHOLD: u32 = 2;
-const CACHE_DIR_NAME: &str = "cache/birdseye-3d-v4";
+const CACHE_DIR_NAME: &str = "cache/birdseye-3d-v2";
 const METRIC_STRIDE: u32 = 4;
 const EDGE_PAIR_STRIDE: u32 = 2;
 const GOLDEN_ANGLE: f32 = 2.399_963_1;
@@ -214,7 +214,7 @@ fn build_artifacts(
         }
     }
 
-    let layout_groups = build_layout_groups(&sorted_players, &layout_adjacency, pair_map);
+    let layout_groups = build_layout_groups(&sorted_players, &layout_adjacency);
     let mut node_cluster_ids = vec![String::new(); sorted_players.len()];
     let mut node_positions = vec![[0.0_f32; 3]; sorted_players.len()];
     for group in &layout_groups {
@@ -259,7 +259,6 @@ fn build_artifacts(
 fn build_layout_groups(
     players: &[EligiblePlayer],
     layout_adjacency: &HashMap<usize, Vec<usize>>,
-    pair_map: &HashMap<(String, String), PairAccumulator>,
 ) -> Vec<LayoutGroup> {
     let mut visited = vec![false; players.len()];
     let mut components: Vec<Vec<usize>> = Vec::new();
@@ -306,13 +305,12 @@ fn build_layout_groups(
     components.extend(singleton_members);
 
     let anchors = fibonacci_sphere_points(components.len().max(1));
-    let anchor_order = optimized_anchor_order(&components, players, pair_map, &anchors);
     components
         .into_iter()
         .enumerate()
         .map(|(index, members)| LayoutGroup {
             cluster_id: format!("birdseye:group:{}", index + 1),
-            anchor: anchors[anchor_order[index]],
+            anchor: anchors[index],
             members,
         })
         .collect()
@@ -333,152 +331,6 @@ fn fibonacci_sphere_points(count: usize) -> Vec<[f32; 3]> {
     points
 }
 
-fn permuted_anchor_indices(count: usize) -> Vec<usize> {
-    let mut indices: Vec<usize> = (0..count).collect();
-    indices.sort_by_key(|index| stable_hash(&format!("birdseye-anchor-slot-{index}")));
-    indices
-}
-
-fn optimized_anchor_order(
-    components: &[Vec<usize>],
-    players: &[EligiblePlayer],
-    pair_map: &HashMap<(String, String), PairAccumulator>,
-    anchors: &[[f32; 3]],
-) -> Vec<usize> {
-    let count = components.len();
-    if count <= 1 {
-        return vec![0];
-    }
-
-    let mut group_by_player_id: HashMap<&str, usize> = HashMap::new();
-    for (group_index, members) in components.iter().enumerate() {
-        for &member_index in members {
-            group_by_player_id.insert(players[member_index].id.as_str(), group_index);
-        }
-    }
-
-    let mut affinities = vec![vec![0.0_f32; count]; count];
-    for ((left_id, right_id), relation) in pair_map {
-        let Some(&left_group) = group_by_player_id.get(left_id.as_str()) else {
-            continue;
-        };
-        let Some(&right_group) = group_by_player_id.get(right_id.as_str()) else {
-            continue;
-        };
-        if left_group == right_group {
-            continue;
-        }
-        let weight = relation.total_matches() as f32;
-        affinities[left_group][right_group] += weight;
-        affinities[right_group][left_group] += weight;
-    }
-
-    let mut placement_sequence = Vec::with_capacity(count);
-    let mut placed_groups = vec![false; count];
-    placement_sequence.push(0);
-    placed_groups[0] = true;
-
-    while placement_sequence.len() < count {
-        let mut best_group = None;
-        let mut best_score = f32::NEG_INFINITY;
-        for candidate in 0..count {
-            if placed_groups[candidate] {
-                continue;
-            }
-
-            let affinity_to_placed = placement_sequence
-                .iter()
-                .map(|&placed| affinities[candidate][placed])
-                .sum::<f32>();
-            let size_bias = components[candidate].len() as f32 * 0.015;
-            let score = affinity_to_placed + size_bias;
-            if score > best_score {
-                best_score = score;
-                best_group = Some(candidate);
-            }
-        }
-
-        let next_group = best_group.unwrap_or(placement_sequence.len());
-        placed_groups[next_group] = true;
-        placement_sequence.push(next_group);
-    }
-
-    let preferred_anchor_order = permuted_anchor_indices(count);
-    let mut assigned_anchor_by_group = vec![0usize; count];
-    let mut used_anchors = vec![false; count];
-    let first_group = placement_sequence[0];
-    let first_anchor = preferred_anchor_order[0];
-    assigned_anchor_by_group[first_group] = first_anchor;
-    used_anchors[first_anchor] = true;
-
-    for &group_index in placement_sequence.iter().skip(1) {
-        let mut best_anchor = None;
-        let mut best_score = f32::INFINITY;
-
-        for &anchor_index in &preferred_anchor_order {
-            if used_anchors[anchor_index] {
-                continue;
-            }
-
-            let mut affinity_sum = 0.0_f32;
-            let mut affinity_distance_sum = 0.0_f32;
-            let mut total_distance = 0.0_f32;
-            let mut proximity_penalty = 0.0_f32;
-            let mut placed_count = 0usize;
-
-            for &placed_group in &placement_sequence {
-                let placed_anchor = assigned_anchor_by_group[placed_group];
-                if !used_anchors[placed_anchor] {
-                    continue;
-                }
-
-                let distance = chord_distance(anchors[anchor_index], anchors[placed_anchor]);
-                let affinity = affinities[group_index][placed_group];
-                affinity_sum += affinity;
-                affinity_distance_sum += affinity * distance;
-                total_distance += distance;
-                proximity_penalty += (2.15 - distance).max(0.0) / (1.0 + affinity * 0.18);
-                placed_count += 1;
-            }
-
-            let avg_distance = if placed_count > 0 {
-                total_distance / placed_count as f32
-            } else {
-                0.0
-            };
-            let score = if affinity_sum > 0.0 {
-                affinity_distance_sum / affinity_sum - avg_distance * 0.2 + proximity_penalty * 0.06
-            } else {
-                -avg_distance + proximity_penalty * 0.08
-            };
-
-            if score < best_score {
-                best_score = score;
-                best_anchor = Some(anchor_index);
-            }
-        }
-
-        let anchor_index = best_anchor.unwrap_or_else(|| {
-            preferred_anchor_order
-                .iter()
-                .copied()
-                .find(|candidate| !used_anchors[*candidate])
-                .unwrap_or(0)
-        });
-        assigned_anchor_by_group[group_index] = anchor_index;
-        used_anchors[anchor_index] = true;
-    }
-
-    assigned_anchor_by_group
-}
-
-fn chord_distance(left: [f32; 3], right: [f32; 3]) -> f32 {
-    let dx = left[0] - right[0];
-    let dy = left[1] - right[1];
-    let dz = left[2] - right[2];
-    (dx * dx + dy * dy + dz * dz).sqrt()
-}
-
 fn position_for_group_member(
     anchor: [f32; 3],
     member_offset: usize,
@@ -496,7 +348,7 @@ fn position_for_group_member(
     let normal = normalize(anchor);
     let tangent_a = tangent_basis_a(normal);
     let tangent_b = cross(normal, tangent_a);
-    let group_spread = (0.009 + (group_size as f32).sqrt() * 0.0038).min(0.082);
+    let group_spread = (0.014 + (group_size as f32).sqrt() * 0.006).min(0.13);
     let theta = GOLDEN_ANGLE * member_offset as f32;
     let radial = group_spread * (((member_offset + 1) as f32) / group_size as f32).sqrt();
     let offset_vector = [
@@ -504,7 +356,7 @@ fn position_for_group_member(
         tangent_a[1] * theta.cos() * radial + tangent_b[1] * theta.sin() * radial,
         tangent_a[2] * theta.cos() * radial + tangent_b[2] * theta.sin() * radial,
     ];
-    let jitter = ((stable_hash(player_id) % 7) as f32 - 3.0) * 0.0016;
+    let jitter = ((stable_hash(player_id) % 7) as f32 - 3.0) * 0.0028;
     let direction = normalize([
         normal[0] + offset_vector[0],
         normal[1] + offset_vector[1],

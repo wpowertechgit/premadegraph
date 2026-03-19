@@ -19,6 +19,8 @@ This prototype keeps the existing frontend demo intact while adding an optional 
 - signed graph search execution
 - future migration planning to a faster engine runtime
 
+![Pathfinder replay panel backed by the runtime contract](assets/demo_shots/pathfinder-replay-panel.png)
+
 ## Prototype Endpoints
 
 - `GET /api/pathfinder/options`

@@ -24,6 +24,10 @@ It is built from two major parts:
 
 The key idea is simple: compute the heavy layout and graph artifacts ahead of time, then let the browser focus on rendering and interaction.
 
+![Bird's-eye sphere current state](assets/demo_shots/birds-eye-current-state.png)
+
+![Association graph companion view](assets/demo_shots/associative-graph.png)
+
 ## Data Flow
 
 The bird's-eye pipeline works like this:
@@ -77,6 +81,8 @@ This gives the graph a readable silhouette from far away and prevents the globe 
 
 The scene also generates faint 3D outline shells around denser clusters so they can be visually separated without turning the scene into a full force-directed fog.
 
+![Bird's-eye cluster view](assets/demo_shots/birds-eye-cluster-view.png)
+
 ### Edge behavior
 
 Edges are always real graph relationships, but they are intentionally very faint at wide zoom levels. As the camera gets closer, edge opacity increases so the user can start reading actual match connectivity rather than only seeing a mass of points.
@@ -90,6 +96,8 @@ The sphere page supports:
 - click selection
 - focus jumps from search results
 - local edge highlighting for a selected node
+
+![Individual node neighborhood in the sphere](assets/demo_shots/birds-eye-individiual-web.png)
 
 The point-picking threshold is adjusted based on camera distance so node selection stays usable at different zoom levels.
 

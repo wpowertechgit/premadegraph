@@ -38,6 +38,7 @@ interface PathfinderGraphOverlayProps {
   onRestart: () => void;
   onStepForward: () => void;
   onStepBackward: () => void;
+  onJumpToEnd: () => void;
   onSpeedChange: (value: number) => void;
   onRunSearch: (overrides: {
     sourcePlayerId: string;
@@ -77,6 +78,7 @@ export default function PathfinderGraphOverlay({
   onRestart,
   onStepForward,
   onStepBackward,
+  onJumpToEnd,
   onSpeedChange,
   onRunSearch,
   datasetSummary,
@@ -441,6 +443,7 @@ export default function PathfinderGraphOverlay({
               onRestart={onRestart}
               onStepForward={onStepForward}
               onStepBackward={onStepBackward}
+              onJumpToEnd={onJumpToEnd}
               onSpeedChange={onSpeedChange}
             />
 
