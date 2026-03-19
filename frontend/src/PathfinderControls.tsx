@@ -84,29 +84,42 @@ export default function PathfinderControls({
       <div style={{ marginBottom: "0.95rem" }}>
         <label style={labelStyle}>{t.pathfinder.execution}</label>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-          <div
-            style={{
-              borderRadius: "12px",
-              border: "1px solid #4f677f",
-              background: "#24303b",
-              color: "#f3f4f6",
-              padding: "0.8rem 0.95rem",
-              fontWeight: 700,
-            }}
-          >
-            {t.pathfinder.rustBackend}
-          </div>
+          {([
+            { id: "rust-backend", label: t.pathfinder.rustBackend },
+            { id: "frontend-demo", label: t.pathfinder.browserReplay },
+          ] as const).map((option) => {
+            const active = executionMode === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onExecutionModeChange(option.id)}
+                style={{
+                  borderRadius: "12px",
+                  border: active ? "1px solid #4f677f" : "1px solid #39424d",
+                  background: active ? "#24303b" : "#20252c",
+                  color: "#f3f4f6",
+                  padding: "0.8rem 0.95rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
           <button
             type="button"
             onClick={onReloadPlayers}
-            disabled={playersLoading}
+            disabled={playersLoading || executionMode === "frontend-demo"}
             style={{
               borderRadius: "12px",
               border: "1px solid #39424d",
               background: "#20252c",
               color: "#d1d5db",
               padding: "0.8rem 0.95rem",
-              cursor: playersLoading ? "not-allowed" : "pointer",
+              cursor: playersLoading || executionMode === "frontend-demo" ? "not-allowed" : "pointer",
+              opacity: executionMode === "frontend-demo" ? 0.6 : 1,
             }}
           >
             {playersLoading ? t.pathfinder.loadingPlayers : t.pathfinder.reloadPlayers}

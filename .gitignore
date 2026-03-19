@@ -14,3 +14,11 @@ backend/pathfinder-rust/Cargo.lock
 *.pyc
 __pycache__
 AGENTS.md
+*.db-shm
+*.db-wal
+*.sqlite
+*.puml
+*.u32
+*.f32
+backend/pathfinder-rust/cache
+*.db

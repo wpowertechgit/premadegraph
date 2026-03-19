@@ -28,124 +28,156 @@ interface SearchResult {
   trace: TraceStep[];
 }
 
-const NODE_MAP: Record<string, GraphNode> = {
-  a: { id: "a", label: "Aster#EUNE", x: 10, y: 28 },
-  b: { id: "b", label: "Breach#EUNE", x: 17, y: 20 },
-  c: { id: "c", label: "Cipher#EUNE", x: 20, y: 36 },
-  d: { id: "d", label: "Drift#EUNE", x: 30, y: 30 },
-  e: { id: "e", label: "Ember#EUNE", x: 36, y: 18 },
-  f: { id: "f", label: "Flux#EUNE", x: 38, y: 41 },
-  g: { id: "g", label: "Glint#EUNE", x: 49, y: 18 },
-  h: { id: "h", label: "Halo#EUNE", x: 53, y: 31 },
-  i: { id: "i", label: "Ion#EUNE", x: 58, y: 12 },
-  j: { id: "j", label: "Jolt#EUNE", x: 61, y: 26 },
-  k: { id: "k", label: "Kite#EUNE", x: 72, y: 13 },
-  l: { id: "l", label: "Lumen#EUNE", x: 76, y: 26 },
-  m: { id: "m", label: "Myth#EUNE", x: 81, y: 10 },
-  n: { id: "n", label: "Nova#EUNE", x: 84, y: 22 },
-  o: { id: "o", label: "Onyx#EUNE", x: 88, y: 34 },
-  p: { id: "p", label: "Pulse#EUNE", x: 92, y: 18 },
-  q: { id: "q", label: "Quill#EUNE", x: 20, y: 66 },
-  r: { id: "r", label: "Rune#EUNE", x: 30, y: 56 },
-  s: { id: "s", label: "Shade#EUNE", x: 41, y: 69 },
-  t: { id: "t", label: "Talon#EUNE", x: 50, y: 57 },
-  u: { id: "u", label: "Umbra#EUNE", x: 61, y: 69 },
-  v: { id: "v", label: "Vex#EUNE", x: 71, y: 57 },
-  w: { id: "w", label: "Wisp#EUNE", x: 81, y: 67 },
-  x: { id: "x", label: "Xylo#EUNE", x: 90, y: 57 },
-};
-
-const ALL_NODES = Object.values(NODE_MAP);
+const CLUSTER_COUNT = 11;
+const NODES_PER_CLUSTER = 20;
 const WEIGHT_COST_SCALE = 1000;
-
-const SIGNED_EDGES: GraphEdge[] = [
-  { from: "a", to: "b", relation: "ally", weight: 2 },
-  { from: "a", to: "c", relation: "ally", weight: 4 },
-  { from: "b", to: "d", relation: "ally", weight: 3 },
-  { from: "b", to: "e", relation: "ally", weight: 5 },
-  { from: "c", to: "d", relation: "ally", weight: 3 },
-  { from: "d", to: "f", relation: "ally", weight: 2 },
-  { from: "e", to: "f", relation: "ally", weight: 4 },
-  { from: "g", to: "h", relation: "ally", weight: 3 },
-  { from: "g", to: "i", relation: "ally", weight: 4 },
-  { from: "h", to: "j", relation: "ally", weight: 3 },
-  { from: "i", to: "j", relation: "ally", weight: 2 },
-  { from: "k", to: "l", relation: "ally", weight: 5 },
-  { from: "k", to: "m", relation: "ally", weight: 2 },
-  { from: "l", to: "n", relation: "ally", weight: 4 },
-  { from: "m", to: "n", relation: "ally", weight: 3 },
-  { from: "n", to: "o", relation: "ally", weight: 3 },
-  { from: "o", to: "p", relation: "ally", weight: 4 },
-  { from: "l", to: "o", relation: "ally", weight: 2 },
-  { from: "q", to: "r", relation: "ally", weight: 5 },
-  { from: "r", to: "s", relation: "ally", weight: 3 },
-  { from: "s", to: "t", relation: "ally", weight: 2 },
-  { from: "t", to: "u", relation: "ally", weight: 4 },
-  { from: "u", to: "v", relation: "ally", weight: 3 },
-  { from: "v", to: "w", relation: "ally", weight: 2 },
-  { from: "w", to: "x", relation: "ally", weight: 4 },
-  { from: "q", to: "s", relation: "ally", weight: 2 },
-  { from: "r", to: "t", relation: "ally", weight: 2 },
-  { from: "a", to: "e", relation: "enemy", weight: 1 },
-  { from: "b", to: "g", relation: "enemy", weight: 1 },
-  { from: "c", to: "f", relation: "enemy", weight: 1 },
-  { from: "d", to: "g", relation: "enemy", weight: 2 },
-  { from: "f", to: "g", relation: "enemy", weight: 1 },
-  { from: "c", to: "h", relation: "enemy", weight: 1 },
-  { from: "e", to: "j", relation: "enemy", weight: 1 },
-  { from: "h", to: "l", relation: "enemy", weight: 2 },
-  { from: "i", to: "k", relation: "enemy", weight: 1 },
-  { from: "j", to: "m", relation: "enemy", weight: 1 },
-  { from: "f", to: "q", relation: "enemy", weight: 1 },
-  { from: "e", to: "r", relation: "enemy", weight: 1 },
-  { from: "j", to: "t", relation: "enemy", weight: 1 },
-  { from: "n", to: "v", relation: "enemy", weight: 1 },
-  { from: "o", to: "w", relation: "enemy", weight: 2 },
-  { from: "p", to: "x", relation: "enemy", weight: 1 },
-];
-
-export const mockDatasetSummary = {
-  players: ALL_NODES.length,
-  relationships: SIGNED_EDGES.length,
-  allyRelationships: SIGNED_EDGES.filter((edge) => edge.relation === "ally").length,
-  enemyRelationships: SIGNED_EDGES.filter((edge) => edge.relation === "enemy").length,
-};
-
-export const mockPlayers: PlayerOption[] = ALL_NODES.map((node) => ({
-  id: node.id,
-  label: node.label,
-}));
 
 function edgeKey(from: string, to: string): string {
   return [from, to].sort().join("|");
 }
 
-function normalizeEdge(from: string, to: string, relation: RelationType): PathEdge {
-  return { from, to, relation };
+function buildMockGraph() {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const edgeKeys = new Set<string>();
+  const clusters: string[][] = [];
+  const gridColumns = 4;
+  const leafIndices = new Set([18, 19]);
+
+  for (let clusterIndex = 0; clusterIndex < CLUSTER_COUNT; clusterIndex += 1) {
+    const clusterId = `mock-cluster-${clusterIndex + 1}`;
+    const centerX = 18 + (clusterIndex % gridColumns) * 26;
+    const centerY = 18 + Math.floor(clusterIndex / gridColumns) * 28;
+    const members: string[] = [];
+
+    for (let nodeIndex = 0; nodeIndex < NODES_PER_CLUSTER; nodeIndex += 1) {
+      const angle = (nodeIndex / NODES_PER_CLUSTER) * Math.PI * 2;
+      const radius = leafIndices.has(nodeIndex)
+        ? 10.5 + (nodeIndex - 18) * 1.6
+        : 5.5 + (nodeIndex % 4) * 1.25;
+      const id = `c${clusterIndex + 1}n${nodeIndex + 1}`;
+      members.push(id);
+      nodes.push({
+        id,
+        label: `Demo${String(clusterIndex + 1).padStart(2, "0")}-${String(nodeIndex + 1).padStart(2, "0")}#MOCK`,
+        x: centerX + Math.cos(angle) * radius,
+        y: centerY + Math.sin(angle) * radius,
+        clusterId,
+        isBridge: nodeIndex === 0 || nodeIndex === 1,
+        isStar: nodeIndex === 0,
+      });
+    }
+
+    clusters.push(members);
+  }
+
+  const addEdge = (from: string, to: string, relation: RelationType, weight: number) => {
+    const key = edgeKey(from, to);
+    if (edgeKeys.has(key)) {
+      return;
+    }
+    edgeKeys.add(key);
+    edges.push({ from, to, relation, weight });
+  };
+
+  for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex += 1) {
+    const members = clusters[clusterIndex];
+    const hub = members[0];
+
+    for (let nodeIndex = 0; nodeIndex < members.length; nodeIndex += 1) {
+      if (leafIndices.has(nodeIndex)) {
+        continue;
+      }
+
+      const current = members[nodeIndex];
+      const next = members[(nodeIndex + 1) % members.length];
+      const skip = members[(nodeIndex + 2) % members.length];
+      const nextIndex = (nodeIndex + 1) % members.length;
+      const skipIndex = (nodeIndex + 2) % members.length;
+
+      if (!leafIndices.has(nextIndex)) {
+        addEdge(current, next, "ally", 3 + ((clusterIndex + nodeIndex) % 4));
+      }
+      if (!leafIndices.has(skipIndex)) {
+        addEdge(current, skip, "ally", 2 + ((clusterIndex + nodeIndex) % 3));
+      }
+
+      if (nodeIndex > 1 && nodeIndex % 3 === 0) {
+        addEdge(hub, current, "ally", 4 + ((clusterIndex + nodeIndex) % 4));
+      }
+    }
+
+    const fringeAnchor = members[17];
+    const fringeNode = members[18];
+    const leafNode = members[19];
+
+    addEdge(hub, fringeNode, "ally", 1 + (clusterIndex % 2));
+    addEdge(fringeNode, leafNode, clusterIndex % 2 === 0 ? "enemy" : "ally", 1);
+
+    if (clusterIndex % 3 === 1) {
+      addEdge(fringeAnchor, fringeNode, "enemy", 1);
+    }
+  }
+
+  for (let clusterIndex = 0; clusterIndex < clusters.length - 1; clusterIndex += 1) {
+    const current = clusters[clusterIndex];
+    const next = clusters[clusterIndex + 1];
+    addEdge(current[0], next[0], "enemy", 1 + (clusterIndex % 2));
+    addEdge(current[1], next[2], "enemy", 1);
+    addEdge(current[4], next[6], "ally", 2 + (clusterIndex % 3));
+  }
+
+  for (let clusterIndex = 0; clusterIndex < clusters.length - 2; clusterIndex += 1) {
+    const current = clusters[clusterIndex];
+    const next = clusters[clusterIndex + 2];
+    addEdge(current[8], next[10], "enemy", 1);
+    addEdge(current[12], next[14], "ally", 2);
+  }
+
+  addEdge(clusters[0][0], clusters[clusters.length - 1][0], "enemy", 2);
+  addEdge(clusters[2][3], clusters[7][4], "enemy", 1);
+  addEdge(clusters[5][5], clusters[9][6], "ally", 3);
+
+  // Add a few explicitly unstable local structures so the mock dataset is easier to explain.
+  for (const clusterIndex of [0, 3, 6, 9]) {
+    const members = clusters[clusterIndex];
+    addEdge(members[0], members[7], "ally", 3);
+    addEdge(members[0], members[11], "ally", 2);
+    addEdge(members[7], members[11], "enemy", 1);
+  }
+
+  for (const clusterIndex of [1, 5, 8]) {
+    const members = clusters[clusterIndex];
+    addEdge(members[2], members[9], "enemy", 1);
+    addEdge(members[9], members[14], "enemy", 1);
+    addEdge(members[2], members[14], "enemy", 1);
+  }
+
+  for (let clusterIndex = 0; clusterIndex < clusters.length - 1; clusterIndex += 2) {
+    const currentLeaf = clusters[clusterIndex][19];
+    const nextHub = clusters[clusterIndex + 1][0];
+    addEdge(currentLeaf, nextHub, "enemy", 1);
+  }
+
+  return { nodes, edges };
 }
 
-function relationForEdge(from: string, to: string, pathMode: PathMode): RelationType {
-  const candidate = SIGNED_EDGES.find(
-    (edge) =>
-      edgeKey(edge.from, edge.to) === edgeKey(from, to) &&
-      (pathMode === "battle-path" || edge.relation === "ally"),
-  );
-  return candidate?.relation ?? "ally";
-}
+const { nodes: ALL_NODES, edges: SIGNED_EDGES } = buildMockGraph();
+const NODE_MAP: Record<string, GraphNode> = Object.fromEntries(
+  ALL_NODES.map((node) => [node.id, node] as const),
+);
+const EDGE_MAP = new Map(SIGNED_EDGES.map((edge) => [edgeKey(edge.from, edge.to), edge] as const));
 
-function getAllowedEdges(pathMode: PathMode): GraphEdge[] {
-  return SIGNED_EDGES.filter(
-    (edge) => pathMode === "battle-path" || edge.relation === "ally",
-  );
-}
-
-function buildAdjacency(pathMode: PathMode): Record<string, Neighbor[]> {
+function buildAdjacencyForMode(pathMode: PathMode): Record<string, Neighbor[]> {
   const adjacency: Record<string, Neighbor[]> = {};
   for (const node of ALL_NODES) {
     adjacency[node.id] = [];
   }
 
-  for (const edge of getAllowedEdges(pathMode)) {
+  for (const edge of SIGNED_EDGES) {
+    if (pathMode === "social-path" && edge.relation !== "ally") {
+      continue;
+    }
     adjacency[edge.from].push({ ...edge, id: edge.to });
     adjacency[edge.to].push({ ...edge, id: edge.from });
   }
@@ -160,6 +192,45 @@ function buildAdjacency(pathMode: PathMode): Record<string, Neighbor[]> {
   }
 
   return adjacency;
+}
+
+const ADJACENCY_BY_MODE: Record<PathMode, Record<string, Neighbor[]>> = {
+  "social-path": buildAdjacencyForMode("social-path"),
+  "battle-path": buildAdjacencyForMode("battle-path"),
+};
+
+export const mockDatasetSummary = {
+  players: ALL_NODES.length,
+  relationships: SIGNED_EDGES.length,
+  allyRelationships: SIGNED_EDGES.filter((edge) => edge.relation === "ally").length,
+  enemyRelationships: SIGNED_EDGES.filter((edge) => edge.relation === "enemy").length,
+};
+
+export const mockPlayers: PlayerOption[] = ALL_NODES.map((node) => ({
+  id: node.id,
+  label: node.label,
+}));
+
+function normalizeEdge(from: string, to: string, relation: RelationType): PathEdge {
+  return { from, to, relation };
+}
+
+function relationForEdge(from: string, to: string, pathMode: PathMode): RelationType {
+  const candidate = EDGE_MAP.get(edgeKey(from, to));
+  if (pathMode === "social-path" && candidate?.relation === "enemy") {
+    return "ally";
+  }
+  return candidate?.relation ?? "ally";
+}
+
+function getAllowedEdges(pathMode: PathMode): GraphEdge[] {
+  return SIGNED_EDGES.filter(
+    (edge) => pathMode === "battle-path" || edge.relation === "ally",
+  );
+}
+
+function buildAdjacency(pathMode: PathMode): Record<string, Neighbor[]> {
+  return ADJACENCY_BY_MODE[pathMode];
 }
 
 function getTraversalCost(weightedMode: boolean, edgeWeight: number): number {
@@ -574,6 +645,8 @@ function pickSearch(request: PathfinderRequest): SearchResult {
       return runDijkstra(request);
     case "bidirectional":
       return runBidirectional(request);
+    case "astar":
+      return runDijkstra(request);
     default:
       return {
         found: false,
@@ -637,25 +710,6 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
       trace: [],
       graphSnapshot: { nodes: [], edges: [] },
       warnings: ["The selected player does not exist in the current dataset."],
-    };
-  }
-
-  if (request.algorithm === "astar") {
-    return {
-      request: baseRequest,
-      status: "invalid_input",
-      summary: {
-        pathLength: 0,
-        nodesVisited: 0,
-        edgesConsidered: 0,
-        runtimeMs: 0,
-        backendRuntimeMs: 0,
-        traceStepCount: 0,
-      },
-      path: { nodes: [], edges: [] },
-      trace: [],
-      graphSnapshot: getMockGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
-      warnings: ["A* is not enabled yet for this search view."],
     };
   }
 
@@ -738,7 +792,7 @@ export function getComparisonRows(
   currentMode: PathMode,
   weightedMode: boolean,
 ): ComparisonRow[] {
-  const runnableAlgorithms: AlgorithmId[] = ["bfs", "dijkstra", "bidirectional"];
+  const runnableAlgorithms: AlgorithmId[] = ["bfs", "dijkstra", "bidirectional", "astar"];
 
   const rows = runnableAlgorithms.map((algorithm) => {
     const socialRun = buildResponse({
@@ -775,17 +829,6 @@ export function getComparisonRows(
       runtimeMs: activeRun.summary.runtimeMs,
       relativeNote: describeRelativeNote(socialRun, battleRun, currentMode),
     };
-  });
-
-  rows.push({
-    algorithm: "astar",
-    label: ALGORITHM_LABELS.astar,
-    supportedNow: false,
-    pathFound: null,
-    pathLength: null,
-    nodesVisited: null,
-    runtimeMs: null,
-    relativeNote: "coming later, pending heuristic",
   });
 
   return rows;

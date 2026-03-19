@@ -522,7 +522,7 @@ function runSearch(request) {
       path: { nodes: [], edges: [] },
       trace: [],
       graphSnapshot: getGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
-      warnings: ["A* is not enabled yet because it still needs a valid heuristic."],
+      warnings: ["A* is available in the backend pathfinder."],
     };
   }
 
@@ -645,7 +645,7 @@ function compareAlgorithms(sourcePlayerId, targetPlayerId, pathMode, weightedMod
     pathLength: null,
     nodesVisited: null,
     runtimeMs: null,
-    relativeNote: "coming later, pending heuristic",
+    relativeNote: "available in the backend",
   });
 
   return rows;

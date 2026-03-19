@@ -1,5 +1,5 @@
 use crate::models::*;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OpenFlags};
 use serde_json::Value;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
@@ -11,7 +11,8 @@ const CLUSTER_TYPE_RUST_PATHFINDING: &str = "rust_pathfinding";
 const CLUSTER_ALGORITHM: &str = "strong_components";
 const MIN_CLUSTER_EDGE_WEIGHT: u32 = 2;
 const MAX_SNAPSHOT_CLUSTER_NODES: usize = 10;
-const MAX_LANDMARKS: usize = 6;
+const MIN_LANDMARKS: usize = 8;
+const MAX_LANDMARKS: usize = 64;
 const WEIGHT_COST_SCALE: usize = 1000;
 const INF_DISTANCE: usize = usize::MAX / 4;
 
@@ -52,6 +53,7 @@ impl Neighbor {
 #[derive(Debug, Clone)]
 pub(super) struct PairRelation {
     pub(super) ally_weight: u32,
+    pub(super) enemy_weight: u32,
     pub(super) total_matches: u32,
     pub(super) dominant_relation: String,
 }
@@ -143,6 +145,10 @@ pub fn build_graph_state() -> GraphState {
     let (cluster_membership, cluster_records, cluster_edge_set) =
         build_clusters(&co_presence_edges, &signed_pairs, &player_rows);
     let filtered_nodes: HashSet<String> = cluster_membership.keys().cloned().collect();
+    let pathfinding_nodes: HashSet<String> = signed_pairs
+        .keys()
+        .flat_map(|(left, right)| [left.clone(), right.clone()])
+        .collect();
     let node_layouts = build_node_layouts(&cluster_records);
     let bridge_nodes = detect_bridge_nodes(&signed_pairs, &cluster_membership);
     let star_nodes: HashSet<String> = cluster_records
@@ -151,29 +157,47 @@ pub fn build_graph_state() -> GraphState {
         .collect();
     persist_rust_clusters(&db_path, &cluster_records, &bridge_nodes, &star_nodes);
 
-    let mut nodes = Vec::new();
+    let mut dataset_nodes = Vec::new();
     for node_id in filtered_nodes.iter() {
-        let row = player_rows.get(node_id).cloned().unwrap_or_default();
-        let (x, y) = node_layouts.get(node_id).copied().unwrap_or((0.0, 0.0));
-        nodes.push(GraphNode {
-            id: node_id.clone(),
-            label: row.label,
-            x,
-            y,
-            cluster_id: cluster_membership.get(node_id).cloned(),
-            is_bridge: Some(bridge_nodes.contains(node_id)),
-            is_star: Some(star_nodes.contains(node_id)),
-        });
+        dataset_nodes.push(build_graph_node(
+            node_id,
+            &player_rows,
+            &node_layouts,
+            &cluster_membership,
+            &bridge_nodes,
+            &star_nodes,
+        ));
     }
-    nodes.sort_by(|left, right| left.label.cmp(&right.label).then_with(|| left.id.cmp(&right.id)));
+    dataset_nodes.sort_by(|left, right| {
+        left.label
+            .cmp(&right.label)
+            .then_with(|| left.id.cmp(&right.id))
+    });
 
-    let node_map: HashMap<String, GraphNode> = nodes
+    let mut all_nodes = Vec::new();
+    for node_id in pathfinding_nodes.iter() {
+        all_nodes.push(build_graph_node(
+            node_id,
+            &player_rows,
+            &node_layouts,
+            &cluster_membership,
+            &bridge_nodes,
+            &star_nodes,
+        ));
+    }
+    all_nodes.sort_by(|left, right| {
+        left.label
+            .cmp(&right.label)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    let node_map: HashMap<String, GraphNode> = all_nodes
         .iter()
         .cloned()
         .map(|node| (node.id.clone(), node))
         .collect();
 
-    let mut adjacency: HashMap<String, Vec<Neighbor>> = nodes
+    let mut adjacency: HashMap<String, Vec<Neighbor>> = all_nodes
         .iter()
         .map(|node| (node.id.clone(), Vec::new()))
         .collect();
@@ -182,7 +206,7 @@ pub fn build_graph_state() -> GraphState {
     let mut population_edges = Vec::new();
 
     for ((left, right), pair) in signed_pairs {
-        if !filtered_nodes.contains(&left) || !filtered_nodes.contains(&right) {
+        if !pathfinding_nodes.contains(&left) || !pathfinding_nodes.contains(&right) {
             continue;
         }
 
@@ -197,6 +221,7 @@ pub fn build_graph_state() -> GraphState {
             edge_key(&left, &right),
             PairRelation {
                 ally_weight: pair.ally_weight,
+                enemy_weight: pair.enemy_weight,
                 total_matches,
                 dominant_relation: dominant_relation.clone(),
             },
@@ -214,12 +239,14 @@ pub fn build_graph_state() -> GraphState {
             ..neighbor
         });
 
-        dataset_edges.push(GraphEdge {
-            from: left.clone(),
-            to: right.clone(),
-            relation: dominant_relation,
-            weight: total_matches,
-        });
+        if filtered_nodes.contains(&left) && filtered_nodes.contains(&right) {
+            dataset_edges.push(GraphEdge {
+                from: left.clone(),
+                to: right.clone(),
+                relation: dominant_relation,
+                weight: total_matches,
+            });
+        }
     }
 
     for ((left, right), weight) in co_presence_edges {
@@ -250,15 +277,15 @@ pub fn build_graph_state() -> GraphState {
     }
 
     let dataset = PrototypeDataset {
-        nodes: nodes.clone(),
+        nodes: dataset_nodes.clone(),
         edges: dataset_edges,
     };
     let population_snapshot = GraphSnapshot {
-        nodes: nodes.clone(),
+        nodes: dataset_nodes.clone(),
         edges: population_edges,
     };
 
-    let ordered_nodes: Vec<String> = nodes.iter().map(|node| node.id.clone()).collect();
+    let ordered_nodes: Vec<String> = all_nodes.iter().map(|node| node.id.clone()).collect();
     let node_indices: HashMap<String, usize> = ordered_nodes
         .iter()
         .enumerate()
@@ -298,6 +325,39 @@ pub fn build_graph_state() -> GraphState {
     }
 }
 
+fn build_graph_node(
+    node_id: &str,
+    player_rows: &HashMap<String, PlayerDbRow>,
+    node_layouts: &HashMap<String, (f64, f64)>,
+    cluster_membership: &HashMap<String, String>,
+    bridge_nodes: &HashSet<String>,
+    star_nodes: &HashSet<String>,
+) -> GraphNode {
+    let row = player_rows.get(node_id).cloned().unwrap_or_default();
+    let (x, y) = node_layouts
+        .get(node_id)
+        .copied()
+        .unwrap_or_else(|| hidden_node_position(node_id));
+    GraphNode {
+        id: node_id.to_string(),
+        label: row.label,
+        x,
+        y,
+        cluster_id: cluster_membership.get(node_id).cloned(),
+        is_bridge: Some(bridge_nodes.contains(node_id)),
+        is_star: Some(star_nodes.contains(node_id)),
+    }
+}
+
+fn hidden_node_position(node_id: &str) -> (f64, f64) {
+    let hash = node_id.bytes().fold(1469598103934665603u64, |state, byte| {
+        state.wrapping_mul(1099511628211).wrapping_add(byte as u64)
+    });
+    let angle = (hash % 360) as f64 * std::f64::consts::PI / 180.0;
+    let radius = 700.0 + ((hash >> 9) % 180) as f64;
+    (radius * angle.cos(), radius * angle.sin())
+}
+
 fn resolve_match_dir() -> PathBuf {
     if let Ok(value) = env::var("PATHFINDER_MATCH_DIR") {
         return PathBuf::from(value);
@@ -323,8 +383,45 @@ fn latest_name(raw_names: &str) -> String {
         .unwrap_or_else(|| "Unknown#Unknown".to_string())
 }
 
+fn configure_read_only_connection(conn: &Connection) {
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(5_000));
+    let _ = conn.pragma_update(None, "busy_timeout", 5_000);
+    let _ = conn.pragma_update(None, "query_only", true);
+}
+
+fn configure_read_write_connection(conn: &Connection) {
+    let _ = conn.busy_timeout(std::time::Duration::from_millis(5_000));
+    let _ = conn.execute_batch(
+        "
+        PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 5000;
+        ",
+    );
+}
+
+fn open_read_only_db(db_path: &Path) -> Connection {
+    let conn = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .expect("failed to open player database");
+    configure_read_only_connection(&conn);
+    conn
+}
+
+fn open_read_write_db(db_path: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
+    )?;
+    configure_read_write_connection(&conn);
+    Ok(conn)
+}
+
 fn load_player_rows(db_path: &Path) -> HashMap<String, PlayerDbRow> {
-    let conn = Connection::open(db_path).expect("failed to open player database");
+    let conn = open_read_only_db(db_path);
     let mut stmt = conn
         .prepare("SELECT puuid, names, feedscore, opscore FROM players")
         .expect("failed to prepare player query");
@@ -390,7 +487,9 @@ fn load_graph_edges(
                 let (right_id, right_team) = &rows[next];
                 let pair_key = ordered_pair(left_id, right_id);
                 *co_presence.entry(pair_key.clone()).or_insert(0) += 1;
-                let entry = signed_pairs.entry(pair_key).or_insert_with(PairAccumulator::default);
+                let entry = signed_pairs
+                    .entry(pair_key)
+                    .or_insert_with(PairAccumulator::default);
                 if left_team == right_team {
                     entry.ally_weight += 1;
                 } else {
@@ -576,7 +675,10 @@ fn detect_bridge_nodes(
         }
     }
 
-    by_cluster.into_values().map(|(node_id, _)| node_id).collect()
+    by_cluster
+        .into_values()
+        .map(|(node_id, _)| node_id)
+        .collect()
 }
 
 fn persist_rust_clusters(
@@ -585,13 +687,12 @@ fn persist_rust_clusters(
     bridge_nodes: &HashSet<String>,
     star_nodes: &HashSet<String>,
 ) {
-    let Ok(mut conn) = Connection::open(db_path) else {
+    let Ok(mut conn) = open_read_write_db(db_path) else {
         return;
     };
-    let _ = conn.busy_timeout(std::time::Duration::from_secs(2));
     if conn
         .execute_batch(
-        "
+            "
         CREATE TABLE IF NOT EXISTS clusters (
             cluster_id TEXT PRIMARY KEY,
             cluster_type TEXT NOT NULL,
@@ -616,7 +717,7 @@ fn persist_rust_clusters(
             PRIMARY KEY (cluster_id, puuid)
         );
         ",
-    )
+        )
         .is_err()
     {
         return;
@@ -626,18 +727,17 @@ fn persist_rust_clusters(
         return;
     };
 
-    let existing_ids: Vec<String> = match transaction
-        .prepare("SELECT cluster_id FROM clusters WHERE cluster_type = ?1")
-    {
-        Ok(mut statement) => statement
-        .query_map(params![CLUSTER_TYPE_RUST_PATHFINDING], |row| row.get(0))
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .collect(),
-        Err(_) => return,
-    };
+    let existing_ids: Vec<String> =
+        match transaction.prepare("SELECT cluster_id FROM clusters WHERE cluster_type = ?1") {
+            Ok(mut statement) => statement
+                .query_map(params![CLUSTER_TYPE_RUST_PATHFINDING], |row| row.get(0))
+                .ok()
+                .into_iter()
+                .flatten()
+                .filter_map(Result::ok)
+                .collect(),
+            Err(_) => return,
+        };
     for cluster_id in &existing_ids {
         let _ = transaction.execute(
             "DELETE FROM cluster_members WHERE cluster_id = ?1",
@@ -656,8 +756,9 @@ fn persist_rust_clusters(
             "highlightedMembers": cluster.highlighted_members,
         })
         .to_string();
-        if transaction.execute(
-            "
+        if transaction
+            .execute(
+                "
             INSERT INTO clusters (
                 cluster_id,
                 cluster_type,
@@ -672,28 +773,29 @@ fn persist_rust_clusters(
                 updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             ",
-            params![
-                cluster.cluster_id,
-                CLUSTER_TYPE_RUST_PATHFINDING,
-                CLUSTER_ALGORITHM,
-                cluster.members.len() as i64,
-                cluster.best_op,
-                cluster.worst_feed,
-                summary_json,
-                cluster.center_x,
-                cluster.center_y,
-                format!("rust:min_weight={}", MIN_CLUSTER_EDGE_WEIGHT),
-                "runtime"
-            ],
-        )
-        .is_err()
+                params![
+                    cluster.cluster_id,
+                    CLUSTER_TYPE_RUST_PATHFINDING,
+                    CLUSTER_ALGORITHM,
+                    cluster.members.len() as i64,
+                    cluster.best_op,
+                    cluster.worst_feed,
+                    summary_json,
+                    cluster.center_x,
+                    cluster.center_y,
+                    format!("rust:min_weight={}", MIN_CLUSTER_EDGE_WEIGHT),
+                    "runtime"
+                ],
+            )
+            .is_err()
         {
             return;
         }
 
         for member in &cluster.members {
-            if transaction.execute(
-                "
+            if transaction
+                .execute(
+                    "
                 INSERT INTO cluster_members (
                     cluster_id,
                     puuid,
@@ -704,31 +806,31 @@ fn persist_rust_clusters(
                     role_json
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 ",
-                params![
-                    cluster.cluster_id,
-                    member,
-                    if bridge_nodes.contains(member) { 1 } else { 0 },
-                    if star_nodes.contains(member) { 1 } else { 0 },
-                    if cluster.best_op.as_deref() == Some(member.as_str()) {
-                        1
-                    } else {
-                        0
-                    },
-                    if cluster.worst_feed.as_deref() == Some(member.as_str()) {
-                        1
-                    } else {
-                        0
-                    },
-                    serde_json::json!({
-                        "isBridge": bridge_nodes.contains(member),
-                        "isStar": star_nodes.contains(member),
-                        "isBestOp": cluster.best_op.as_deref() == Some(member.as_str()),
-                        "isWorstFeed": cluster.worst_feed.as_deref() == Some(member.as_str()),
-                    })
-                    .to_string()
-                ],
-            )
-            .is_err()
+                    params![
+                        cluster.cluster_id,
+                        member,
+                        if bridge_nodes.contains(member) { 1 } else { 0 },
+                        if star_nodes.contains(member) { 1 } else { 0 },
+                        if cluster.best_op.as_deref() == Some(member.as_str()) {
+                            1
+                        } else {
+                            0
+                        },
+                        if cluster.worst_feed.as_deref() == Some(member.as_str()) {
+                            1
+                        } else {
+                            0
+                        },
+                        serde_json::json!({
+                            "isBridge": bridge_nodes.contains(member),
+                            "isStar": star_nodes.contains(member),
+                            "isBestOp": cluster.best_op.as_deref() == Some(member.as_str()),
+                            "isWorstFeed": cluster.worst_feed.as_deref() == Some(member.as_str()),
+                        })
+                        .to_string()
+                    ],
+                )
+                .is_err()
             {
                 return;
             }
@@ -761,7 +863,10 @@ fn build_cluster_hops(
             .entry(left_cluster.clone())
             .or_default()
             .insert(right_cluster.clone());
-        adjacency.entry(right_cluster).or_default().insert(left_cluster);
+        adjacency
+            .entry(right_cluster)
+            .or_default()
+            .insert(left_cluster);
     }
 
     let mut result = HashMap::new();
@@ -782,24 +887,90 @@ fn build_cluster_hops(
     result
 }
 
-fn choose_landmarks(cluster_records: &[ClusterRecord], bridge_nodes: &HashSet<String>) -> Vec<String> {
+fn choose_landmarks(
+    cluster_records: &[ClusterRecord],
+    bridge_nodes: &HashSet<String>,
+) -> Vec<String> {
+    let total_nodes = cluster_records
+        .iter()
+        .map(|cluster| cluster.members.len())
+        .sum::<usize>();
+    let landmark_budget = adaptive_landmark_budget(total_nodes);
+    if landmark_budget == 0 {
+        return Vec::new();
+    }
+
+    let cluster_candidates: Vec<Vec<String>> = cluster_records
+        .iter()
+        .map(|cluster| cluster_landmark_candidates(cluster, bridge_nodes))
+        .collect();
+    let mut cluster_offsets = vec![0usize; cluster_candidates.len()];
     let mut landmarks = Vec::new();
-    for cluster in cluster_records {
-        if landmarks.len() >= MAX_LANDMARKS {
+    let mut used = HashSet::new();
+
+    loop {
+        let mut progressed = false;
+        for (cluster_index, candidates) in cluster_candidates.iter().enumerate() {
+            if landmarks.len() >= landmark_budget {
+                break;
+            }
+
+            while let Some(candidate) = candidates.get(cluster_offsets[cluster_index]) {
+                cluster_offsets[cluster_index] += 1;
+                if used.insert(candidate.clone()) {
+                    landmarks.push(candidate.clone());
+                    progressed = true;
+                    break;
+                }
+            }
+        }
+
+        if landmarks.len() >= landmark_budget || !progressed {
             break;
         }
-        let preferred = cluster
-            .members
-            .iter()
-            .find(|member| bridge_nodes.contains(*member))
-            .cloned()
-            .or_else(|| cluster.best_op.clone())
-            .or_else(|| cluster.members.first().cloned());
-        if let Some(node_id) = preferred {
-            landmarks.push(node_id);
+    }
+
+    landmarks
+}
+
+fn adaptive_landmark_budget(total_nodes: usize) -> usize {
+    if total_nodes == 0 {
+        return 0;
+    }
+
+    let scaled_budget = (((total_nodes as f64).sqrt()) / 2.0).ceil() as usize;
+    scaled_budget
+        .max(1)
+        .next_power_of_two()
+        .clamp(MIN_LANDMARKS, MAX_LANDMARKS)
+}
+
+fn cluster_landmark_candidates(
+    cluster: &ClusterRecord,
+    bridge_nodes: &HashSet<String>,
+) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut candidates = Vec::new();
+
+    for member in &cluster.members {
+        if bridge_nodes.contains(member) && seen.insert(member.clone()) {
+            candidates.push(member.clone());
         }
     }
-    landmarks
+
+    if let Some(best_op) = &cluster.best_op {
+        if seen.insert(best_op.clone()) {
+            candidates.push(best_op.clone());
+        }
+    }
+
+    for member in &cluster.members {
+        if seen.insert(member.clone()) {
+            candidates.push(member.clone());
+        }
+    }
+
+    candidates
 }
 
 fn traversal_cost(weighted: bool, weight: u32) -> usize {
@@ -886,18 +1057,23 @@ fn build_min_costs(adjacency: &HashMap<String, Vec<Neighbor>>) -> HashMap<ModeKe
     min_costs
 }
 
-pub(super) fn allowed_neighbors(graph: &GraphState, node_id: &str, path_mode: &str) -> Vec<Neighbor> {
+pub(super) fn neighbors_for<'a>(
+    graph: &'a GraphState,
+    node_id: &str,
+) -> &'a [Neighbor] {
     graph
         .adjacency
         .get(node_id)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|neighbor| neighbor.is_allowed(path_mode))
-        .collect()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
 }
 
-pub(super) fn relation_for_path(graph: &GraphState, from: &str, to: &str, path_mode: &str) -> String {
+pub(super) fn relation_for_path(
+    graph: &GraphState,
+    from: &str,
+    to: &str,
+    path_mode: &str,
+) -> String {
     if path_mode == "social-path" {
         return "ally".to_string();
     }
@@ -940,9 +1116,15 @@ pub(super) fn build_path(
 }
 
 fn node_strength(graph: &GraphState, node_id: &str) -> u32 {
-    graph.adjacency
+    graph
+        .adjacency
         .get(node_id)
-        .map(|neighbors| neighbors.iter().map(|neighbor| neighbor.total_matches).sum())
+        .map(|neighbors| {
+            neighbors
+                .iter()
+                .map(|neighbor| neighbor.total_matches)
+                .sum()
+        })
         .unwrap_or(0)
 }
 
@@ -1007,9 +1189,13 @@ pub(super) fn pathfinder_snapshot(
     source_id: &str,
     target_id: &str,
     path_nodes: &[String],
+    visited_nodes: &[String],
 ) -> GraphSnapshot {
     let mut preferred_nodes = HashSet::from([source_id.to_string(), target_id.to_string()]);
     for node_id in path_nodes {
+        preferred_nodes.insert(node_id.clone());
+    }
+    for node_id in visited_nodes {
         preferred_nodes.insert(node_id.clone());
     }
 
@@ -1022,8 +1208,12 @@ pub(super) fn pathfinder_snapshot(
     }
 
     for cluster_id in visible_clusters {
-        for node_id in select_cluster_nodes(graph, &cluster_id, &preferred_nodes, MAX_SNAPSHOT_CLUSTER_NODES)
-        {
+        for node_id in select_cluster_nodes(
+            graph,
+            &cluster_id,
+            &preferred_nodes,
+            MAX_SNAPSHOT_CLUSTER_NODES,
+        ) {
             visible.insert(node_id);
         }
     }
@@ -1033,15 +1223,37 @@ pub(super) fn pathfinder_snapshot(
         .map(|pair| edge_key(&pair[0], &pair[1]))
         .collect();
 
-    let nodes = graph
-        .dataset
-        .nodes
+    let source_position = graph
+        .node_map
+        .get(source_id)
+        .map(|node| (node.x, node.y))
+        .unwrap_or((0.0, 0.0));
+    let target_position = graph
+        .node_map
+        .get(target_id)
+        .map(|node| (node.x, node.y))
+        .unwrap_or((source_position.0 + 180.0, source_position.1));
+    let path_index_map: HashMap<String, usize> = path_nodes
         .iter()
-        .filter(|node| visible.contains(&node.id))
-        .cloned()
+        .enumerate()
+        .map(|(index, node_id)| (node_id.clone(), index))
         .collect();
+    let mut nodes: Vec<GraphNode> = visible
+        .iter()
+        .filter_map(|node_id| {
+            let mut node = graph.node_map.get(node_id)?.clone();
+            if node.cluster_id.is_none() && path_nodes.len() > 2 {
+                if let Some(index) = path_index_map.get(node_id).copied() {
+                    node.x = interpolated_path_x(source_position.0, target_position.0, index, path_nodes.len());
+                    node.y = interpolated_path_y(source_position.1, target_position.1, index, path_nodes.len());
+                }
+            }
+            Some(node)
+        })
+        .collect();
+    nodes.sort_by(|left, right| left.label.cmp(&right.label).then_with(|| left.id.cmp(&right.id)));
 
-    let edges: Vec<GraphEdge> = graph
+    let mut edges: Vec<GraphEdge> = graph
         .dataset
         .edges
         .iter()
@@ -1050,8 +1262,9 @@ pub(super) fn pathfinder_snapshot(
                 return None;
             }
             let edge_key_value = edge_key(&edge.from, &edge.to);
-            let same_cluster = graph.cluster_membership.get(&edge.from) == graph.cluster_membership.get(&edge.to);
-            if !same_cluster && !path_edge_keys.contains(&edge_key_value) {
+            let same_cluster =
+                graph.cluster_membership.get(&edge.from) == graph.cluster_membership.get(&edge.to);
+            if !path_edge_keys.is_empty() && !same_cluster && !path_edge_keys.contains(&edge_key_value) {
                 return None;
             }
             let relation = graph.pair_relations.get(&edge_key(&edge.from, &edge.to))?;
@@ -1074,8 +1287,47 @@ pub(super) fn pathfinder_snapshot(
             }
         })
         .collect();
+    let mut seen_edge_keys: HashSet<String> = edges
+        .iter()
+        .map(|edge| edge_key(&edge.from, &edge.to))
+        .collect();
+    for pair in path_nodes.windows(2) {
+        let key = edge_key(&pair[0], &pair[1]);
+        if !seen_edge_keys.insert(key.clone()) {
+            continue;
+        }
+        let Some(relation) = graph.pair_relations.get(&key) else {
+            continue;
+        };
+        edges.push(if path_mode == "battle-path" {
+            GraphEdge {
+                from: pair[0].clone(),
+                to: pair[1].clone(),
+                relation: relation.dominant_relation.clone(),
+                weight: relation.total_matches,
+            }
+        } else {
+            GraphEdge {
+                from: pair[0].clone(),
+                to: pair[1].clone(),
+                relation: "ally".to_string(),
+                weight: relation.ally_weight.max(1),
+            }
+        });
+    }
 
     GraphSnapshot { nodes, edges }
+}
+
+fn interpolated_path_x(start: f64, end: f64, index: usize, total: usize) -> f64 {
+    let progress = index as f64 / total.saturating_sub(1).max(1) as f64;
+    start + (end - start) * progress
+}
+
+fn interpolated_path_y(start: f64, end: f64, index: usize, total: usize) -> f64 {
+    let progress = index as f64 / total.saturating_sub(1).max(1) as f64;
+    let arc = ((progress * std::f64::consts::PI).sin() - 0.5) * 80.0;
+    start + (end - start) * progress + arc
 }
 
 pub(super) fn population_snapshot(graph: &GraphState) -> GraphSnapshot {
@@ -1189,4 +1441,55 @@ pub(super) fn tie_break_distance(graph: &GraphState, current_id: &str, target_id
     let dx = current.x - target.x;
     let dy = current.y - target.y;
     (((dx * dx) + (dy * dy)).sqrt() * 100.0) as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cluster_record(id: &str, members: &[&str], best_op: Option<&str>) -> ClusterRecord {
+        ClusterRecord {
+            cluster_id: id.to_string(),
+            members: members.iter().map(|member| (*member).to_string()).collect(),
+            best_op: best_op.map(|value| value.to_string()),
+            worst_feed: None,
+            center_x: 0.0,
+            center_y: 0.0,
+            highlighted_members: vec![],
+        }
+    }
+
+    #[test]
+    fn adaptive_landmark_budget_grows_with_graph_size() {
+        assert_eq!(adaptive_landmark_budget(0), 0);
+        assert_eq!(adaptive_landmark_budget(64), 8);
+        assert_eq!(adaptive_landmark_budget(1_600), 32);
+        assert_eq!(adaptive_landmark_budget(10_000), 64);
+        assert_eq!(adaptive_landmark_budget(50_000), 64);
+    }
+
+    #[test]
+    fn choose_landmarks_can_select_multiple_from_large_clusters() {
+        let clusters = vec![
+            cluster_record("c1", &["a1", "a2", "a3", "a4"], Some("a3")),
+            cluster_record("c2", &["b1", "b2", "b3", "b4"], Some("b2")),
+            cluster_record("c3", &["c1", "c2", "c3", "c4"], Some("c4")),
+            cluster_record("c4", &["d1", "d2", "d3", "d4"], Some("d1")),
+        ];
+        let bridge_nodes = HashSet::from([
+            "a2".to_string(),
+            "b3".to_string(),
+            "c2".to_string(),
+            "d4".to_string(),
+        ]);
+
+        let landmarks = choose_landmarks(&clusters, &bridge_nodes);
+
+        assert_eq!(landmarks.len(), 8);
+        assert!(landmarks.contains(&"a2".to_string()));
+        assert!(landmarks.contains(&"b3".to_string()));
+        assert!(landmarks.contains(&"c2".to_string()));
+        assert!(landmarks.contains(&"d4".to_string()));
+        assert!(landmarks.contains(&"a3".to_string()) || landmarks.contains(&"a1".to_string()));
+    }
 }

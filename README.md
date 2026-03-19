@@ -192,6 +192,18 @@ To run a search:
 echo '{"sourcePlayerId":"...","targetPlayerId":"...","algorithm":"astar","pathMode":"social-path","weightedMode":true,"options":{"includeTrace":false,"maxSteps":5000}}' | cargo run -- run
 ```
 
+Signed structural-balance analysis is also available from the same Rust runtime:
+
+```bash
+echo '{"minEdgeSupport":2,"tiePolicy":"exclude","maxTopNodes":10,"includeClusterSummaries":true}' | cargo run -- signed-balance
+```
+
+The backend exposes the same analysis through:
+
+```text
+POST /api/pathfinder-rust/signed-balance
+```
+
 ## Environment Variables
 
 Useful variables across the project:

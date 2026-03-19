@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { Suspense, lazy, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import MatchAnalysisForm from "./MatchAnalysisForm";
 import GraphPage from "./GraphPage";
 import PathfinderLabPage from "./PathfinderLabPage";
 import { FaSyncAlt } from "react-icons/fa";
 import { useI18n } from "./i18n";
+
+const GraphSpherePage = lazy(() => import("./GraphSpherePage"));
+const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 
 function Navbar() {
   const { language, setLanguage, t } = useI18n();
@@ -47,6 +50,12 @@ function Navbar() {
       </Link>
       <Link to="/graph" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
         {t.app.nav.graph}
+      </Link>
+      <Link to="/graph-sphere" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
+        {t.app.nav.graphSphere}
+      </Link>
+      <Link to="/signed-balance" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
+        {t.app.nav.signedBalance}
       </Link>
       <Link to="/pathfinder-lab" style={{ color: "white", textDecoration: "none", fontWeight: "bold" }}>
         {t.app.nav.pathfinderLab}
@@ -135,6 +144,22 @@ function App() {
         <Routes>
           <Route path="/matchanalysis" element={<MatchAnalysisForm />} />
           <Route path="/graph" element={<GraphPage />} />
+          <Route
+            path="/graph-sphere"
+            element={(
+              <Suspense fallback={<div style={{ color: "white", padding: "2rem" }}>{t.common.loading}</div>}>
+                <GraphSpherePage />
+              </Suspense>
+            )}
+          />
+          <Route
+            path="/signed-balance"
+            element={(
+              <Suspense fallback={<div style={{ color: "white", padding: "2rem" }}>{t.common.loading}</div>}>
+                <SignedBalancePage />
+              </Suspense>
+            )}
+          />
           <Route path="/pathfinder-lab" element={<PathfinderLabPage />} />
         </Routes>
       </div>

@@ -1,12 +1,17 @@
+mod birdseye;
 mod graph;
 mod search;
+mod signed_balance;
 
+use self::birdseye::export_birdseye_3d_artifacts;
 use self::graph::{
     global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
     GraphState,
 };
 use self::search::{search_astar, search_bfs, search_bidirectional, search_dijkstra, SearchResult};
+use self::signed_balance::signed_balance_response;
 use crate::models::*;
+use rayon::prelude::*;
 use std::time::Instant;
 
 fn invalid_response(
@@ -52,7 +57,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
     {
         return invalid_response(
             &request,
-            "The selected player does not exist in the current Rust dataset.",
+            "The selected player does not exist in the current dataset.",
             None,
         );
     }
@@ -86,6 +91,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
                 &request.source_player_id,
                 &request.target_player_id,
                 &[request.source_player_id.clone()],
+                &[request.source_player_id.clone()],
             ),
             warnings: vec![],
         };
@@ -108,6 +114,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         path_nodes,
         path_edges,
         visited_count,
+        visited_nodes,
         edges_considered,
         trace,
     } = result;
@@ -119,7 +126,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
 
     let mut warnings = Vec::new();
     if !found && request.path_mode == "social-path" {
-        warnings.push("No friend-only route is available in the current Rust graph.".to_string());
+        warnings.push("No friend-only route is available in the current graph.".to_string());
     }
     if request.path_mode == "battle-path" {
         warnings.push("Enemy edges are enabled in this run.".to_string());
@@ -160,6 +167,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
             &request.source_player_id,
             &request.target_player_id,
             &path_nodes,
+            &visited_nodes,
         ),
         path: PathfinderPath {
             nodes: path_nodes,
@@ -182,79 +190,80 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
 }
 
 pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> CompareResponse {
-    let mut rows = Vec::new();
-
-    for algorithm in ["bfs", "dijkstra", "bidirectional", "astar"] {
-        let social = run_search(
-            graph,
-            PathfinderRequest {
-                source_player_id: request.source_player_id.clone(),
-                target_player_id: request.target_player_id.clone(),
-                algorithm: algorithm.to_string(),
-                path_mode: "social-path".to_string(),
-                weighted_mode: request.weighted_mode,
-                options: PathfinderOptions {
-                    include_trace: false,
-                    max_steps: 5000,
+    let rows = ["bfs", "dijkstra", "bidirectional", "astar"]
+        .par_iter()
+        .map(|algorithm| {
+            let social = run_search(
+                graph,
+                PathfinderRequest {
+                    source_player_id: request.source_player_id.clone(),
+                    target_player_id: request.target_player_id.clone(),
+                    algorithm: (*algorithm).to_string(),
+                    path_mode: "social-path".to_string(),
+                    weighted_mode: request.weighted_mode,
+                    options: PathfinderOptions {
+                        include_trace: false,
+                        max_steps: 50000,
+                    },
                 },
-            },
-        );
+            );
 
-        let battle = run_search(
-            graph,
-            PathfinderRequest {
-                source_player_id: request.source_player_id.clone(),
-                target_player_id: request.target_player_id.clone(),
-                algorithm: algorithm.to_string(),
-                path_mode: "battle-path".to_string(),
-                weighted_mode: request.weighted_mode,
-                options: PathfinderOptions {
-                    include_trace: false,
-                    max_steps: 5000,
+            let battle = run_search(
+                graph,
+                PathfinderRequest {
+                    source_player_id: request.source_player_id.clone(),
+                    target_player_id: request.target_player_id.clone(),
+                    algorithm: (*algorithm).to_string(),
+                    path_mode: "battle-path".to_string(),
+                    weighted_mode: request.weighted_mode,
+                    options: PathfinderOptions {
+                        include_trace: false,
+                        max_steps: 50000,
+                    },
                 },
-            },
-        );
+            );
 
-        let active = if request.path_mode == "battle-path" {
-            &battle
-        } else {
-            &social
-        };
-        let relative_note = if battle.status == "found" && social.status != "found" {
-            "enemy edges create connectivity".to_string()
-        } else if battle.status == "found" && social.status == "found" {
-            if battle.summary.path_length < social.summary.path_length {
-                "shorter with enemy edges".to_string()
-            } else if battle.summary.path_length == social.summary.path_length {
-                "no gain from enemy edges".to_string()
+            let active = if request.path_mode == "battle-path" {
+                &battle
             } else {
+                &social
+            };
+            let relative_note = if battle.status == "found" && social.status != "found" {
+                "enemy edges create connectivity".to_string()
+            } else if battle.status == "found" && social.status == "found" {
+                if battle.summary.path_length < social.summary.path_length {
+                    "shorter with enemy edges".to_string()
+                } else if battle.summary.path_length == social.summary.path_length {
+                    "no gain from enemy edges".to_string()
+                } else {
+                    "battle-path mirrors social-path here".to_string()
+                }
+            } else if request.path_mode == "battle-path" {
                 "battle-path mirrors social-path here".to_string()
-            }
-        } else if request.path_mode == "battle-path" {
-            "battle-path mirrors social-path here".to_string()
-        } else {
-            "social-only route is the current baseline".to_string()
-        };
-
-        rows.push(ComparisonRow {
-            algorithm: algorithm.to_string(),
-            label: if algorithm == "bfs" {
-                "BFS".to_string()
-            } else if algorithm == "dijkstra" {
-                "Dijkstra".to_string()
-            } else if algorithm == "astar" {
-                "A*".to_string()
             } else {
-                "Bidirectional".to_string()
-            },
-            supported_now: true,
-            path_found: Some(active.status == "found" || active.status == "same_source_target"),
-            path_length: Some(active.summary.path_length),
-            nodes_visited: Some(active.summary.nodes_visited),
-            runtime_ms: Some(active.summary.runtime_ms),
-            relative_note,
-        });
-    }
+                "social-only route is the current baseline".to_string()
+            };
+
+            ComparisonRow {
+                algorithm: (*algorithm).to_string(),
+                label: if *algorithm == "bfs" {
+                    "BFS".to_string()
+                } else if *algorithm == "dijkstra" {
+                    "Dijkstra".to_string()
+                } else if *algorithm == "astar" {
+                    "A*".to_string()
+                } else {
+                    "Bidirectional".to_string()
+                },
+                supported_now: true,
+                path_found: Some(active.status == "found" || active.status == "same_source_target"),
+                path_length: Some(active.summary.path_length),
+                nodes_visited: Some(active.summary.nodes_visited),
+                runtime_ms: Some(active.summary.runtime_ms),
+                relative_note,
+            }
+        })
+        .collect();
 
     CompareResponse { rows }
 }
@@ -329,6 +338,17 @@ pub fn player_focus_response(graph: &GraphState, player_id: &str) -> Option<Play
         snapshot: player_focus_snapshot(graph, player_id),
         related_clusters,
     })
+}
+
+pub fn signed_balance_analysis(
+    graph: &GraphState,
+    request: SignedBalanceRequest,
+) -> SignedBalanceResponse {
+    signed_balance_response(graph, request)
+}
+
+pub fn export_birdseye_bundle() -> std::path::PathBuf {
+    export_birdseye_3d_artifacts()
 }
 
 pub fn engine_spec_response() -> EngineSpecResponse {

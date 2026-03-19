@@ -78,6 +78,14 @@ export interface PathfinderRunResponse {
   trace: TraceStep[];
   graphSnapshot: GraphSnapshot;
   warnings: string[];
+  replayMeta?: {
+    title: string;
+    cacheKey: string;
+    sourceLabel: string;
+    targetLabel: string;
+    datasetPlayerCount: number;
+    loadedFromSave: boolean;
+  };
 }
 
 export interface PlayerOption {
@@ -114,6 +122,24 @@ export interface PathfinderOptionsResponse {
 
 export interface PathfinderCompareResponse {
   rows: ComparisonRow[];
+}
+
+export interface SavedReplayRecord {
+  id: number;
+  cacheKey: string;
+  title: string;
+  executionMode: ExecutionMode;
+  sourcePlayerId: string;
+  targetPlayerId: string;
+  sourceLabel: string;
+  targetLabel: string;
+  datasetPlayerCount: number;
+  pathMode: PathMode;
+  weightedMode: boolean;
+  selectedAlgorithm: AlgorithmId;
+  createdAt: string;
+  comparisonRows: ComparisonRow[];
+  algorithmRuns: PathfinderRunResponse[];
 }
 
 export interface PathfinderCompareRequest {

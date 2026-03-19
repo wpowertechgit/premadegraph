@@ -36,7 +36,7 @@ function resolveRustCommand(command) {
   return null;
 }
 
-function executeRustCommand(command, payload) {
+function executeRustProcess(command, payload, { parseJson = true } = {}) {
   const resolved = resolveRustCommand(command);
 
   if (!resolved) {
@@ -66,6 +66,11 @@ function executeRustCommand(command, payload) {
           console.log(stderr.trim());
         }
 
+        if (!parseJson) {
+          resolve(stdout);
+          return;
+        }
+
         try {
           resolve(JSON.parse(stdout));
         } catch (parseError) {
@@ -81,6 +86,15 @@ function executeRustCommand(command, payload) {
   });
 }
 
+function executeRustCommand(command, payload) {
+  return executeRustProcess(command, payload, { parseJson: true });
+}
+
+function executeRustCommandRaw(command, payload) {
+  return executeRustProcess(command, payload, { parseJson: false });
+}
+
 module.exports = {
   executeRustCommand,
+  executeRustCommandRaw,
 };

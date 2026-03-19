@@ -9,6 +9,8 @@ type TranslationTree = {
     nav: {
       matchAnalysis: string;
       graph: string;
+      graphSphere: string;
+      signedBalance: string;
       pathfinderLab: string;
       generateGraph: string;
       normalizePlayers: string;
@@ -172,8 +174,145 @@ type TranslationTree = {
     defaultComparison: string;
     routeThroughGraph: string;
     currentModePrefix: string;
+    replayTitle: string;
+    cachedReplays: string;
+    loadReplay: string;
+    loadedFromMemory: string;
+    deleteReplay: string;
+    };
+    graphSphere: {
+      pageLabel: string;
+      pageTitle: string;
+      pageDescription: string;
+      showPanel: string;
+      hidePanel: string;
+      renderer: string;
+      loading: string;
+      loadingDetail: string;
+      loadFailed: string;
+      controlsTitle: string;
+      searchLabel: string;
+      searchPlaceholder: string;
+      searchResults: string;
+      summary: string;
+      nodes: string;
+      edges: string;
+      clusters: string;
+      allyEdges: string;
+      enemyEdges: string;
+      generationTime: string;
+      inspectTitle: string;
+      inspectPreview: string;
+      inspectPinned: string;
+      hoverHint: string;
+      noSelection: string;
+      playerId: string;
+      playerName: string;
+      clusterId: string;
+      totalDegree: string;
+      allyDegree: string;
+      enemyDegree: string;
+      totalSupport: string;
+      focusNode: string;
+      sceneTitle: string;
+      zoomHint: string;
+      edgeMode: string;
+      selectedNeighborhood: string;
+    };
+    signedBalance: {
+      pageLabel: string;
+      pageTitle: string;
+      pageDescription: string;
+      controls: string;
+      datasetMode: string;
+      datasetModeHelp: string;
+      datasetModeEffect: string;
+      fullDataset: string;
+      mockDataset: string;
+      mockDatasetActiveEffect: string;
+      mockModeBadge: string;
+      minEdgeSupport: string;
+      minEdgeSupportHelp: string;
+      minEdgeSupportEffect: string;
+      tiePolicy: string;
+      tiePolicyHelp: string;
+      tiePolicyEffect: string;
+      tieExclude: string;
+      tieAlly: string;
+      tieEnemy: string;
+      maxTopNodes: string;
+      maxTopNodesHelp: string;
+      maxTopNodesEffect: string;
+      clusterSummaries: string;
+      clusterSummariesHelp: string;
+      clusterSummariesEffect: string;
+      runAnalysis: string;
+      running: string;
+      runHint: string;
+      runHintMock: string;
+      waitingToRun: string;
+      readOnly: string;
+      loadFailed: string;
+      warnings: string;
+      totalTriads: string;
+      balancedCount: string;
+      unbalancedCount: string;
+      balancedRatio: string;
+      balanced: string;
+      unbalanced: string;
+      triads: string;
+      triadDistribution: string;
+      graphSummary: string;
+      filteredNodes: string;
+      projectedNodes: string;
+      candidateEdges: string;
+      analyzedEdges: string;
+      excludedLowSupport: string;
+      excludedTied: string;
+      graphSummaryText: string;
+      balanceSplitChart: string;
+      balanceSplitChartText: string;
+      balanceSplitAllBalanced: string;
+      balanceSplitMixed: string;
+      edgePipelineChart: string;
+      edgePipelineChartText: string;
+      decisions: string;
+      decisionsText: string;
+      graphScope: string;
+      edgeProjection: string;
+      supportMeasure: string;
+      signRule: string;
+      validTriadRule: string;
+      researchReading: string;
+      researchReadingText: string;
+      researchInterpretation: string;
+      researchNoTriads: string;
+      triadDistributionText: string;
+      instabilityChart: string;
+      instabilityChartText: string;
+      topUnbalancedNodes: string;
+      topUnbalancedNodesText: string;
+      player: string;
+      playerId: string;
+      instabilityScore: string;
+      clusterId: string;
+      clusterSize: string;
+      localTriads: string;
+      clusterSummariesText: string;
+      documentationTitle: string;
+      documentationIntro: string;
+      docWhatTitle: string;
+      docWhatText: string;
+      docBalancedTitle: string;
+      docBalancedText: string;
+      docUnbalancedTitle: string;
+      docUnbalancedText: string;
+      parameterGuideTitle: string;
+      howToReadTitle: string;
+      howToReadText: string;
+      documentationImplementationNote: string;
+    };
   };
-};
 
 const translations: Record<Language, TranslationTree> = {
   en: {
@@ -182,6 +321,8 @@ const translations: Record<Language, TranslationTree> = {
       nav: {
         matchAnalysis: "Match Analysis",
         graph: "Association Graph",
+        graphSphere: "3D Graph Sphere",
+        signedBalance: "Signed Balance",
         pathfinderLab: "Pathfinder Lab",
         generateGraph: "Generate Graph",
         normalizePlayers: "Normalize Players",
@@ -243,7 +384,7 @@ const translations: Record<Language, TranslationTree> = {
       iframeTitle: "Association Graph",
       openPathfinder: "Open Pathfinder",
       panelTitle: "Pathfinder",
-      panelHeading: "Find a route through the live Rust graph",
+      panelHeading: "Find a route through the live graph",
       panelDescription: "Use the population graph as your overview, then jump straight into the animated pathfinder for any two players you want to connect.",
       sourcePlayer: "Source Player",
       targetPlayer: "Target Player",
@@ -256,9 +397,9 @@ const translations: Record<Language, TranslationTree> = {
     },
     pathfinder: {
       execution: "Execution",
-      rustBackend: "Rust Backend",
+      rustBackend: "Backend",
       nodeBackend: "Node Backend",
-      browserReplay: "Browser Replay",
+      browserReplay: "Mock Mode",
       reloadPlayers: "Reload Players",
       loadingPlayers: "Loading players...",
       sourcePlayer: "Source Player",
@@ -339,12 +480,149 @@ const translations: Record<Language, TranslationTree> = {
       enemyEdges: "enemy edges",
       overlayExplanation: "Social path limits traversal to ally links. Battle path also allows enemy links, which can expose shorter or otherwise unreachable routes. When weighted search is enabled, repeated connections are cheaper, so stronger match-history edges are favored during the search. Playback reveals the visited frontier and then resolves the final route when the search finishes.",
       currentStep: "Current step",
-      metadataRustFailed: "Rust backend is selected, but its metadata could not be loaded.",
+      metadataRustFailed: "The backend is selected, but its metadata could not be loaded.",
       metadataFailed: "Backend metadata failed to load.",
       comparisonUnavailable: "Comparison data unavailable.",
       defaultComparison: "Run a search to compare path modes.",
-      routeThroughGraph: "Find a route through the live Rust graph",
+      routeThroughGraph: "Find a route through the live graph",
       currentModePrefix: "Current mode",
+      replayTitle: "Replay Title",
+      cachedReplays: "Saved Replays",
+      loadReplay: "Load Replay",
+      loadedFromMemory: "Loaded from saved replay.",
+      deleteReplay: "Delete replay",
+    },
+    graphSphere: {
+      pageLabel: "Experimental Graph",
+      pageTitle: "Full 3D graph sphere",
+      pageDescription: "Explore the full named-player network like a static star map. The layout is precomputed so clusters stay tighter locally and the browser can stay focused on navigation instead of physics.",
+      showPanel: "Show controls",
+      hidePanel: "Hide controls",
+      renderer: "Three.js WebGL",
+      loading: "Loading 3D graph...",
+      loadingDetail: "Preparing manifest, metadata, and binary buffers for the 3D graph view.",
+      loadFailed: "The 3D graph data could not be loaded.",
+      controlsTitle: "Flight controls",
+      searchLabel: "Search players",
+      searchPlaceholder: "Search by name or puuid",
+      searchResults: "Search results",
+      summary: "Dataset summary",
+      nodes: "nodes",
+      edges: "edges",
+      clusters: "layout groups",
+      allyEdges: "ally edges",
+      enemyEdges: "enemy edges",
+      generationTime: "generation time",
+      inspectTitle: "Node inspect",
+      inspectPreview: "Hover preview",
+      inspectPinned: "Pinned node",
+      hoverHint: "Middle mouse rotates, arrow keys move the camera target, wheel zooms, and picking only activates when you are close enough.",
+      noSelection: "No node selected yet.",
+      playerId: "Player ID",
+      playerName: "Player name",
+      clusterId: "Cluster ID",
+      totalDegree: "Total degree",
+      allyDegree: "Ally degree",
+      enemyDegree: "Enemy degree",
+      totalSupport: "Total support",
+      focusNode: "Focus node",
+      sceneTitle: "Sphere renderer",
+      zoomHint: "Left drag pans, middle drag rotates, right drag dollies, arrow keys shift the view, and wheel zooms.",
+      edgeMode: "All edges stay loaded, but they stay faint until you move closer or pin a neighborhood.",
+      selectedNeighborhood: "Selected neighborhood",
+    },
+    signedBalance: {
+      pageLabel: "Signed network experiment",
+      pageTitle: "Structural balance in the player graph",
+      pageDescription: "This page turns the signed-triad experiment into a research-facing view. Run the analysis with different thresholds and inspect whether balanced local structures dominate the observed signed graph.",
+      controls: "Experiment controls",
+      datasetMode: "Dataset mode",
+      datasetModeHelp: "Switch between the full player graph and the smaller mock dataset used in Pathfinder Lab.",
+      datasetModeEffect: "Mock mode is easier to explain and inspect, while full mode reflects the real experimental graph.",
+      fullDataset: "Full dataset",
+      mockDataset: "Mock dataset",
+      mockDatasetActiveEffect: "Mock mode is active, so the experiment runs on the smaller demo graph and should be much easier to explain step by step.",
+      mockModeBadge: "Mock dataset mode is enabled for a smaller, easier-to-explain network.",
+      minEdgeSupport: "Minimum edge support",
+      minEdgeSupportHelp: "Only keep projected edges with at least this much evidence from repeated match history.",
+      minEdgeSupportEffect: "Higher values make the graph stricter and usually reduce the number of analyzed triads.",
+      tiePolicy: "Tie policy",
+      tiePolicyHelp: "Choose what happens when ally and enemy evidence are exactly equal for one edge.",
+      tiePolicyEffect: "Excluding ties gives a cleaner but smaller graph, while forcing ally or enemy changes the final triad mix.",
+      tieExclude: "Exclude tied edges",
+      tieAlly: "Resolve ties as ally",
+      tieEnemy: "Resolve ties as enemy",
+      maxTopNodes: "Top unstable nodes",
+      maxTopNodesHelp: "Select how many players appear in the instability ranking and chart.",
+      maxTopNodesEffect: "Higher values expose more local problem cases, but make the ranking panels denser.",
+      clusterSummaries: "Cluster summaries",
+      clusterSummariesHelp: "Toggle the optional cluster-level balance table.",
+      clusterSummariesEffect: "Enabling it adds local balance summaries, but the core global analysis stays the same.",
+      runAnalysis: "Run analysis",
+      running: "Running...",
+      runHint: "Nothing runs automatically here. The experiment executes only when you press the button.",
+      runHintMock: "Mock mode is selected, so the run will use the smaller demo graph instead of the full player network.",
+      waitingToRun: "The signed-balance experiment is idle. Adjust the thresholds and press Run analysis when you want to execute it.",
+      readOnly: "Read-only observational module for signed-network analysis.",
+      loadFailed: "Signed balance analysis could not be loaded.",
+      warnings: "Warnings",
+      totalTriads: "Total signed triads",
+      balancedCount: "Balanced triads",
+      unbalancedCount: "Unbalanced triads",
+      balancedRatio: "Balanced ratio",
+      balanced: "Balanced",
+      unbalanced: "Unbalanced",
+      triads: "triads",
+      triadDistribution: "Triad type distribution",
+      graphSummary: "Projection summary",
+      filteredNodes: "Filtered nodes",
+      projectedNodes: "Projected nodes",
+      candidateEdges: "Candidate edges",
+      analyzedEdges: "Analyzed edges",
+      excludedLowSupport: "Excluded low-support edges",
+      excludedTied: "Excluded tied edges",
+      graphSummaryText: "This tells you how much of the player graph survived the current projection and threshold settings.",
+      balanceSplitChart: "Balanced versus unbalanced",
+      balanceSplitChartText: "A quick read on whether social consistency dominates the valid signed triads in this run.",
+      balanceSplitAllBalanced: "Every analyzed triad in this run ended up balanced under the current projection choices.",
+      balanceSplitMixed: "The graph still leans one way or the other, but the unbalanced share shows where local tension survives the projection.",
+      edgePipelineChart: "Edge filtering pipeline",
+      edgePipelineChartText: "This chart shows how many candidate edges survive the support threshold and tie policy before triads are counted.",
+      decisions: "Design decisions",
+      decisionsText: "These are the exact projection rules behind the current run, so the experiment stays explicit and reproducible.",
+      graphScope: "Graph scope",
+      edgeProjection: "Edge projection",
+      supportMeasure: "Support measure",
+      signRule: "Sign rule",
+      validTriadRule: "Valid triad rule",
+      researchReading: "Research reading",
+      researchReadingText: "This turns the raw counts into a short interpretation, but it should still be read as descriptive analysis rather than causal proof.",
+      researchInterpretation: "The current run suggests a balanced ratio of {ratio}, with {balanced} balanced triads versus {unbalanced} unbalanced triads in the analyzed signed graph.",
+      researchNoTriads: "No valid signed triads survived the current support threshold and tie policy.",
+      triadDistributionText: "Each triad type captures a different local signed pattern. Balanced theory expects `+++` and `+--` to be the stable families.",
+      instabilityChart: "Player instability snapshot",
+      instabilityChartText: "These bars highlight players who appear most often in unbalanced triads under the current settings.",
+      topUnbalancedNodes: "Players in the most unbalanced triads",
+      topUnbalancedNodesText: "The table ranks players by how often they participate in structurally inconsistent local patterns.",
+      player: "Player",
+      playerId: "Player ID",
+      instabilityScore: "Instability score",
+      clusterId: "Cluster ID",
+      clusterSize: "Cluster size",
+      localTriads: "Local triads",
+      clusterSummariesText: "Cluster summaries are optional local views, useful for checking whether imbalance concentrates in a few communities.",
+      documentationTitle: "What this experiment means",
+      documentationIntro: "This section is the quick thesis/demo explanation for what you are looking at and how the controls change the output.",
+      docWhatTitle: "What is a signed triad?",
+      docWhatText: "A signed triad is a fully connected triple of players where each edge is assigned a positive ally sign or a negative enemy sign after projection.",
+      docBalancedTitle: "What counts as balanced?",
+      docBalancedText: "Structural Balance Theory treats `+++` and `+--` as balanced. In plain language: friend-of-friend stays friendly, and enemy-of-enemy resolves into friendship.",
+      docUnbalancedTitle: "What counts as unbalanced?",
+      docUnbalancedText: "Patterns like `++-` are unbalanced because local relationships pull in conflicting directions. They can be read as small pockets of social inconsistency.",
+      parameterGuideTitle: "Parameter guide",
+      howToReadTitle: "How to read the output",
+      howToReadText: "Start with the balanced ratio and the balanced-versus-unbalanced chart. Then inspect the triad distribution to see which signed patterns dominate, and finally use the instability and cluster panels to find where imbalance is concentrated. If changing one parameter sharply shifts the counts, that tells you the result is sensitive to projection choices and should be interpreted carefully.",
+      documentationImplementationNote: "Implementation note: this page visualizes a deterministic backend experiment over a projected signed player graph, so rerunning the same settings should reproduce the same result.",
     },
   },
   hu: {
@@ -353,6 +631,8 @@ const translations: Record<Language, TranslationTree> = {
       nav: {
         matchAnalysis: "Meccselemzés",
         graph: "Asszociációs Gráf",
+        graphSphere: "3D Gráfgömb",
+        signedBalance: "Signed Balance",
         pathfinderLab: "Pathfinder Labor",
         generateGraph: "Gráf generálása",
         normalizePlayers: "Játékosok normalizálása",
@@ -414,7 +694,7 @@ const translations: Record<Language, TranslationTree> = {
       iframeTitle: "Asszociációs Gráf",
       openPathfinder: "Pathfinder megnyitása",
       panelTitle: "Pathfinder",
-      panelHeading: "Útkeresés az élő Rust-gráfban",
+      panelHeading: "Útkeresés az élő gráfban",
       panelDescription: "Használd a populációs gráfot áttekintésnek, majd ugorj az animált útkeresőbe bármelyik két játékos között.",
       sourcePlayer: "Forrás játékos",
       targetPlayer: "Céljátékos",
@@ -427,9 +707,9 @@ const translations: Record<Language, TranslationTree> = {
     },
     pathfinder: {
       execution: "Végrehajtás",
-      rustBackend: "Rust Backend",
+      rustBackend: "Backend",
       nodeBackend: "Node Backend",
-      browserReplay: "Böngészős demo",
+      browserReplay: "Mock mód",
       reloadPlayers: "Játékosok újratöltése",
       loadingPlayers: "Játékosok betöltése...",
       sourcePlayer: "Forrás játékos",
@@ -510,12 +790,149 @@ const translations: Record<Language, TranslationTree> = {
       enemyEdges: "ellenséges él",
       overlayExplanation: "A social path a bejárást a szövetséges kapcsolatokra korlátozza. A battle path az ellenséges kapcsolatokat is engedi, ami rövidebb vagy különben elérhetetlen útvonalakat nyithat meg. Ha a súlyozott keresés be van kapcsolva, az ismétlődő kapcsolatok olcsóbbnak számítanak, így a keresést az erősebb meccstörténeti kapcsolatok irányítják. A visszajátszás megmutatja a bejárt frontiert, majd a keresés végén feloldja a végső útvonalat.",
       currentStep: "Aktuális lépés",
-      metadataRustFailed: "A Rust backend van kiválasztva, de a metaadatai nem töltődtek be.",
+      metadataRustFailed: "A backend van kiválasztva, de a metaadatai nem töltődtek be.",
       metadataFailed: "Nem sikerült betölteni a backend metaadatait.",
       comparisonUnavailable: "Az összehasonlítási adatok nem érhetők el.",
       defaultComparison: "Indíts egy keresést az útvonalmódok összehasonlításához.",
-      routeThroughGraph: "Útkeresés az élő Rust-gráfban",
+      routeThroughGraph: "Útkeresés az élő gráfban",
       currentModePrefix: "Aktuális mód",
+      replayTitle: "Visszajátszás címe",
+      cachedReplays: "Mentett visszajátszások",
+      loadReplay: "Visszajátszás betöltése",
+      loadedFromMemory: "Mentett visszajátszásból betöltve.",
+      deleteReplay: "Visszajátszás törlése",
+    },
+    graphSphere: {
+      pageLabel: "Kísérleti gráf",
+      pageTitle: "Teljes 3D gráfgömb",
+      pageDescription: "A teljes névvel rendelkező játékoshálózat itt egy statikus csillagtérként böngészhető. Az elrendezés előre ki van számolva, így a klaszterek lokálisan közelebb maradnak egymáshoz, a böngésző pedig a navigációra koncentrálhat fizika helyett.",
+      showPanel: "Vezérlők mutatása",
+      hidePanel: "Vezérlők elrejtése",
+      renderer: "Three.js WebGL",
+      loading: "3D gráf betöltése...",
+      loadingDetail: "Manifest, metaadatok és bináris pufferek előkészítése a 3D gráfnézethez.",
+      loadFailed: "Nem sikerült betölteni a 3D gráf adatait.",
+      controlsTitle: "Repülési vezérlők",
+      searchLabel: "Játékos keresése",
+      searchPlaceholder: "Keresés név vagy puuid alapján",
+      searchResults: "Keresési találatok",
+      summary: "Adathalmaz összegzés",
+      nodes: "csomópont",
+      edges: "él",
+      clusters: "elrendezési csoport",
+      allyEdges: "szövetséges él",
+      enemyEdges: "ellenséges él",
+      generationTime: "generálási idő",
+      inspectTitle: "Csomópont vizsgálata",
+      inspectPreview: "Lebegő előnézet",
+      inspectPinned: "Rögzített csomópont",
+      hoverHint: "A középső egérgomb forgat, a nyilak mozgatják a nézet célpontját, a görgő nagyít, és kijelölni csak kellően közelről lehet.",
+      noSelection: "Még nincs kijelölt csomópont.",
+      playerId: "Játékos azonosító",
+      playerName: "Játékosnév",
+      clusterId: "Klaszter azonosító",
+      totalDegree: "Teljes fokszám",
+      allyDegree: "Szövetséges fokszám",
+      enemyDegree: "Ellenséges fokszám",
+      totalSupport: "Összes támogatás",
+      focusNode: "Csomópont fókuszálása",
+      sceneTitle: "Gömb renderelő",
+      zoomHint: "Bal húzás pásztáz, középső húzás forgat, jobb húzás dolly-zik, a nyilak arrébb viszik a nézetet, a görgő zoomol.",
+      edgeMode: "Minden él betöltve marad, de csak közelebbről vagy kijelölt környezetnél erősödik fel.",
+      selectedNeighborhood: "Kijelölt szomszédság",
+    },
+    signedBalance: {
+      pageLabel: "Előjeles hálózati kísérlet",
+      pageTitle: "Strukturális egyensúly a játékosgráfban",
+      pageDescription: "Ez az oldal kutatásra szabott nézetet ad a signed-triad kísérlethez. Újrafuttathatóvá teszi a megfigyeléses elemzést állítható küszöbökkel, és megmutatja, hogy a kiegyensúlyozott lokális struktúrák dominálják-e a megfigyelt előjeles gráfot.",
+      controls: "Kísérleti vezérlők",
+      datasetMode: "Adathalmaz mód",
+      datasetModeHelp: "Váltás a teljes játékosgráf és a Pathfinder Laborból ismert kisebb mock adathalmaz között.",
+      datasetModeEffect: "A mock mód könnyebben magyarázható és átlátható, míg a teljes mód a valódi kísérleti gráfot mutatja.",
+      fullDataset: "Teljes adathalmaz",
+      mockDataset: "Mock adathalmaz",
+      mockDatasetActiveEffect: "A mock mód aktív, ezért a kísérlet a kisebb demo gráfon fut, amit sokkal könnyebb lépésről lépésre elmagyarázni.",
+      mockModeBadge: "Mock adathalmaz mód aktív egy kisebb, könnyebben bemutatható hálózathoz.",
+      minEdgeSupport: "Minimum éltámogatás",
+      minEdgeSupportHelp: "Csak azok az élek maradnak bent, amelyek mögött legalább ennyi ismétlődő meccstörténeti bizonyíték áll.",
+      minEdgeSupportEffect: "Nagyobb érték szigorúbb gráfot ad, és általában csökkenti az elemzett triádok számát.",
+      tiePolicy: "Döntetlenkezelés",
+      tiePolicyHelp: "Ez szabályozza, mi történjen akkor, ha egy élhez pontosan ugyanannyi ally és enemy bizonyíték tartozik.",
+      tiePolicyEffect: "A kizárás tisztább, de kisebb gráfot ad, míg a szövetséges vagy ellenség feloldás megváltoztatja a végső triádösszetételt.",
+      tieExclude: "Döntetlen élek kizárása",
+      tieAlly: "Döntetlen szövetségesként",
+      tieEnemy: "Döntetlen ellenségként",
+      maxTopNodes: "Top instabil játékosok",
+      maxTopNodesHelp: "Ez adja meg, hány játékos jelenjen meg az instabilitási rangsorban és a mini diagramon.",
+      maxTopNodesEffect: "Nagyobb értéknél több lokális problémás eset látszik, de zsúfoltabbak lesznek a rangsor panelek.",
+      clusterSummaries: "Klaszter összegzések",
+      clusterSummariesHelp: "Kapcsolja be vagy ki az opcionális klaszterszintű egyensúly táblát.",
+      clusterSummariesEffect: "Bekapcsolva lokális klaszterösszegzéseket ad hozzá, de a globális elemzés magja nem változik.",
+      runAnalysis: "Elemzés futtatása",
+      running: "Futás...",
+      runHint: "Itt semmi sem indul el magától. A kísérlet csak a gomb megnyomására fut le.",
+      runHintMock: "A mock mód van kiválasztva, ezért ez a futás a kisebb demo gráfot használja a teljes játékoshálózat helyett.",
+      waitingToRun: "A signed-balance kísérlet most tétlen. Állítsd be a küszöböket, majd nyomd meg az Elemzés futtatása gombot, amikor el akarod indítani.",
+      readOnly: "Csak olvasható, megfigyeléses modul előjeles hálózatelemzéshez.",
+      loadFailed: "Nem sikerült betölteni a strukturális egyensúly elemzést.",
+      warnings: "Figyelmeztetések",
+      totalTriads: "Összes előjeles triád",
+      balancedCount: "Kiegyensúlyozott triádok",
+      unbalancedCount: "Kiegyensúlyozatlan triádok",
+      balancedRatio: "Kiegyensúlyozottsági arány",
+      balanced: "Kiegyensúlyozott",
+      unbalanced: "Kiegyensúlyozatlan",
+      triads: "triád",
+      triadDistribution: "Triádtípus eloszlás",
+      graphSummary: "Projekció összegzés",
+      filteredNodes: "Szűrt csomópontok",
+      projectedNodes: "Leképezett csomópontok",
+      candidateEdges: "Jelölt élek",
+      analyzedEdges: "Elemzett élek",
+      excludedLowSupport: "Kizárt gyenge élek",
+      excludedTied: "Kizárt döntetlen élek",
+      graphSummaryText: "Ez mutatja meg, a játékosgráf mekkora része maradt bent az aktuális projekció és küszöbök mellett.",
+      balanceSplitChart: "Kiegyensúlyozott vs kiegyensúlyozatlan",
+      balanceSplitChartText: "Gyors áttekintés arról, hogy a valid előjeles triádok között a társas konzisztencia dominál-e ebben a futásban.",
+      balanceSplitAllBalanced: "Ebben a futásban minden elemzett triád kiegyensúlyozottnak bizonyult a jelenlegi projekciós döntések mellett.",
+      balanceSplitMixed: "A gráf valamelyik irányba továbbra is eltolódik, de a kiegyensúlyozatlan arány megmutatja, hol marad fenn lokális feszültség.",
+      edgePipelineChart: "Élszűrési pipeline",
+      edgePipelineChartText: "Ez a diagram megmutatja, hány jelölt él marad bent a támogatási küszöb és a döntetlenkezelés után, mielőtt a triádok számolása megtörténik.",
+      decisions: "Tervezési döntések",
+      decisionsText: "Ezek a futás mögötti pontos projekciós szabályok, hogy a kísérlet egyértelmű és reprodukálható maradjon.",
+      graphScope: "Gráf hatókör",
+      edgeProjection: "Élprojekció",
+      supportMeasure: "Támogatási mérőszám",
+      signRule: "Előjel szabály",
+      validTriadRule: "Érvényes triád szabály",
+      researchReading: "Kutatási olvasat",
+      researchReadingText: "Ez a nyers számokból rövid értelmezést ad, de továbbra is leíró elemzésként kell olvasni, nem oksági bizonyítékként.",
+      researchInterpretation: "Az aktuális futás {ratio} kiegyensúlyozottsági arányt jelez, {balanced} kiegyensúlyozott és {unbalanced} kiegyensúlyozatlan triáddal az elemzett előjeles gráfban.",
+      researchNoTriads: "Az aktuális küszöb és döntetlenkezelés mellett nem maradt érvényes előjeles triád.",
+      triadDistributionText: "Minden triádtípus más lokális előjeles mintát ír le. Az egyensúlyelmélet szerint a `+++` és a `+--` a stabil családok.",
+      instabilityChart: "Játékos instabilitási pillanatkép",
+      instabilityChartText: "Ezek az oszlopok azokat a játékosokat emelik ki, akik a jelenlegi beállítások mellett a legtöbbször szerepelnek kiegyensúlyozatlan triádokban.",
+      topUnbalancedNodes: "A legtöbb kiegyensúlyozatlan triádban szereplő játékosok",
+      topUnbalancedNodesText: "A tábla azt rangsorolja, hogy a játékosok milyen gyakran vesznek részt strukturálisan inkonzisztens lokális mintákban.",
+      player: "Játékos",
+      playerId: "Játékos azonosító",
+      instabilityScore: "Instabilitási pontszám",
+      clusterId: "Klaszter azonosító",
+      clusterSize: "Klaszter méret",
+      localTriads: "Lokális triádok",
+      clusterSummariesText: "A klaszterösszegzések opcionális lokális nézetek, hasznosak annak ellenőrzésére, hogy az egyensúlytalanság néhány közösségben sűrűsödik-e.",
+      documentationTitle: "Mit jelent ez a kísérlet?",
+      documentationIntro: "Ez a rész a gyors thesis/demo magyarázat arra, hogy mit látsz, és hogyan módosítják a vezérlők a kimenetet.",
+      docWhatTitle: "Mi az az előjeles triád?",
+      docWhatText: "Az előjeles triád egy teljesen összekötött játékoshármas, ahol minden él egy projekció után pozitív ally vagy negatív enemy előjelet kap.",
+      docBalancedTitle: "Mi számít kiegyensúlyozottnak?",
+      docBalancedText: "A Strukturális Egyensúly Elmélet a `+++` és a `+--` mintákat tekinti kiegyensúlyozottnak. Egyszerűbben: a barátom barátja barát marad, az ellenségem ellensége pedig baráttá oldódik.",
+      docUnbalancedTitle: "Mi számít kiegyensúlyozatlannak?",
+      docUnbalancedText: "Az olyan minták, mint a `++-`, kiegyensúlyozatlanok, mert a lokális kapcsolatok ellentétes irányba húznak. Ezek kis társas inkonzisztencia-zsebekként olvashatók.",
+      parameterGuideTitle: "Paraméter útmutató",
+      howToReadTitle: "Hogyan olvasd az eredményt",
+      howToReadText: "Kezdd a kiegyensúlyozottsági aránnyal és a balanced-vs-unbalanced diagrammal. Ezután nézd meg a triádeloszlást, hogy mely előjeles minták dominálnak, végül használd az instabilitási és klaszter paneleket annak feltárására, hol sűrűsödik az egyensúlytalanság. Ha egyetlen paraméter módosítása erősen átrendezi a számokat, az arra utal, hogy az eredmény érzékeny a projekciós döntésekre, ezért óvatosan kell értelmezni.",
+      documentationImplementationNote: "Implementációs megjegyzés: ez az oldal egy determinisztikus háttérelemzés eredményét jeleníti meg egy projekciózott előjeles játékosgráfon, ezért ugyanazokkal a beállításokkal ugyanazt az eredményt kell kapni.",
     },
   },
 };
@@ -611,13 +1028,13 @@ const backendTextMap: Record<string, { en: string; hu: string }> = {
     en: "coming later, pending heuristic",
     hu: "később érkezik, heurisztikára vár",
   },
+  "available in the backend": {
+    en: "available in the backend",
+    hu: "elérhető a backendben",
+  },
   "The selected player does not exist in the current dataset.": {
     en: "The selected player does not exist in the current dataset.",
     hu: "A kiválasztott játékos nem szerepel a jelenlegi adathalmazban.",
-  },
-  "The selected player does not exist in the current Rust dataset.": {
-    en: "The selected player does not exist in the current Rust dataset.",
-    hu: "A kiválasztott játékos nem szerepel a jelenlegi Rust adathalmazban.",
   },
   "A* is not enabled yet for this search view.": {
     en: "A* is not enabled yet for this search view.",
@@ -627,13 +1044,13 @@ const backendTextMap: Record<string, { en: string; hu: string }> = {
     en: "A* is not enabled yet because it still needs a valid heuristic.",
     hu: "Az A* még nincs engedélyezve, mert még hiányzik egy érvényes heurisztika.",
   },
+  "A* is available in the backend pathfinder.": {
+    en: "A* is available in the backend pathfinder.",
+    hu: "Az A* elérhető a backendes útkeresőben.",
+  },
   "No friend-only route is available in the current graph.": {
     en: "No friend-only route is available in the current graph.",
     hu: "A jelenlegi gráfban nincs csak baráti kapcsolatokat használó útvonal.",
-  },
-  "No friend-only route is available in the current Rust graph.": {
-    en: "No friend-only route is available in the current Rust graph.",
-    hu: "A jelenlegi Rust-gráfban nincs csak baráti kapcsolatokat használó útvonal.",
   },
   "Try battle-path to include enemy edges.": {
     en: "Try battle-path to include enemy edges.",

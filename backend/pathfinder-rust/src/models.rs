@@ -58,6 +58,45 @@ pub struct CompareRequest {
     pub weighted_mode: bool,
 }
 
+fn default_signed_balance_min_edge_support() -> u32 {
+    2
+}
+
+fn default_signed_balance_top_nodes() -> usize {
+    10
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SignedTiePolicy {
+    Exclude,
+    Ally,
+    Enemy,
+}
+
+impl Default for SignedTiePolicy {
+    fn default() -> Self {
+        Self::Exclude
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceRequest {
+    #[serde(default = "default_signed_balance_min_edge_support")]
+    pub min_edge_support: u32,
+    #[serde(default)]
+    pub tie_policy: SignedTiePolicy,
+    #[serde(default = "default_signed_balance_top_nodes")]
+    pub max_top_nodes: usize,
+    #[serde(default = "default_true")]
+    pub include_cluster_summaries: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct PlayerOption {
     pub id: String,
@@ -211,4 +250,79 @@ pub struct EngineSpecResponse {
     pub response_contract: serde_json::Value,
     pub signed_graph_model: serde_json::Value,
     pub integration_path: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceDecisions {
+    pub graph_scope: String,
+    pub edge_projection: String,
+    pub support_measure: String,
+    pub canonical_positive_sign: String,
+    pub canonical_negative_sign: String,
+    pub sign_rule: String,
+    pub tie_policy: SignedTiePolicy,
+    pub min_edge_support: u32,
+    pub valid_triad_rule: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceGraphSummary {
+    pub filtered_nodes: usize,
+    pub projected_nodes: usize,
+    pub candidate_edges: usize,
+    pub analyzed_edges: usize,
+    pub excluded_low_support_edges: usize,
+    pub excluded_tied_edges: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceTriadSummary {
+    pub total_analyzed: usize,
+    pub balanced_count: usize,
+    pub unbalanced_count: usize,
+    pub balanced_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SignedTriadTypeCount {
+    pub triad_type: String,
+    pub balanced: bool,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceNodeSummary {
+    pub player_id: String,
+    pub label: String,
+    pub total_triads: usize,
+    pub unbalanced_triads: usize,
+    pub instability_score: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceClusterSummary {
+    pub cluster_id: String,
+    pub size: usize,
+    pub local_triads: usize,
+    pub balanced_count: usize,
+    pub unbalanced_count: usize,
+    pub balanced_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceResponse {
+    pub status: String,
+    pub decisions: SignedBalanceDecisions,
+    pub graph_summary: SignedBalanceGraphSummary,
+    pub triads: SignedBalanceTriadSummary,
+    pub triad_type_distribution: Vec<SignedTriadTypeCount>,
+    pub top_unbalanced_nodes: Vec<SignedBalanceNodeSummary>,
+    pub cluster_summaries: Vec<SignedBalanceClusterSummary>,
+    pub warnings: Vec<String>,
 }

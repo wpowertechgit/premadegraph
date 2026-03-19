@@ -8,6 +8,7 @@
     "backend": "node backend/server.js"
   },
   "dependencies": {
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "three": "^0.179.1"
   }
 }
