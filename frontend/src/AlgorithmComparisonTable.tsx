@@ -1,6 +1,7 @@
 import React from "react";
 import { type ComparisonRow } from "./pathfinderTypes";
 import { getAlgorithmLabel, translateBackendText, useI18n } from "./i18n";
+import { surfaceCardStyle } from "./theme";
 
 interface AlgorithmComparisonTableProps {
   rows: ComparisonRow[];
@@ -21,20 +22,19 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
   return (
     <section
       style={{
-        background: "#1d2127",
-        border: "1px solid #303741",
-        borderRadius: "18px",
+        ...surfaceCardStyle(),
         padding: "1rem",
-        color: "#f3f4f6",
-        overflowX: "auto",
+        color: "var(--text-primary)",
+        overflow: "hidden",
+        minWidth: 0,
       }}
     >
       <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>
         {t.pathfinder.algorithmComparison}
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
         <thead>
-          <tr style={{ color: "#9ca3af", textAlign: "left" }}>
+          <tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
             <th style={{ padding: "0.7rem 0.45rem" }}>{t.pathfinder.algorithm}</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>{t.pathfinder.available}</th>
             <th style={{ padding: "0.7rem 0.45rem" }}>{t.pathfinder.pathFound}</th>
@@ -46,9 +46,9 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.algorithm} style={{ borderTop: "1px solid #313842" }}>
-              <td style={{ padding: "0.8rem 0.45rem", fontWeight: 600 }}>{getAlgorithmLabel(language, row.algorithm)}</td>
-              <td style={{ padding: "0.8rem 0.45rem" }}>
+            <tr key={row.algorithm} style={{ borderTop: "1px solid rgba(126, 155, 183, 0.14)", verticalAlign: "top" }}>
+              <td style={{ padding: "0.8rem 0.45rem", fontWeight: 600, overflowWrap: "anywhere" }}>{getAlgorithmLabel(language, row.algorithm)}</td>
+              <td style={{ padding: "0.8rem 0.45rem", overflowWrap: "anywhere" }}>
                 {row.supportedNow ? (
                   t.common.yes
                 ) : (
@@ -57,21 +57,21 @@ export default function AlgorithmComparisonTable({ rows }: AlgorithmComparisonTa
                       display: "inline-block",
                       padding: "0.15rem 0.45rem",
                       borderRadius: "999px",
-                      background: "#3a3122",
-                      color: "#d7b16a",
+                      background: "rgba(234, 179, 108, 0.16)",
+                      color: "var(--warning)",
                     }}
                   >
                     {t.pathfinder.comingLater}
                   </span>
                 )}
               </td>
-              <td style={{ padding: "0.8rem 0.45rem" }}>
+              <td style={{ padding: "0.8rem 0.45rem", overflowWrap: "anywhere" }}>
                 {row.pathFound === null ? t.common.na : row.pathFound ? t.common.yes : t.common.no}
               </td>
-              <td style={{ padding: "0.8rem 0.45rem" }}>{formatValue(row.pathLength, "", t.common.na)}</td>
-              <td style={{ padding: "0.8rem 0.45rem" }}>{formatValue(row.nodesVisited, "", t.common.na)}</td>
-              <td style={{ padding: "0.8rem 0.45rem" }}>{formatValue(row.runtimeMs, " ms", t.common.na)}</td>
-              <td style={{ padding: "0.8rem 0.45rem", color: "#9ca3af" }}>{translateBackendText(language, row.relativeNote)}</td>
+              <td style={{ padding: "0.8rem 0.45rem", overflowWrap: "anywhere" }}>{formatValue(row.pathLength, "", t.common.na)}</td>
+              <td style={{ padding: "0.8rem 0.45rem", overflowWrap: "anywhere" }}>{formatValue(row.nodesVisited, "", t.common.na)}</td>
+              <td style={{ padding: "0.8rem 0.45rem", overflowWrap: "anywhere" }}>{formatValue(row.runtimeMs, " ms", t.common.na)}</td>
+              <td style={{ padding: "0.8rem 0.45rem", color: "var(--text-muted)", overflowWrap: "anywhere" }}>{translateBackendText(language, row.relativeNote)}</td>
             </tr>
           ))}
         </tbody>

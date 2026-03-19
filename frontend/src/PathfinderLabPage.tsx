@@ -33,6 +33,7 @@ import {
   type SavedReplayRecord,
 } from "./pathfinderTypes";
 import { useI18n } from "./i18n";
+import { pageShellStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
 
 function getDefaultComparisonNote(
   sourcePlayerId: string,
@@ -113,6 +114,7 @@ export default function PathfinderLabPage() {
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const autorunHandledRef = useRef(false);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("rust-backend");
   const [sourcePlayerId, setSourcePlayerId] = useState(searchParams.get("source") ?? "");
   const [targetPlayerId, setTargetPlayerId] = useState(searchParams.get("target") ?? "");
@@ -142,6 +144,7 @@ export default function PathfinderLabPage() {
   const [comparisonNote, setComparisonNote] = useState(
     getDefaultComparisonNote("a", "f", "battle-path", true, t.pathfinder.defaultComparison),
   );
+  const [showScrollCue, setShowScrollCue] = useState(false);
   const replayCacheRef = useRef<Map<string, SavedReplayRecord>>(new Map());
   const playback = usePathfinderPlayback(run);
   const usingFrontendReplay = executionMode === "frontend-demo";
@@ -312,6 +315,27 @@ export default function PathfinderLabPage() {
     }
   }, [executionMode, pathMode, sourcePlayerId, targetPlayerId, weightedMode, t.pathfinder.defaultComparison]);
 
+  useEffect(() => {
+    const viewport = scrollViewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const updateCue = () => {
+      const remaining = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      setShowScrollCue(remaining > 24);
+    };
+
+    updateCue();
+    viewport.addEventListener("scroll", updateCue);
+    window.addEventListener("resize", updateCue);
+
+    return () => {
+      viewport.removeEventListener("scroll", updateCue);
+      window.removeEventListener("resize", updateCue);
+    };
+  }, [comparisonRows.length, players.length, run, savedReplays.length]);
+
   const resetPrototype = () => {
     setRun(null);
     setComparisonNote(getDefaultComparisonNote(sourcePlayerId, targetPlayerId, pathMode, weightedMode, t.pathfinder.defaultComparison));
@@ -452,38 +476,35 @@ export default function PathfinderLabPage() {
 
   return (
     <div
+      className="pathfinder-lab"
       style={{
-        minHeight: "100vh",
+        ...pageShellStyle(),
         width: "100%",
-        padding: "1.25rem",
-        boxSizing: "border-box",
-        background: "#15181d",
-        color: "#f3f4f6",
+        color: "var(--text-primary)",
+        maxWidth: "none",
+        padding: 0,
+        height: "calc(100vh - var(--nav-height))",
+        minHeight: "620px",
+        overflow: "hidden",
+        position: "relative",
       }}
     >
-      <div
-        style={{
-          maxWidth: "1320px",
-          margin: "0 auto",
-          display: "grid",
-          gap: "1rem",
-        }}
-      >
+      <div ref={scrollViewportRef} className="pathfinder-lab__scroll-viewport app-hidden-scrollbar">
+        <div className="pathfinder-lab__content">
         <section
           style={{
             padding: "1.1rem 1.15rem",
-            borderRadius: "18px",
-            background: "#1d2127",
-            border: "1px solid #303741",
+            ...surfaceCardStyle(),
+            minWidth: 0,
           }}
         >
-          <div style={{ color: "#8b98a7", fontSize: "0.82rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          <div style={sectionLabelStyle()}>
             {t.pathfinder.pageLabel}
           </div>
           <h1 style={{ margin: "0.4rem 0 0.55rem", fontSize: "clamp(2rem, 4vw, 3rem)" }}>
             {t.pathfinder.pageTitle}
           </h1>
-          <p style={{ margin: 0, maxWidth: "860px", color: "#9ca3af" }}>
+          <p style={{ margin: 0, maxWidth: "860px", color: "var(--text-muted)" }}>
             {t.pathfinder.pageDescription}
           </p>
         </section>
@@ -493,6 +514,7 @@ export default function PathfinderLabPage() {
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: "0.75rem",
+            minWidth: 0,
           }}
           >
           {[
@@ -511,14 +533,14 @@ export default function PathfinderLabPage() {
             <div
               key={item.label}
               style={{
+                ...surfaceCardStyle(),
                 borderRadius: "16px",
-                border: "1px solid #303741",
-                background: "#1d2127",
                 padding: "0.9rem 1rem",
+                minWidth: 0,
               }}
             >
-              <div style={{ color: "#8b98a7", fontSize: "0.78rem", textTransform: "uppercase" }}>{item.label}</div>
-              <div style={{ color: "#f3f4f6", fontSize: "1.2rem", fontWeight: 700, marginTop: "0.25rem" }}>
+              <div style={sectionLabelStyle()}>{item.label}</div>
+              <div style={{ color: "var(--text-primary)", fontSize: "1.2rem", fontWeight: 700, marginTop: "0.25rem" }}>
                 {item.value}
               </div>
             </div>
@@ -596,44 +618,43 @@ export default function PathfinderLabPage() {
 
         <section
           style={{
-            borderRadius: "18px",
-            border: "1px solid #303741",
-            background: "#1d2127",
+            ...surfaceCardStyle(),
             padding: "1rem",
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
             gap: "1rem",
+            minWidth: 0,
           }}
         >
           <div>
-            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+            <div style={sectionLabelStyle()}>
               {t.pathfinder.whatGraphShows}
             </div>
-            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
               {t.pathfinder.whatGraphShowsText}
             </div>
           </div>
           <div>
-            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+            <div style={sectionLabelStyle()}>
               {t.pathfinder.pathModes}
             </div>
-            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
               {t.pathfinder.pathModesText}
             </div>
           </div>
           <div>
-            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+            <div style={sectionLabelStyle()}>
               {t.pathfinder.algorithmsPlayback}
             </div>
-            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
               {t.pathfinder.algorithmsPlaybackText}
             </div>
           </div>
           <div>
-            <div style={{ color: "#8b98a7", fontSize: "0.8rem", textTransform: "uppercase" }}>
+            <div style={sectionLabelStyle()}>
               {t.pathfinder.activeExecution}
             </div>
-            <div style={{ marginTop: "0.4rem", color: "#9ca3af", lineHeight: 1.5 }}>
+            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
               {t.pathfinder.currentModePrefix}: {getExecutionLabel(executionMode, {
                 nodeBackend: t.pathfinder.nodeBackend,
                 rustBackend: t.pathfinder.rustBackend,
@@ -645,10 +666,13 @@ export default function PathfinderLabPage() {
         </section>
 
         <div
+          className="pathfinder-lab__two-up"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
             gap: "1rem",
+            minWidth: 0,
+            alignItems: "start",
           }}
         >
           <PathfinderCanvas
@@ -705,7 +729,15 @@ export default function PathfinderLabPage() {
         />
 
         <AlgorithmComparisonTable rows={comparisonRows} />
+        </div>
       </div>
+
+      {showScrollCue ? (
+        <div className="app-scroll-cue pathfinder-lab__scroll-cue" aria-hidden="true">
+          <div className="app-scroll-fade" />
+          <div className="app-scroll-arrow">↓</div>
+        </div>
+      ) : null}
 
       <PathfinderGraphOverlay
         open={overlayOpen}

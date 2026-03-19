@@ -1,5 +1,16 @@
 # Pathfinder Backend Prototype
 
+## Document Role
+
+This document captures the earlier backend-migration stage and serves as historical context for the later Rust runtime architecture.
+
+## Related Documents
+
+- [Unified Cluster Persistence And Exact A*](unified-cluster-persistence-and-astar.md)
+- [Bird's-Eye 3D Sphere](birdseye-3d-sphere.md)
+- [Signed Balance Theory And Implementation](signed-balance-theory.md)
+- [New GUI Overview](new-gui-overview.md)
+
 ## Purpose
 
 This prototype keeps the existing frontend demo intact while adding an optional backend execution path for:
@@ -63,3 +74,7 @@ Binary discovery:
 - build the crate so one of these exists:
   - `backend/pathfinder-rust/target/release/pathfinder_rust(.exe)`
   - `backend/pathfinder-rust/target/debug/pathfinder_rust(.exe)`
+
+## Conclusions
+
+The main conclusion of the prototype phase was that the search core belonged on the backend, and eventually in Rust, while the frontend should preserve a stable response contract.

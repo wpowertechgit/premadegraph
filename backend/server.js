@@ -26,7 +26,7 @@ const rustInFlightRequests = new Map();
 let signedBalanceQueue = Promise.resolve();
 let signedBalanceActivePromise = null;
 let signedBalanceActiveKey = null;
-const birdseyeCacheDir = path.resolve(__dirname, "pathfinder-rust", "cache", "birdseye-3d-v2");
+const birdseyeCacheDir = path.resolve(__dirname, "pathfinder-rust", "cache", "birdseye-3d-v4");
 const birdseyeArtifactPaths = {
   manifest: path.join(birdseyeCacheDir, "manifest.json"),
   nodeMeta: path.join(birdseyeCacheDir, "node_meta.json"),

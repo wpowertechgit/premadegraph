@@ -8,15 +8,31 @@ type TranslationTree = {
     title: string;
     nav: {
       matchAnalysis: string;
+      matchAnalysisDescription: string;
       graph: string;
+      graphDescription: string;
       graphSphere: string;
+      graphSphereDescription: string;
       signedBalance: string;
+      signedBalanceDescription: string;
       pathfinderLab: string;
+      pathfinderLabDescription: string;
       generateGraph: string;
       normalizePlayers: string;
       language: string;
       hungarian: string;
       english: string;
+      brandSubtitle: string;
+      navigateSection: string;
+      actionsSection: string;
+      expandNavigation: string;
+      collapseNavigation: string;
+      graphPipelineTitle: string;
+      graphPipelineCaption: string;
+      playerHygieneTitle: string;
+      playerHygieneCaption: string;
+      interfaceLanguageTitle: string;
+      interfaceLanguageCaption: string;
     };
     alerts: {
       errorPrefix: string;
@@ -179,6 +195,12 @@ type TranslationTree = {
     loadReplay: string;
     loadedFromMemory: string;
     deleteReplay: string;
+    selectedNode: string;
+    selectedNodeHint: string;
+    useAsSource: string;
+    useAsTarget: string;
+    nodeAlreadySelected: string;
+    clickNodePrompt: string;
     };
     graphSphere: {
       pageLabel: string;
@@ -320,15 +342,31 @@ const translations: Record<Language, TranslationTree> = {
       title: "League of Legends Feed Analyzer",
       nav: {
         matchAnalysis: "Match Analysis",
+        matchAnalysisDescription: "Match intake, player metrics, and summaries",
         graph: "Association Graph",
+        graphDescription: "Association graph and route launch panel",
         graphSphere: "3D Graph Sphere",
+        graphSphereDescription: "Immersive 3D cluster and node exploration",
         signedBalance: "Signed Balance",
+        signedBalanceDescription: "Signed-network balance experiment workspace",
         pathfinderLab: "Pathfinder Lab",
+        pathfinderLabDescription: "Algorithm comparison and replay theater",
         generateGraph: "Generate Graph",
         normalizePlayers: "Normalize Players",
         language: "Language",
         hungarian: "Hungarian",
         english: "English",
+        brandSubtitle: "Research cockpit for graph, pathfinding, and signed-network thesis work.",
+        navigateSection: "Navigate",
+        actionsSection: "Actions",
+        expandNavigation: "Expand navigation",
+        collapseNavigation: "Collapse navigation",
+        graphPipelineTitle: "Graph Pipeline",
+        graphPipelineCaption: "Rebuild the association graph from the current backend state.",
+        playerHygieneTitle: "Player Hygiene",
+        playerHygieneCaption: "Normalize saved player records and refresh derived names.",
+        interfaceLanguageTitle: "Interface Language",
+        interfaceLanguageCaption: "Switch the thesis UI copy between English and Hungarian.",
       },
       alerts: {
         errorPrefix: "Error",
@@ -491,6 +529,12 @@ const translations: Record<Language, TranslationTree> = {
       loadReplay: "Load Replay",
       loadedFromMemory: "Loaded from saved replay.",
       deleteReplay: "Delete replay",
+      selectedNode: "Selected Node",
+      selectedNodeHint: "Use the clicked graph node to populate either endpoint in the search controls.",
+      useAsSource: "Use as Source",
+      useAsTarget: "Use as Target",
+      nodeAlreadySelected: "Already selected",
+      clickNodePrompt: "Click a graph node to map it into the route inputs.",
     },
     graphSphere: {
       pageLabel: "Experimental Graph",
@@ -630,15 +674,31 @@ const translations: Record<Language, TranslationTree> = {
       title: "League of Legends Feeder Elemző",
       nav: {
         matchAnalysis: "Meccselemzés",
+        matchAnalysisDescription: "Meccsbetöltés, játékosmutatók és összegzések",
         graph: "Asszociációs Gráf",
+        graphDescription: "Asszociációs gráf és útvonalindító panel",
         graphSphere: "3D Gráfgömb",
-        signedBalance: "Signed Balance",
+        graphSphereDescription: "Magával ragadó 3D klaszter- és csomópontfelfedezés",
+        signedBalance: "Strukturális egyensúly",
+        signedBalanceDescription: "Előjeles hálózati egyensúlykísérlet munkaterület",
         pathfinderLab: "Pathfinder Labor",
+        pathfinderLabDescription: "Algoritmus-összehasonlítás és visszajátszás",
         generateGraph: "Gráf generálása",
         normalizePlayers: "Játékosok normalizálása",
         language: "Nyelv",
         hungarian: "Magyar",
         english: "Angol",
+        brandSubtitle: "Kutatási vezérlőpult gráf-, útkeresési és előjeles hálózati államvizsga szakdolgozathoz.",
+        navigateSection: "Navigáció",
+        actionsSection: "Műveletek",
+        expandNavigation: "Navigáció kinyitása",
+        collapseNavigation: "Navigáció összecsukása",
+        graphPipelineTitle: "Gráf pipeline",
+        graphPipelineCaption: "Az asszociációs gráf újraépítése a jelenlegi backend állapotból.",
+        playerHygieneTitle: "Játékos karbantartás",
+        playerHygieneCaption: "A mentett játékosrekordok normalizálása és a származtatott nevek frissítése.",
+        interfaceLanguageTitle: "Felület nyelve",
+        interfaceLanguageCaption: "A thesis felületszövegének váltása angol és magyar között.",
       },
       alerts: {
         errorPrefix: "Hiba",
@@ -801,6 +861,12 @@ const translations: Record<Language, TranslationTree> = {
       loadReplay: "Visszajátszás betöltése",
       loadedFromMemory: "Mentett visszajátszásból betöltve.",
       deleteReplay: "Visszajátszás törlése",
+      selectedNode: "Kijelölt csomópont",
+      selectedNodeHint: "A kattintott gráfcsomóponttal közvetlenül kitöltheted bármelyik útvégpont mezőt.",
+      useAsSource: "Beállítás forrásként",
+      useAsTarget: "Beállítás célként",
+      nodeAlreadySelected: "Már be van állítva",
+      clickNodePrompt: "Kattints egy gráfcsomópontra, hogy beemeld az útvonal mezőibe.",
     },
     graphSphere: {
       pageLabel: "Kísérleti gráf",

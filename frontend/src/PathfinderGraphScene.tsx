@@ -15,6 +15,7 @@ interface PathfinderGraphSceneProps {
   sourcePlayerId: string;
   targetPlayerId: string;
   variant: "preview" | "overlay";
+  onNodeActivate?: (node: GraphNode) => void;
 }
 
 function edgeKey(from: string, to: string): string {
@@ -128,6 +129,61 @@ function getNodeFill(nodeId: string, frame: CanvasFrame, sourcePlayerId: string,
   return "#6b7280";
 }
 
+function getProjector(
+  snapshot: GraphSnapshot,
+  dimensions: { width: number; height: number },
+  variant: "preview" | "overlay",
+  zoom: number,
+  offset: { x: number; y: number },
+) {
+  const padding = variant === "overlay" ? 72 : 46;
+  const bounds = getSnapshotBounds(snapshot);
+  const widthSpan = Math.max(bounds.maxX - bounds.minX, 1);
+  const heightSpan = Math.max(bounds.maxY - bounds.minY, 1);
+
+  return (node: GraphNode) => {
+    const normalizedX = (node.x - bounds.minX) / widthSpan;
+    const normalizedY = (node.y - bounds.minY) / heightSpan;
+    const baseX = padding + normalizedX * (dimensions.width - padding * 2);
+    const baseY = padding + normalizedY * (dimensions.height - padding * 2);
+    return {
+      x: dimensions.width / 2 + (baseX - dimensions.width / 2) * zoom + offset.x,
+      y: dimensions.height / 2 + (baseY - dimensions.height / 2) * zoom + offset.y,
+    };
+  };
+}
+
+function getNodeAtPoint(
+  snapshot: GraphSnapshot,
+  project: (node: GraphNode) => { x: number; y: number },
+  point: { x: number; y: number },
+  frame: CanvasFrame,
+  run: PathfinderRunResponse | null,
+  variant: "preview" | "overlay",
+) {
+  const visibleNodeIds = run
+    ? new Set<string>([...snapshot.nodes.map((node) => node.id), ...frame.revealedNodeIds])
+    : new Set<string>(snapshot.nodes.map((node) => node.id));
+  const radiusBase = variant === "overlay" ? 9 : 6;
+
+  for (let index = snapshot.nodes.length - 1; index >= 0; index -= 1) {
+    const node = snapshot.nodes[index];
+    if (!visibleNodeIds.has(node.id)) {
+      continue;
+    }
+    const projected = project(node);
+    const radius =
+      frame.activeNodeId === node.id ? radiusBase + 2 : frame.pathNodeIds.includes(node.id) && frame.isTerminal ? radiusBase + 1 : radiusBase;
+    const dx = projected.x - point.x;
+    const dy = projected.y - point.y;
+    if ((dx * dx) + (dy * dy) <= (radius + 6) * (radius + 6)) {
+      return node;
+    }
+  }
+
+  return null;
+}
+
 export default function PathfinderGraphScene({
   snapshot,
   run,
@@ -135,6 +191,7 @@ export default function PathfinderGraphScene({
   sourcePlayerId,
   targetPlayerId,
   variant,
+  onNodeActivate,
 }: PathfinderGraphSceneProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -142,10 +199,13 @@ export default function PathfinderGraphScene({
   const [dimensions, setDimensions] = useState({ width: 960, height: variant === "overlay" ? 660 : 360 });
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragStateRef = useRef<{ active: boolean; x: number; y: number }>({
+  const dragStateRef = useRef<{ active: boolean; x: number; y: number; startX: number; startY: number; moved: boolean }>({
     active: false,
     x: 0,
     y: 0,
+    startX: 0,
+    startY: 0,
+    moved: false,
   });
 
   useEffect(() => {
@@ -197,30 +257,18 @@ export default function PathfinderGraphScene({
     context.fillRect(0, 0, dimensions.width, dimensions.height);
 
     const nodeMap = getNodeById(snapshot);
-    const padding = variant === "overlay" ? 72 : 46;
-    const bounds = getSnapshotBounds(snapshot);
-    const widthSpan = Math.max(bounds.maxX - bounds.minX, 1);
-    const heightSpan = Math.max(bounds.maxY - bounds.minY, 1);
-    const project = (node: GraphNode) => {
-      const normalizedX = (node.x - bounds.minX) / widthSpan;
-      const normalizedY = (node.y - bounds.minY) / heightSpan;
-      const baseX = padding + normalizedX * (dimensions.width - padding * 2);
-      const baseY = padding + normalizedY * (dimensions.height - padding * 2);
-      return {
-        x: dimensions.width / 2 + (baseX - dimensions.width / 2) * zoom + offset.x,
-        y: dimensions.height / 2 + (baseY - dimensions.height / 2) * zoom + offset.y,
-      };
-    };
+    const project = getProjector(snapshot, dimensions, variant, zoom, offset);
+    const gridPadding = variant === "overlay" ? 72 : 46;
 
     context.strokeStyle = "#2b3138";
     context.lineWidth = 1;
-    for (let line = padding; line < dimensions.width; line += 64) {
+    for (let line = gridPadding; line < dimensions.width; line += 64) {
       context.beginPath();
       context.moveTo(line, 0);
       context.lineTo(line, dimensions.height);
       context.stroke();
     }
-    for (let line = padding; line < dimensions.height; line += 64) {
+    for (let line = gridPadding; line < dimensions.height; line += 64) {
       context.beginPath();
       context.moveTo(0, line);
       context.lineTo(dimensions.width, line);
@@ -329,6 +377,9 @@ export default function PathfinderGraphScene({
       active: true,
       x: event.clientX,
       y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -344,6 +395,9 @@ export default function PathfinderGraphScene({
       active: true,
       x: event.clientX,
       y: event.clientY,
+      startX: dragStateRef.current.startX,
+      startY: dragStateRef.current.startY,
+      moved: dragStateRef.current.moved || Math.abs(event.clientX - dragStateRef.current.startX) > 4 || Math.abs(event.clientY - dragStateRef.current.startY) > 4,
     };
 
     setOffset((currentValue) => ({
@@ -353,6 +407,20 @@ export default function PathfinderGraphScene({
   };
 
   const stopDrag: React.PointerEventHandler<HTMLCanvasElement> = (event) => {
+    const pointerState = dragStateRef.current;
+    if (!pointerState.moved && onNodeActivate) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const point = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      const project = getProjector(snapshot, dimensions, variant, zoom, offset);
+      const hitNode = getNodeAtPoint(snapshot, project, point, frame, run, variant);
+      if (hitNode) {
+        onNodeActivate(hitNode);
+      }
+    }
+
     dragStateRef.current.active = false;
     event.currentTarget.releasePointerCapture(event.pointerId);
   };

@@ -1,8 +1,10 @@
 /// <reference types="vite/client" />
 import React, { useState , useEffect} from "react";
 import {
+  Alert,
   Box,
   Button,
+  Chip,
   Container,
   TextField,
   Typography,
@@ -16,19 +18,87 @@ import {
   TableRow,
   Select,
   MenuItem,
+  Stack,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  InputAdornment,
 } from "@mui/material";
 import { translateBackendText, useI18n } from "./i18n";
+import BarrierIcon from "../assets/Barrier_HD.png";
+import ClarityIcon from "../assets/Clarity_HD.png";
+import CleanseIcon from "../assets/Cleanse_HD.png";
+import ExhaustIcon from "../assets/Exhaust_HD.png";
+import FlashIcon from "../assets/Flash_HD.png";
+import GhostIcon from "../assets/Ghost_HD.png";
+import HealIcon from "../assets/Heal_HD.png";
+import IgniteIcon from "../assets/Ignite_HD.png";
+import SmiteIcon from "../assets/Smite_HD.png";
+import TeleportIcon from "../assets/Teleport_HD.png";
+
+const SUMMONER_SPELL_ICONS: Record<number, { name: string; icon: string }> = {
+  1: { name: "Cleanse", icon: CleanseIcon },
+  3: { name: "Exhaust", icon: ExhaustIcon },
+  4: { name: "Flash", icon: FlashIcon },
+  6: { name: "Ghost", icon: GhostIcon },
+  7: { name: "Heal", icon: HealIcon },
+  11: { name: "Smite", icon: SmiteIcon },
+  12: { name: "Teleport", icon: TeleportIcon },
+  13: { name: "Clarity", icon: ClarityIcon },
+  14: { name: "Ignite", icon: IgniteIcon },
+  21: { name: "Barrier", icon: BarrierIcon },
+};
 
 type PlayerInfo = {
   name: string;
   champion: string;
-  summonerSpells: string;
+  summonerSpellIds: [number, number];
   kda: string;
   gold: number;
   feedscore: number;
   opscore: number;
   country: string;
 };
+
+const renderSummonerSpellIcons = (spellIds: [number, number]) => (
+  <Stack direction="row" spacing={1} sx={{ mt: 0.75, mb: 0.75 }}>
+    {spellIds.map((spellId, index) => {
+      const spell = SUMMONER_SPELL_ICONS[spellId];
+
+      return (
+        <Box
+          key={`${spellId}-${index}`}
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: 1.25,
+            overflow: "hidden",
+            border: "1px solid rgba(148, 163, 184, 0.35)",
+            background: spell ? "rgba(15, 23, 42, 0.92)" : "rgba(30, 41, 59, 0.92)",
+            display: "grid",
+            placeItems: "center",
+            boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04)",
+          }}
+          title={spell ? spell.name : `Unknown spell ${spellId}`}
+        >
+          {spell ? (
+            <Box
+              component="img"
+              src={spell.icon}
+              alt={spell.name}
+              sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          ) : (
+            <Typography sx={{ fontSize: "0.72rem", fontWeight: 700, color: "text.secondary" }}>
+              {spellId}
+            </Typography>
+          )}
+        </Box>
+      );
+    })}
+  </Stack>
+);
 
 type MatchData = {
   matchId: string;
@@ -83,6 +153,9 @@ const MatchAnalysisForm = () => {
     setLoading(true);
     setOutput([]);
     setError(null);
+    Object.keys(feedermap).forEach((key) => {
+      delete feedermap[key];
+    });
 
     try {
       // Lekérjük a puuid-t a Riot ID alapján
@@ -167,7 +240,7 @@ const MatchAnalysisForm = () => {
           return {
             name,
             champion: p.championName,
-            summonerSpells: `${p.summoner1Id}/${p.summoner2Id}`,
+            summonerSpellIds: [p.summoner1Id, p.summoner2Id],
             kda: `${p.kills}/${p.deaths}/${p.assists}`,
             gold: p.goldEarned,
             kills: p.kills,
@@ -259,124 +332,171 @@ const MatchAnalysisForm = () => {
     }
   };
   return (
-    <Container maxWidth="md" sx={{ mt: 4 }}>
-      <Paper sx={{ p: 4, backgroundColor: "rgba(100,100,100)", color: "#fff" }} elevation={3}>
-        <Typography variant="h5" align="center" gutterBottom>
-          {t.matchAnalysis.title}
-        </Typography>
+    <Container maxWidth={false} sx={{ py: 4 }}>
+      <Box sx={{ maxWidth: "1360px", mx: "auto", display: "grid", gap: 3 }}>
+        <Paper sx={{ p: { xs: 2.5, md: 3.5 }, display: "grid", gap: 2.5 }}>
+          <Box sx={{ display: "grid", gap: 1 }}>
+            <Typography sx={{ color: "text.secondary", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700 }}>
+              Match Intelligence
+            </Typography>
+            <Typography variant="h3" sx={{ fontSize: "clamp(2rem, 4vw, 3.2rem)" }}>
+              {t.matchAnalysis.title}
+            </Typography>
+            <Typography color="text.secondary" sx={{ maxWidth: "72ch" }}>
+              Pull recent matches by Riot ID, persist the payload to the backend, and inspect team-by-team feedscore and opscore output inside one unified analyzer view.
+            </Typography>
+          </Box>
 
-        <Box display="flex" justifyContent="center" gap={2} flexWrap="wrap" mb={3}>
-          <TextField
-            label={t.matchAnalysis.riotId}
-            variant="filled"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            sx={{ input: { color: "#fff" } }}
-          />
-          <TextField
-            label={t.matchAnalysis.tag}
-            variant="filled"
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-            sx={{ input: { color: "#fff" } }}
-          />
-          <TextField
-            label={t.matchAnalysis.matchCount}
-            variant="filled"
-            type="number"
-            inputProps={{ min: 1, max: 20 }}
-            value={count}
-            onChange={(e) => setCount(e.target.value)}
-            sx={{ input: { color: "#fff" } }}
-          />
-          <Button variant="contained" onClick={handleSubmit} disabled={loading}>
-            {loading ? <CircularProgress size={24} color="inherit" /> : t.matchAnalysis.submit}
-          </Button>
-          <TextField
-            label={t.matchAnalysis.startIndex}
-            variant="filled"
-            type="number"
-            inputProps={{ min: 0 }}
-            value={start}
-            onChange={(e) => setStart(Number(e.target.value))}
-            sx={{ input: { color: "#fff" } }}
-          />
-          <Select value={queueType} sx={{ color: "white", fontWeight: "bold" }} onChange={(e) => setQueueType(e.target.value)} >
-            <MenuItem value="all">{t.matchAnalysis.queueAll}</MenuItem>
-            <MenuItem value="solo">{t.matchAnalysis.queueSolo}</MenuItem>
-            <MenuItem value="flex">{t.matchAnalysis.queueFlex}</MenuItem>
-            <MenuItem value="normal">{t.matchAnalysis.queueNormal}</MenuItem>
-          </Select>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" },
+              gap: 2,
+            }}
+          >
+            <TextField
+              label={t.matchAnalysis.riotId}
+              variant="filled"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <TextField
+              label={t.matchAnalysis.tag}
+              variant="filled"
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+            />
+            <TextField
+              label={t.matchAnalysis.matchCount}
+              variant="filled"
+              type="number"
+              inputProps={{ min: 1, max: 20 }}
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+            />
+            <TextField
+              label={t.matchAnalysis.startIndex}
+              variant="filled"
+              type="number"
+              inputProps={{ min: 0 }}
+              value={start}
+              onChange={(e) => setStart(Number(e.target.value))}
+              InputProps={{
+                endAdornment: <InputAdornment position="end">idx</InputAdornment>,
+              }}
+            />
+            <Select value={queueType} variant="filled" onChange={(e) => setQueueType(e.target.value)}>
+              <MenuItem value="all">{t.matchAnalysis.queueAll}</MenuItem>
+              <MenuItem value="solo">{t.matchAnalysis.queueSolo}</MenuItem>
+              <MenuItem value="flex">{t.matchAnalysis.queueFlex}</MenuItem>
+              <MenuItem value="normal">{t.matchAnalysis.queueNormal}</MenuItem>
+            </Select>
+            <Button variant="contained" onClick={handleSubmit} disabled={loading} sx={{ minHeight: 56 }}>
+              {loading ? <CircularProgress size={24} color="inherit" /> : t.matchAnalysis.submit}
+            </Button>
+          </Box>
 
-        </Box>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <Chip label={`${t.matchAnalysis.queueAll} / solo / flex / normal`} variant="outlined" />
+            <Chip label={`API ${apiKey ? "ready" : "missing"}`} color={apiKey ? "success" : "error"} variant="outlined" />
+            <Chip label={`${output.length} matches loaded`} variant="outlined" />
+          </Stack>
 
-        {error && (
-          <Typography color="error" align="center" mb={2}>
-            {error}
-          </Typography>
-        )}
+          {error ? <Alert severity="error">{error}</Alert> : null}
+        </Paper>
 
-        {output.length > 0 &&
-          output.map((match) => (
-            <Box key={match.matchId} mb={4}>
-              <Typography variant="h6" mb={1} color="white" textAlign="center">
-                {t.matchAnalysis.matchId}: {match.matchId}
-              </Typography>
-              <TableContainer component={Paper} sx={{ backgroundColor: "#1e1e1e" }}>
-                <Table sx={{ minWidth: 650 }} aria-label="match table">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>{t.matchAnalysis.blueTeam}</TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>{t.matchAnalysis.redTeam}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {Array.from({ length: 5 }).map((_, i) => {
-                      const bluePlayer = match.blueTeam[i];
-                      const redPlayer = match.redTeam[i];
-                      return (
-                        <TableRow key={i}>
-                          <TableCell sx={{ color: "white", fontFamily: "monospace" }}>
-                            {bluePlayer?.name} {bluePlayer?.country}
-                            {bluePlayer?.name === match.topFeederPuuid ? ` ⭐ ` : ""}
-                            <br />
-                            {bluePlayer?.champion} <br />
-                            {bluePlayer?.summonerSpells} <br />
-                            {t.matchAnalysis.kda}: {bluePlayer?.kda} <br />
-                            {t.matchAnalysis.gold}: {bluePlayer?.gold} <br />
-                            {t.matchAnalysis.feedScore}: {bluePlayer?.feedscore.toFixed(2)} <br />
-                            {t.matchAnalysis.usefulScore}: {bluePlayer?.opscore.toFixed(2)}
-                          </TableCell>
-                          <TableCell sx={{ color: "white", fontFamily: "monospace" }}>
-                            {redPlayer?.name} {redPlayer?.country}
-                            {redPlayer?.name === match.topFeederPuuid ? ` ⭐ ` : ""}
-                            <br />
-                            {redPlayer?.champion} <br />
-                            {redPlayer?.summonerSpells} <br />
-                            {t.matchAnalysis.kda}: {redPlayer?.kda} <br />
-                            {t.matchAnalysis.gold}: {redPlayer?.gold} <br />
-                            {t.matchAnalysis.feedScore}: {redPlayer?.feedscore.toFixed(2)} <br />
-                            {t.matchAnalysis.usefulScore}: {redPlayer?.opscore.toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+        {output.length > 0 ? (
+          <Paper sx={{ p: { xs: 2, md: 3 }, display: "grid", gap: 2.5 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+              <Box>
+                <Typography sx={{ color: "text.secondary", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700 }}>
+                  Match Breakdown
+                </Typography>
+                <Typography variant="h5">Recent Match Results</Typography>
+              </Box>
+              <Chip label={`${output.length} matches`} color="primary" variant="outlined" />
             </Box>
 
-          ))}
-      </Paper>
-      <Box>
-        <div>
-          <h4>{t.matchAnalysis.countrySummary}</h4>
-          <ul>
-            {Object.entries(feedermap).map(([country, count]) => (
-              <li key={country}>{country}: {count}</li>
+            {output.map((match, matchIndex) => (
+              <Box key={match.matchId} sx={{ display: "grid", gap: 1.5 }}>
+                {matchIndex > 0 ? <Divider /> : null}
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+                  <Typography variant="h6">
+                    {t.matchAnalysis.matchId}: {match.matchId}
+                  </Typography>
+                  <Chip label={`Top feeder: ${match.topFeederCountry || t.matchAnalysis.unknownCountry}`} variant="outlined" />
+                </Box>
+                <TableContainer component={Paper} sx={{ background: "rgba(8, 15, 23, 0.82)" }}>
+                  <Table sx={{ minWidth: 760 }} aria-label="match table">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>{t.matchAnalysis.blueTeam}</TableCell>
+                        <TableCell>{t.matchAnalysis.redTeam}</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const bluePlayer = match.blueTeam[i];
+                        const redPlayer = match.redTeam[i];
+                        return (
+                          <TableRow key={i}>
+                            <TableCell sx={{ color: "text.primary", fontFamily: "var(--font-mono)", verticalAlign: "top" }}>
+                              <strong>{bluePlayer?.name}</strong>
+                              {bluePlayer?.name === match.topFeederPuuid ? ` ⭐ ` : ""}
+                              <br />
+                              {bluePlayer?.champion} <br />
+                              {bluePlayer ? renderSummonerSpellIcons(bluePlayer.summonerSpellIds) : null}
+                              {t.matchAnalysis.kda}: {bluePlayer?.kda} <br />
+                              {t.matchAnalysis.gold}: {bluePlayer?.gold} <br />
+                              {t.matchAnalysis.feedScore}: {bluePlayer?.feedscore.toFixed(2)} <br />
+                              {t.matchAnalysis.usefulScore}: {bluePlayer?.opscore.toFixed(2)}
+                            </TableCell>
+                            <TableCell sx={{ color: "text.primary", fontFamily: "var(--font-mono)", verticalAlign: "top" }}>
+                              <strong>{redPlayer?.name}</strong>
+                              {redPlayer?.name === match.topFeederPuuid ? ` ⭐ ` : ""}
+                              <br />
+                              {redPlayer?.champion} <br />
+                              {redPlayer ? renderSummonerSpellIcons(redPlayer.summonerSpellIds) : null}
+                              {t.matchAnalysis.kda}: {redPlayer?.kda} <br />
+                              {t.matchAnalysis.gold}: {redPlayer?.gold} <br />
+                              {t.matchAnalysis.feedScore}: {redPlayer?.feedscore.toFixed(2)} <br />
+                              {t.matchAnalysis.usefulScore}: {redPlayer?.opscore.toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
             ))}
-          </ul>
-        </div>
+          </Paper>
+        ) : null}
+
+        <Paper sx={{ p: { xs: 2, md: 3 } }}>
+          <Typography sx={{ color: "text.secondary", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700, mb: 1 }}>
+            Country Signal
+          </Typography>
+          <Typography variant="h5" sx={{ mb: 2 }}>{t.matchAnalysis.countrySummary}</Typography>
+          {Object.keys(feedermap).length === 0 ? (
+            <Alert severity="info">Run an analysis to populate the country summary.</Alert>
+          ) : (
+            <List sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 1 }}>
+              {Object.entries(feedermap).map(([country, count]) => (
+                <Paper key={country} sx={{ px: 2, py: 1.5, background: "rgba(8, 15, 23, 0.78)" }}>
+                  <ListItem disableGutters sx={{ py: 0 }}>
+                    <ListItemText
+                      primary={country}
+                      secondary={`${count} flagged matches`}
+                      primaryTypographyProps={{ sx: { color: "text.primary", fontWeight: 700 } }}
+                      secondaryTypographyProps={{ sx: { color: "text.secondary" } }}
+                    />
+                  </ListItem>
+                </Paper>
+              ))}
+            </List>
+          )}
+        </Paper>
       </Box>
     </Container>
 

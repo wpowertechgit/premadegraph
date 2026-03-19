@@ -1,5 +1,17 @@
 # Unified Cluster Persistence And Exact A*
 
+## Document Role
+
+This document is the main storage and runtime architecture note for the post-prototype system.
+
+## Related Documents
+
+- [Pathfinder Backend Prototype Notes](pathfinder-backend-prototype.md)
+- [Bird's-Eye 3D Sphere](birdseye-3d-sphere.md)
+- [Signed Balance Theory And Implementation](signed-balance-theory.md)
+- [New GUI Overview](new-gui-overview.md)
+- [Mock Datasets And Chaos Design](mock-datasets-and-chaos-design.md)
+
 ## Overview
 
 This document describes the current graph architecture after the SQLite cluster persistence and Rust A* integration work.
@@ -212,3 +224,7 @@ Observed persisted cluster counts after validation:
 - JSON cluster files are still useful as exports/debug artifacts, but they are no longer the main runtime source of truth.
 - the real runtime graph is now driven by match data plus the player DB
 - the next logical frontend step is to consume the Rust `global-view` and `player-focus` endpoints directly instead of relying mainly on the preview snapshot path
+
+## Conclusions
+
+The main conclusion is that the current architecture now has a sustainable split of responsibilities across Python, SQLite, Rust, and the frontend.

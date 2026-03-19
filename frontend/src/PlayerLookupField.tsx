@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { type PlayerOption } from "./pathfinderTypes";
 import { useI18n } from "./i18n";
+import { inputStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
 
 interface PlayerLookupFieldProps {
   label: string;
@@ -11,23 +12,9 @@ interface PlayerLookupFieldProps {
 }
 
 const labelStyle: React.CSSProperties = {
+  ...sectionLabelStyle(),
   display: "block",
-  fontSize: "0.82rem",
-  fontWeight: 700,
-  letterSpacing: "0.05em",
-  textTransform: "uppercase",
   marginBottom: "0.35rem",
-  color: "#9ca3af",
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: "12px",
-  border: "1px solid #39424d",
-  background: "#20252c",
-  color: "#f3f4f6",
-  padding: "0.8rem 0.9rem",
-  boxSizing: "border-box",
 };
 
 export default function PlayerLookupField({
@@ -83,7 +70,7 @@ export default function PlayerLookupField({
             setQuery(selectedPlayer?.label ?? "");
           }, 120);
         }}
-        style={inputStyle}
+        style={inputStyle()}
       />
 
       {open && filteredPlayers.length > 0 ? (
@@ -95,10 +82,8 @@ export default function PlayerLookupField({
             right: 0,
             maxHeight: "220px",
             overflowY: "auto",
-            borderRadius: "14px",
-            border: "1px solid #39424d",
-            background: "#161a20",
-            boxShadow: "0 16px 30px rgba(0, 0, 0, 0.35)",
+            ...surfaceCardStyle(),
+            borderRadius: "18px",
             zIndex: 20,
           }}
         >
@@ -118,9 +103,9 @@ export default function PlayerLookupField({
                   width: "100%",
                   textAlign: "left",
                   border: "none",
-                  borderBottom: "1px solid #252b33",
-                  background: active ? "#24303b" : "transparent",
-                  color: "#f3f4f6",
+                  borderBottom: "1px solid rgba(126, 155, 183, 0.12)",
+                  background: active ? "rgba(102, 184, 255, 0.12)" : "transparent",
+                  color: "var(--text-primary)",
                   padding: "0.75rem 0.9rem",
                   cursor: "pointer",
                 }}

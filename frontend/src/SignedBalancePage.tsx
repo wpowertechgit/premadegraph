@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { runRustSignedBalance } from "./pathfinderApi";
 import { useI18n } from "./i18n";
 import { runSignedBalanceMock } from "./signedBalanceMock";
+import { buttonStyle, inputStyle, metricCardStyle, pageShellStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
 import type {
   SignedBalanceRequest,
   SignedBalanceResponse,
@@ -17,21 +18,11 @@ const DEFAULT_REQUEST: SignedBalanceRequest = {
 };
 
 function pageCardStyle() {
-  return {
-    borderRadius: "20px",
-    border: "1px solid rgba(76, 93, 112, 0.22)",
-    background: "linear-gradient(180deg, rgba(19,24,31,0.96) 0%, rgba(15,19,24,0.94) 100%)",
-    boxShadow: "0 24px 60px rgba(0, 0, 0, 0.22)",
-  } as const;
+  return surfaceCardStyle();
 }
 
 function miniLabelStyle() {
-  return {
-    color: "#87a7cc",
-    fontSize: "0.78rem",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.12em",
-  };
+  return sectionLabelStyle();
 }
 
 function triadDescription(triadType: string) {
@@ -277,14 +268,11 @@ export default function SignedBalancePage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
-        background: "radial-gradient(circle at top, #17202d 0%, #0d1116 55%, #090c10 100%)",
+        ...pageShellStyle(),
         color: "#eef2f7",
-        padding: "1.5rem",
-        boxSizing: "border-box",
       }}
     >
-      <div style={{ maxWidth: "1360px", margin: "0 auto", display: "grid", gap: "1rem" }}>
+      <div style={{ display: "grid", gap: "1rem" }}>
         <section
           style={{
             ...pageCardStyle(),
@@ -335,13 +323,7 @@ export default function SignedBalancePage() {
                       setHasRun(false);
                     }}
                     style={{
-                      borderRadius: "12px",
-                      border: active ? "1px solid #4f677f" : "1px solid #39424d",
-                      background: active ? "#24303b" : "#20252c",
-                      color: "#f3f4f6",
-                      padding: "0.8rem 0.95rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
+                      ...buttonStyle(active ? "primary" : "secondary"),
                     }}
                   >
                     {option.label}
@@ -378,13 +360,7 @@ export default function SignedBalancePage() {
                   ...current,
                   minEdgeSupport: Math.max(1, Number(event.target.value) || 1),
                 }))}
-                style={{
-                  borderRadius: "12px",
-                  border: "1px solid #33404d",
-                  background: "#0d1217",
-                  color: "#eef2f7",
-                  padding: "0.8rem 0.9rem",
-                }}
+                style={inputStyle()}
               />
             </ControlField>
 
@@ -396,13 +372,7 @@ export default function SignedBalancePage() {
               <select
                 value={request.tiePolicy}
                 onChange={(event) => updateTiePolicy(event.target.value)}
-                style={{
-                  borderRadius: "12px",
-                  border: "1px solid #33404d",
-                  background: "#0d1217",
-                  color: "#eef2f7",
-                  padding: "0.8rem 0.9rem",
-                }}
+                style={inputStyle()}
               >
                 <option value="exclude">{t.signedBalance.tieExclude}</option>
                 <option value="ally">{t.signedBalance.tieAlly}</option>
@@ -424,13 +394,7 @@ export default function SignedBalancePage() {
                   ...current,
                   maxTopNodes: Math.max(3, Number(event.target.value) || 3),
                 }))}
-                style={{
-                  borderRadius: "12px",
-                  border: "1px solid #33404d",
-                  background: "#0d1217",
-                  color: "#eef2f7",
-                  padding: "0.8rem 0.9rem",
-                }}
+                style={inputStyle()}
               />
             </ControlField>
 
@@ -446,13 +410,7 @@ export default function SignedBalancePage() {
                   includeClusterSummaries: !current.includeClusterSummaries,
                 }))}
                 style={{
-                  borderRadius: "12px",
-                  border: "1px solid #33404d",
-                  background: request.includeClusterSummaries ? "#1d3746" : "#11161c",
-                  color: "#eef2f7",
-                  padding: "0.8rem 0.9rem",
-                  cursor: "pointer",
-                  fontWeight: 700,
+                  ...buttonStyle(request.includeClusterSummaries ? "primary" : "ghost"),
                 }}
               >
                 {request.includeClusterSummaries ? t.common.enabled : t.common.disabled}
@@ -466,13 +424,10 @@ export default function SignedBalancePage() {
               onClick={() => void runAnalysis(request)}
               disabled={loading}
               style={{
+                ...buttonStyle("primary"),
                 borderRadius: "999px",
-                border: "1px solid #54708d",
-                background: "#27425f",
-                color: "#f4f8fb",
                 padding: "0.82rem 1.2rem",
                 cursor: loading ? "not-allowed" : "pointer",
-                fontWeight: 700,
               }}
             >
               {loading ? t.signedBalance.running : t.signedBalance.runAnalysis}
@@ -517,7 +472,7 @@ export default function SignedBalancePage() {
                 { label: t.signedBalance.unbalancedCount, value: result.triads.unbalancedCount.toLocaleString(), accent: "#d7846f" },
                 { label: t.signedBalance.balancedRatio, value: percent(result.triads.balancedRatio), accent: "#ebd08b" },
               ].map((card) => (
-                <div key={card.label} style={{ ...pageCardStyle(), padding: "1rem 1.05rem", display: "grid", gap: "0.35rem" }}>
+                <div key={card.label} style={{ ...metricCardStyle(), padding: "1rem 1.05rem", display: "grid", gap: "0.35rem" }}>
                   <div style={{ color: "#93a6bb", fontSize: "0.84rem" }}>{card.label}</div>
                   <div style={{ fontSize: "1.85rem", fontWeight: 800, color: card.accent }}>{card.value}</div>
                 </div>

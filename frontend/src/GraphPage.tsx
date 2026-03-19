@@ -4,6 +4,7 @@ import PlayerLookupField from "./PlayerLookupField";
 import { fetchRustPathfinderOptions } from "./pathfinderApi";
 import { type PlayerOption } from "./pathfinderTypes";
 import { getAlgorithmLabel, getPathModeLabel, translateBackendText, useI18n } from "./i18n";
+import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "./theme";
 
 const GraphPage = () => {
   const { language, t } = useI18n();
@@ -49,19 +50,19 @@ const GraphPage = () => {
     fetchGraph();
   }, []);
 
-  if (loading) return <div style={{ padding: "1rem", color: "white" }}>{t.graph.loading}</div>;
-  if (error) return <div style={{ padding: "1rem", color: "red" }}>{t.app.alerts.errorPrefix}: {error}</div>;
+  if (loading) return <div className="app-empty-state">{t.graph.loading}</div>;
+  if (error) return <div className="app-empty-state">{t.app.alerts.errorPrefix}: {error}</div>;
 
   return (
-    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", position: "relative" }}>
+    <div style={{ ...pageShellStyle(true), overflow: "hidden", position: "relative" }}>
       {graphUrl ? (
         <iframe
           src={graphUrl}
           title={t.graph.iframeTitle}
-          style={{ width: "100vw", height: "100vh", border: "none" }}
+          style={{ width: "100%", height: "calc(100vh - var(--nav-height))", border: "none" }}
         />
       ) : (
-        <div style={{ color: "white" }}>{t.graph.unavailable}</div>
+        <div className="app-empty-state">{t.graph.unavailable}</div>
       )}
 
       {panelMinimized ? (
@@ -72,15 +73,9 @@ const GraphPage = () => {
             position: "absolute",
             top: "1rem",
             right: "1rem",
+            ...buttonStyle("secondary"),
             borderRadius: "999px",
-            border: "1px solid rgba(79, 103, 127, 0.95)",
-            background: "rgba(18, 22, 28, 0.92)",
-            color: "#f3f4f6",
             padding: "0.75rem 1rem",
-            boxShadow: "0 18px 40px rgba(0, 0, 0, 0.3)",
-            backdropFilter: "blur(10px)",
-            fontWeight: 700,
-            cursor: "pointer",
           }}
         >
           {t.graph.openPathfinder}
@@ -92,26 +87,21 @@ const GraphPage = () => {
             top: "1rem",
             right: "1rem",
             width: "min(360px, calc(100vw - 2rem))",
-            borderRadius: "18px",
-            border: "1px solid rgba(79, 103, 127, 0.95)",
-            background: "rgba(18, 22, 28, 0.92)",
-            color: "#f3f4f6",
+            ...glassCardStyle(),
             padding: "1rem",
-            boxShadow: "0 24px 50px rgba(0, 0, 0, 0.35)",
-            backdropFilter: "blur(10px)",
             display: "grid",
             gap: "0.8rem",
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start" }}>
             <div>
-              <div style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#9ca3af" }}>
+              <div style={sectionLabelStyle()}>
                 {t.graph.panelTitle}
               </div>
               <div style={{ fontSize: "1.05rem", fontWeight: 700, marginTop: "0.25rem" }}>
                 {t.graph.panelHeading}
               </div>
-              <div style={{ marginTop: "0.35rem", color: "#c5ccd5", fontSize: "0.9rem", lineHeight: 1.45 }}>
+              <div style={{ marginTop: "0.35rem", color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1.45 }}>
                 {t.graph.panelDescription}
               </div>
             </div>
@@ -120,13 +110,10 @@ const GraphPage = () => {
               aria-label={t.graph.minimizePanel}
               onClick={() => setPanelMinimized(true)}
               style={{
+                ...buttonStyle("ghost"),
                 borderRadius: "10px",
-                border: "1px solid #39424d",
-                background: "#20252c",
-                color: "#d1d5db",
                 width: "2rem",
                 height: "2rem",
-                cursor: "pointer",
                 fontWeight: 700,
                 lineHeight: 1,
                 display: "grid",
@@ -155,10 +142,10 @@ const GraphPage = () => {
           <div
             style={{
               borderRadius: "12px",
-              border: "1px solid #39424d",
-              background: "#20252c",
+              border: "1px solid var(--border-subtle)",
+              background: "rgba(8, 15, 23, 0.68)",
               padding: "0.8rem 0.9rem",
-              color: "#d1d5db",
+              color: "var(--text-secondary)",
               lineHeight: 1.5,
             }}
           >
@@ -176,12 +163,8 @@ const GraphPage = () => {
               )
             }
             style={{
-              borderRadius: "12px",
-              border: "1px solid #4f677f",
-              background: "#2f455b",
-              color: "#f3f4f6",
+              ...buttonStyle("primary"),
               padding: "0.9rem 1rem",
-              fontWeight: 700,
               cursor: !sourcePlayerId || !targetPlayerId ? "not-allowed" : "pointer",
               opacity: !sourcePlayerId || !targetPlayerId ? 0.7 : 1,
             }}

@@ -1,5 +1,15 @@
 # Premadegraph x Genetic-Neurosim Integration Plan
 
+## Document Role
+
+This document is a forward-looking integration plan and should be read as future-work design material rather than current implementation documentation.
+
+## Related Documents
+
+- [New GUI Overview](new-gui-overview.md)
+- [Bird's-Eye 3D Sphere](birdseye-3d-sphere.md)
+- [Unified Cluster Persistence And Exact A*](unified-cluster-persistence-and-astar.md)
+
 ## Purpose
 
 This document describes a future research-oriented integration between `premadegraph` and the separate `genetic-neurosim` project.

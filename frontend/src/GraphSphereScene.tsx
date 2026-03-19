@@ -77,6 +77,10 @@ function edgeRelation(edgeProp: number) {
   return (edgeProp & 1) === 1 ? "enemy" : "ally";
 }
 
+function edgeWeight(edgeProp: number) {
+  return edgeProp >>> 1;
+}
+
 function createNodeDiscTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 64;
@@ -101,13 +105,58 @@ function createNodeDiscTexture() {
   return texture;
 }
 
+function createPlanetTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 384;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return null;
+  }
+
+  const baseGradient = context.createLinearGradient(0, 0, 0, canvas.height);
+  baseGradient.addColorStop(0, "#244c71");
+  baseGradient.addColorStop(0.36, "#193754");
+  baseGradient.addColorStop(0.72, "#14314d");
+  baseGradient.addColorStop(1, "#0e2237");
+  context.fillStyle = baseGradient;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  const bands = [
+    { color: "#5b8eb5", alpha: 0.28, y: 0.14, height: 0.08 },
+    { color: "#325f84", alpha: 0.24, y: 0.28, height: 0.09 },
+    { color: "#7ea9c7", alpha: 0.21, y: 0.42, height: 0.07 },
+    { color: "#264a6c", alpha: 0.26, y: 0.58, height: 0.11 },
+    { color: "#91bbd5", alpha: 0.18, y: 0.74, height: 0.08 },
+    { color: "#1e3d5f", alpha: 0.22, y: 0.88, height: 0.09 },
+  ];
+
+  for (const band of bands) {
+    const centerY = canvas.height * band.y;
+    const bandHeight = canvas.height * band.height;
+    const gradient = context.createLinearGradient(0, centerY - bandHeight, 0, centerY + bandHeight);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(0.22, `${band.color}${Math.round(band.alpha * 255).toString(16).padStart(2, "0")}`);
+    gradient.addColorStop(0.5, `${band.color}${Math.round(band.alpha * 255 * 0.75).toString(16).padStart(2, "0")}`);
+    gradient.addColorStop(0.78, `${band.color}${Math.round(band.alpha * 255).toString(16).padStart(2, "0")}`);
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    context.fillStyle = gradient;
+    context.fillRect(0, centerY - bandHeight, canvas.width, bandHeight * 2);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function createStarField(radius: number) {
-  const starCount = 3600;
+  const starCount = 5200;
   const positions = new Float32Array(starCount * 3);
   const colors = new Float32Array(starCount * 3);
 
   for (let index = 0; index < starCount; index += 1) {
-    const spread = radius * (6.5 + (index % 17) * 0.18);
+    const distanceFactor = 7.8 + ((index * 37) % 1000) / 1000 * 7.2;
+    const spread = radius * distanceFactor;
     const theta = 2.3999631 * index;
     const y = 1 - (2 * index) / Math.max(starCount - 1, 1);
     const radial = Math.sqrt(Math.max(1 - y * y, 0));
@@ -116,7 +165,8 @@ function createStarField(radius: number) {
     positions[offset + 1] = y * spread;
     positions[offset + 2] = Math.sin(theta) * radial * spread;
 
-    const color = new THREE.Color(index % 11 === 0 ? "#d2e6ff" : "#f6f0d8");
+    const brightness = 0.78 + (((index * 17) % 29) / 29) * 0.22;
+    const color = new THREE.Color(brightness, brightness, Math.min(brightness + 0.02, 1));
     colors[offset] = color.r;
     colors[offset + 1] = color.g;
     colors[offset + 2] = color.b;
@@ -127,27 +177,35 @@ function createStarField(radius: number) {
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
   const material = new THREE.PointsMaterial({
-    size: radius * 0.012,
+    size: radius * 0.0064,
     sizeAttenuation: true,
     vertexColors: true,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.92,
     depthWrite: false,
+    fog: false,
   });
 
-  return new THREE.Points(geometry, material);
+  const points = new THREE.Points(geometry, material);
+  points.renderOrder = 0;
+  return points;
 }
 
-function createPlanetShell(radius: number) {
+function createPlanetShell(radius: number, texture: THREE.Texture | null) {
   const geometry = new THREE.SphereGeometry(radius * 0.986, 96, 96);
-  const material = new THREE.MeshBasicMaterial({
-    color: "#12304d",
+  const material = new THREE.MeshPhongMaterial({
+    color: "#4f89b2",
+    map: texture ?? undefined,
+    emissive: "#15304a",
+    emissiveIntensity: 0.9,
+    specular: new THREE.Color("#a8d9ff"),
+    shininess: 18,
     transparent: true,
-    opacity: 0.28,
+    opacity: 0.68,
     depthWrite: false,
   });
   const shell = new THREE.Mesh(geometry, material);
-  shell.renderOrder = 0;
+  shell.renderOrder = 1;
   return shell;
 }
 
@@ -164,6 +222,116 @@ function createAtmosphereShell(radius: number) {
   const shell = new THREE.Mesh(geometry, material);
   shell.renderOrder = 0;
   return shell;
+}
+
+function createPlanetGlow(radius: number) {
+  const geometry = new THREE.SphereGeometry(radius * 1.08, 64, 64);
+  const material = new THREE.MeshBasicMaterial({
+    color: "#5bb7ff",
+    transparent: true,
+    opacity: 0.12,
+    side: THREE.BackSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const glow = new THREE.Mesh(geometry, material);
+  glow.renderOrder = 1;
+  return glow;
+}
+
+function createClusterOutlines(
+  clusterIds: string[],
+  positions: Float32Array,
+  sphereRadius: number,
+) {
+  const clusters = new Map<string, number[]>();
+  for (let index = 0; index < clusterIds.length; index += 1) {
+    const clusterId = clusterIds[index] || `birdseye:solo:${index}`;
+    const members = clusters.get(clusterId);
+    if (members) {
+      members.push(index);
+    } else {
+      clusters.set(clusterId, [index]);
+    }
+  }
+
+  const group = new THREE.Group();
+  for (const [clusterId, members] of clusters) {
+    if (members.length < 4) {
+      continue;
+    }
+
+    const centroid = new THREE.Vector3();
+    for (const memberIndex of members) {
+      centroid.add(positionAt(memberIndex, positions));
+    }
+    centroid.multiplyScalar(1 / members.length);
+    const normal = centroid.clone().normalize();
+    if (normal.lengthSq() === 0) {
+      continue;
+    }
+
+    let localRadius = 0;
+    for (const memberIndex of members) {
+      localRadius = Math.max(localRadius, centroid.distanceTo(positionAt(memberIndex, positions)));
+    }
+
+    const outlineRadius = clamp(
+      localRadius * 0.92 + sphereRadius * 0.016,
+      sphereRadius * 0.028,
+      sphereRadius * 0.102,
+    );
+    const shellCenter = normal.multiplyScalar(sphereRadius + outlineRadius * 0.44);
+    const fillColor = clusterColor(clusterId).clone().lerp(new THREE.Color("#dcecff"), 0.28);
+    const lineColor = fillColor.clone().lerp(new THREE.Color("#ffffff"), 0.42);
+
+    const fillGeometry = new THREE.IcosahedronGeometry(outlineRadius, 1);
+    const fillMaterial = new THREE.MeshBasicMaterial({
+      color: fillColor,
+      transparent: true,
+      opacity: members.length >= 10 ? 0.045 : 0.03,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const fillMesh = new THREE.Mesh(fillGeometry, fillMaterial);
+    fillMesh.position.copy(shellCenter);
+    fillMesh.renderOrder = 2;
+    group.add(fillMesh);
+
+    const edgeBaseGeometry = new THREE.IcosahedronGeometry(outlineRadius * 1.02, 1);
+    const edgeGeometry = new THREE.EdgesGeometry(edgeBaseGeometry);
+    edgeBaseGeometry.dispose();
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: lineColor,
+      transparent: true,
+      opacity: members.length >= 10 ? 0.36 : 0.24,
+      depthWrite: false,
+    });
+    const outline = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+    outline.position.copy(shellCenter);
+    outline.renderOrder = 2;
+    group.add(outline);
+  }
+
+  return group;
+}
+
+function disposeObjectTree(root: THREE.Object3D) {
+  root.traverse((object) => {
+    const geometry = (object as THREE.Mesh | THREE.LineSegments | THREE.Points).geometry;
+    if (geometry instanceof THREE.BufferGeometry) {
+      geometry.dispose();
+    }
+
+    const material = (object as THREE.Mesh | THREE.LineSegments | THREE.Points).material;
+    if (Array.isArray(material)) {
+      for (const item of material) {
+        item.dispose();
+      }
+    } else if (material) {
+      material.dispose();
+    }
+  });
 }
 
 function focusCameraOnNode(
@@ -210,6 +378,14 @@ export default function GraphSphereScene({
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#02050a");
     scene.fog = new THREE.FogExp2("#04070d", 0.00055);
+    const ambientLight = new THREE.HemisphereLight("#6aa9e6", "#02050a", 0.72);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight("#bfe2ff", 1.55);
+    directionalLight.position.set(manifest.sphereRadius * 2.6, manifest.sphereRadius * 1.8, manifest.sphereRadius * 3.4);
+    scene.add(directionalLight);
+    const rimLight = new THREE.PointLight("#4ea7ff", 0.85, manifest.sphereRadius * 18);
+    rimLight.position.set(-manifest.sphereRadius * 4.2, manifest.sphereRadius * 0.8, -manifest.sphereRadius * 5.6);
+    scene.add(rimLight);
 
     const camera = new THREE.PerspectiveCamera(
       50,
@@ -250,11 +426,20 @@ export default function GraphSphereScene({
 
     const starField = createStarField(manifest.sphereRadius);
     scene.add(starField);
-    const planetShell = createPlanetShell(manifest.sphereRadius);
+    const planetTexture = createPlanetTexture();
+    const planetShell = createPlanetShell(manifest.sphereRadius, planetTexture);
     scene.add(planetShell);
     const atmosphereShell = createAtmosphereShell(manifest.sphereRadius);
     scene.add(atmosphereShell);
+    const planetGlow = createPlanetGlow(manifest.sphereRadius);
+    scene.add(planetGlow);
     const nodeDiscTexture = createNodeDiscTexture();
+    const clusterOutlines = createClusterOutlines(
+      nodeMeta.clusterIds,
+      buffers.nodePositions,
+      manifest.sphereRadius,
+    );
+    scene.add(clusterOutlines);
 
     const nodeColors = new Float32Array(nodeMeta.clusterIds.length * 3);
     for (let index = 0; index < nodeMeta.clusterIds.length; index += 1) {
@@ -302,7 +487,10 @@ export default function GraphSphereScene({
       edgePositions[lineOffset + 5] = buffers.nodePositions[targetOffset + 2] ?? 0;
 
       const relation = edgeRelation(buffers.edgeProps[edgeIndex] ?? 0);
-      const color = new THREE.Color(relation === "enemy" ? "#9a5f3d" : "#4d6f92");
+      const weight = edgeWeight(buffers.edgeProps[edgeIndex] ?? 0);
+      const strength = clamp(Math.log2(weight + 1) / 4.6, 0, 1);
+      const color = new THREE.Color(relation === "enemy" ? "#9a5f3d" : "#4d6f92")
+        .lerp(new THREE.Color(relation === "enemy" ? "#ffbf92" : "#9dcaff"), strength * 0.55);
       edgeColors[lineOffset] = color.r;
       edgeColors[lineOffset + 1] = color.g;
       edgeColors[lineOffset + 2] = color.b;
@@ -463,7 +651,8 @@ export default function GraphSphereScene({
     renderer.domElement.style.cursor = "grab";
     const animate = () => {
       const distance = camera.position.distanceTo(controls.target);
-      const edgeOpacity = 0.003 + clamp((manifest.sphereRadius * 5.3 - distance) / (manifest.sphereRadius * 8.4), 0, 1) * 0.03;
+      const nearFactor = clamp((manifest.sphereRadius * 6.6 - distance) / (manifest.sphereRadius * 6.1), 0, 1);
+      const edgeOpacity = 0.0012 + nearFactor * nearFactor * 0.11;
       if (Math.abs(edgeMaterial.opacity - edgeOpacity) > 0.0015) {
         edgeMaterial.opacity = edgeOpacity;
       }
@@ -483,18 +672,12 @@ export default function GraphSphereScene({
       if (sceneRefs.current?.frameHandle) {
         cancelAnimationFrame(sceneRefs.current.frameHandle);
       }
-      const starGeometry = starField.geometry as THREE.BufferGeometry;
-      const starMaterial = starField.material as THREE.PointsMaterial;
-      starGeometry.dispose();
-      starMaterial.dispose();
-      const planetGeometry = planetShell.geometry as THREE.BufferGeometry;
-      const planetMaterial = planetShell.material as THREE.MeshBasicMaterial;
-      planetGeometry.dispose();
-      planetMaterial.dispose();
-      const atmosphereGeometry = atmosphereShell.geometry as THREE.BufferGeometry;
-      const atmosphereMaterial = atmosphereShell.material as THREE.MeshBasicMaterial;
-      atmosphereGeometry.dispose();
-      atmosphereMaterial.dispose();
+      disposeObjectTree(starField);
+      disposeObjectTree(planetShell);
+      disposeObjectTree(atmosphereShell);
+      disposeObjectTree(planetGlow);
+      disposeObjectTree(clusterOutlines);
+      planetTexture?.dispose();
       nodeDiscTexture?.dispose();
       nodeGeometry.dispose();
       nodeMaterial.dispose();

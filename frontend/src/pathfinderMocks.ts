@@ -28,35 +28,178 @@ interface SearchResult {
   trace: TraceStep[];
 }
 
-const CLUSTER_COUNT = 11;
-const NODES_PER_CLUSTER = 20;
+interface MockMatch {
+  blue: string[];
+  red: string[];
+}
+
+const MOCK_CLUSTER_SIZES = [20, 18, 8, 4, 3, 12, 2, 16, 6, 14, 9];
 const WEIGHT_COST_SCALE = 1000;
 
 function edgeKey(from: string, to: string): string {
   return [from, to].sort().join("|");
 }
 
+function pickWindow(members: string[], start: number, count: number): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (let offset = 0; offset < members.length && result.length < count; offset += 1) {
+    const candidate = members[(start + offset) % members.length];
+    if (seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    result.push(candidate);
+  }
+  return result;
+}
+
+function buildTeam(...groups: string[][]): string[] {
+  const team: string[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const playerId of group) {
+      if (seen.has(playerId)) {
+        continue;
+      }
+      seen.add(playerId);
+      team.push(playerId);
+      if (team.length === 5) {
+        return team;
+      }
+    }
+  }
+
+  if (team.length !== 5) {
+    throw new Error(`Mock match team construction failed. Expected 5 unique players, got ${team.length}.`);
+  }
+
+  return team;
+}
+
+function pickUnique(
+  pool: string[],
+  start: number,
+  count: number,
+  banned: Iterable<string> = [],
+): string[] {
+  const result: string[] = [];
+  const blocked = new Set<string>(banned);
+
+  for (let offset = 0; offset < pool.length && result.length < count; offset += 1) {
+    const candidate = pool[(start + offset) % pool.length];
+    if (blocked.has(candidate)) {
+      continue;
+    }
+    blocked.add(candidate);
+    result.push(candidate);
+  }
+
+  return result;
+}
+
+function buildPairStats(matches: MockMatch[]): Map<string, { ally: number; enemy: number }> {
+  const pairStats = new Map<string, { ally: number; enemy: number }>();
+
+  const bumpPair = (left: string, right: string, field: "ally" | "enemy") => {
+    const key = edgeKey(left, right);
+    const stats = pairStats.get(key) ?? { ally: 0, enemy: 0 };
+    stats[field] += 1;
+    pairStats.set(key, stats);
+  };
+
+  for (const match of matches) {
+    for (let i = 0; i < match.blue.length - 1; i += 1) {
+      for (let j = i + 1; j < match.blue.length; j += 1) {
+        bumpPair(match.blue[i], match.blue[j], "ally");
+      }
+    }
+
+    for (let i = 0; i < match.red.length - 1; i += 1) {
+      for (let j = i + 1; j < match.red.length; j += 1) {
+        bumpPair(match.red[i], match.red[j], "ally");
+      }
+    }
+
+    for (const bluePlayer of match.blue) {
+      for (const redPlayer of match.red) {
+        bumpPair(bluePlayer, redPlayer, "enemy");
+      }
+    }
+  }
+
+  return pairStats;
+}
+
+function buildBattleComponents(nodeIds: string[], matches: MockMatch[]): string[][] {
+  const pairStats = buildPairStats(matches);
+  const adjacency = new Map<string, Set<string>>();
+
+  for (const nodeId of nodeIds) {
+    adjacency.set(nodeId, new Set<string>());
+  }
+
+  for (const key of pairStats.keys()) {
+    const [from, to] = key.split("|");
+    adjacency.get(from)?.add(to);
+    adjacency.get(to)?.add(from);
+  }
+
+  const seen = new Set<string>();
+  const components: string[][] = [];
+
+  for (const nodeId of nodeIds) {
+    if (seen.has(nodeId)) {
+      continue;
+    }
+
+    const queue = [nodeId];
+    const component: string[] = [];
+    seen.add(nodeId);
+
+    while (queue.length > 0) {
+      const current = queue.shift() as string;
+      component.push(current);
+
+      for (const neighbor of adjacency.get(current) ?? []) {
+        if (seen.has(neighbor)) {
+          continue;
+        }
+        seen.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+
+    component.sort((left, right) => left.localeCompare(right));
+    components.push(component);
+  }
+
+  components.sort((left, right) => right.length - left.length || left[0].localeCompare(right[0]));
+  return components;
+}
+
 function buildMockGraph() {
   const nodes: GraphNode[] = [];
-  const edges: GraphEdge[] = [];
-  const edgeKeys = new Set<string>();
   const clusters: string[][] = [];
+  const clusterByNodeId = new Map<string, number>();
   const gridColumns = 4;
-  const leafIndices = new Set([18, 19]);
 
-  for (let clusterIndex = 0; clusterIndex < CLUSTER_COUNT; clusterIndex += 1) {
+  for (let clusterIndex = 0; clusterIndex < MOCK_CLUSTER_SIZES.length; clusterIndex += 1) {
+    const clusterSize = MOCK_CLUSTER_SIZES[clusterIndex];
     const clusterId = `mock-cluster-${clusterIndex + 1}`;
     const centerX = 18 + (clusterIndex % gridColumns) * 26;
     const centerY = 18 + Math.floor(clusterIndex / gridColumns) * 28;
     const members: string[] = [];
+    const leafIndices = clusterSize >= 10 ? new Set([clusterSize - 2, clusterSize - 1]) : new Set<number>();
 
-    for (let nodeIndex = 0; nodeIndex < NODES_PER_CLUSTER; nodeIndex += 1) {
-      const angle = (nodeIndex / NODES_PER_CLUSTER) * Math.PI * 2;
+    for (let nodeIndex = 0; nodeIndex < clusterSize; nodeIndex += 1) {
+      const angle = (nodeIndex / Math.max(clusterSize, 3)) * Math.PI * 2;
       const radius = leafIndices.has(nodeIndex)
-        ? 10.5 + (nodeIndex - 18) * 1.6
+        ? 10.5 + (nodeIndex - (clusterSize - 2)) * 1.6
         : 5.5 + (nodeIndex % 4) * 1.25;
       const id = `c${clusterIndex + 1}n${nodeIndex + 1}`;
       members.push(id);
+      clusterByNodeId.set(id, clusterIndex);
       nodes.push({
         id,
         label: `Demo${String(clusterIndex + 1).padStart(2, "0")}-${String(nodeIndex + 1).padStart(2, "0")}#MOCK`,
@@ -71,92 +214,156 @@ function buildMockGraph() {
     clusters.push(members);
   }
 
-  const addEdge = (from: string, to: string, relation: RelationType, weight: number) => {
-    const key = edgeKey(from, to);
-    if (edgeKeys.has(key)) {
-      return;
+  const matches: MockMatch[] = [];
+  const addMatch = (blue: string[], red: string[]) => {
+    const blueTeam = buildTeam(blue);
+    const redTeam = buildTeam(red);
+    const allParticipants = new Set([...blueTeam, ...redTeam]);
+    if (allParticipants.size !== 10) {
+      throw new Error(
+        `Mock match construction failed. A synthetic match must contain 10 distinct participants. Blue=${blueTeam.join(",")} Red=${redTeam.join(",")}`,
+      );
     }
-    edgeKeys.add(key);
-    edges.push({ from, to, relation, weight });
+    matches.push({ blue: blueTeam, red: redTeam });
   };
 
-  for (let clusterIndex = 0; clusterIndex < clusters.length; clusterIndex += 1) {
-    const members = clusters[clusterIndex];
-    const hub = members[0];
+  // Base 5v5 rivalries between larger groups.
+  addMatch(pickWindow(clusters[0], 0, 5), pickWindow(clusters[1], 0, 5));
+  addMatch(pickWindow(clusters[0], 5, 5), pickWindow(clusters[1], 5, 5));
+  addMatch(pickWindow(clusters[0], 10, 5), pickWindow(clusters[1], 10, 5));
+  addMatch(pickWindow(clusters[0], 15, 5), pickWindow(clusters[1], 13, 5));
 
-    for (let nodeIndex = 0; nodeIndex < members.length; nodeIndex += 1) {
-      if (leafIndices.has(nodeIndex)) {
-        continue;
-      }
+  addMatch(pickWindow(clusters[5], 0, 5), pickWindow(clusters[7], 0, 5));
+  addMatch(pickWindow(clusters[5], 4, 5), pickWindow(clusters[9], 0, 5));
+  addMatch(pickWindow(clusters[5], 7, 5), pickWindow(clusters[9], 5, 5));
+  addMatch(pickWindow(clusters[7], 5, 5), pickWindow(clusters[9], 9, 5));
+  addMatch(pickWindow(clusters[7], 11, 5), pickWindow(clusters[10], 0, 5));
+  addMatch(pickWindow(clusters[10], 4, 5), pickWindow(clusters[2], 0, 5));
 
-      const current = members[nodeIndex];
-      const next = members[(nodeIndex + 1) % members.length];
-      const skip = members[(nodeIndex + 2) % members.length];
-      const nextIndex = (nodeIndex + 1) % members.length;
-      const skipIndex = (nodeIndex + 2) % members.length;
+  // Small-cluster coalition matches.
+  addMatch(
+    buildTeam(clusters[3], pickWindow(clusters[4], 0, 1)),
+    pickWindow(clusters[8], 0, 5),
+  );
+  addMatch(
+    buildTeam(clusters[4], clusters[6]),
+    pickWindow(clusters[2], 3, 5),
+  );
+  addMatch(
+    buildTeam(clusters[6], pickWindow(clusters[8], 1, 3)),
+    buildTeam(clusters[3], pickWindow(clusters[10], 8, 1)),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[2], 0, 3), pickWindow(clusters[3], 0, 2)),
+    pickWindow(clusters[8], 1, 5),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[4], 0, 2), pickWindow(clusters[8], 4, 3)),
+    pickWindow(clusters[10], 4, 5),
+  );
 
-      if (!leafIndices.has(nextIndex)) {
-        addEdge(current, next, "ally", 3 + ((clusterIndex + nodeIndex) % 4));
-      }
-      if (!leafIndices.has(skipIndex)) {
-        addEdge(current, skip, "ally", 2 + ((clusterIndex + nodeIndex) % 3));
-      }
+  // Controlled chaos: same communities appearing on both sides creates mixed evidence.
+  addMatch(
+    buildTeam(pickWindow(clusters[0], 0, 3), pickWindow(clusters[1], 0, 2)),
+    buildTeam(pickWindow(clusters[0], 3, 2), pickWindow(clusters[1], 2, 3)),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[5], 0, 3), pickWindow(clusters[9], 0, 2)),
+    buildTeam(pickWindow(clusters[5], 3, 2), pickWindow(clusters[9], 2, 3)),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[7], 10, 3), pickWindow(clusters[10], 0, 2)),
+    buildTeam(pickWindow(clusters[7], 13, 2), pickWindow(clusters[10], 2, 3)),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[2], 0, 3), pickWindow(clusters[4], 0, 2)),
+    buildTeam(pickWindow(clusters[2], 3, 2), pickWindow(clusters[4], 2, 1), pickWindow(clusters[3], 0, 2)),
+  );
 
-      if (nodeIndex > 1 && nodeIndex % 3 === 0) {
-        addEdge(hub, current, "ally", 4 + ((clusterIndex + nodeIndex) % 4));
-      }
+  // Mixed scrims: both sides contain players from multiple clusters.
+  addMatch(
+    buildTeam(pickWindow(clusters[0], 8, 2), pickWindow(clusters[2], 0, 3)),
+    buildTeam(pickWindow(clusters[1], 8, 2), pickWindow(clusters[8], 0, 3)),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[7], 2, 2), pickWindow(clusters[10], 1, 2), pickWindow(clusters[4], 0, 1)),
+    buildTeam(pickWindow(clusters[9], 3, 2), pickWindow(clusters[5], 1, 2), pickWindow(clusters[3], 0, 1)),
+  );
+  addMatch(
+    buildTeam(pickWindow(clusters[2], 1, 2), pickWindow(clusters[3], 0, 2), pickWindow(clusters[6], 0, 1)),
+    buildTeam(pickWindow(clusters[8], 2, 2), pickWindow(clusters[10], 5, 2), pickWindow(clusters[6], 1, 1)),
+  );
+
+  const nodeIds = nodes.map((node) => node.id);
+  const corePool = [
+    ...clusters[0],
+    ...clusters[1],
+    ...clusters[5],
+    ...clusters[7],
+    ...clusters[9],
+    ...clusters[10],
+  ];
+  let repairCursor = 0;
+
+  const participationCounts = new Map<string, number>(nodeIds.map((nodeId) => [nodeId, 0]));
+  for (const match of matches) {
+    for (const playerId of [...match.blue, ...match.red]) {
+      participationCounts.set(playerId, (participationCounts.get(playerId) ?? 0) + 1);
+    }
+  }
+
+  const unplayedNodeIds = nodeIds.filter((nodeId) => (participationCounts.get(nodeId) ?? 0) === 0);
+  for (const nodeId of unplayedNodeIds) {
+    const clusterMembers = clusters[clusterByNodeId.get(nodeId) ?? 0];
+    const localPartners = pickUnique(clusterMembers, clusterMembers.indexOf(nodeId) + 1, 2, [nodeId]);
+    const blueTeam = buildTeam(
+      [nodeId, ...localPartners],
+      pickUnique(corePool, repairCursor, 5, [nodeId, ...localPartners]),
+    );
+    const redTeam = buildTeam(
+      pickUnique(corePool, repairCursor + 9, 5, blueTeam),
+    );
+    addMatch(blueTeam, redTeam);
+    repairCursor += 13;
+  }
+
+  const components = buildBattleComponents(nodeIds, matches);
+  const mainComponentAnchor = clusters[0][0];
+  const mainComponentIndex = components.findIndex((component) => component.includes(mainComponentAnchor));
+
+  for (let componentIndex = 0; componentIndex < components.length; componentIndex += 1) {
+    if (componentIndex === mainComponentIndex) {
+      continue;
     }
 
-    const fringeAnchor = members[17];
-    const fringeNode = members[18];
-    const leafNode = members[19];
-
-    addEdge(hub, fringeNode, "ally", 1 + (clusterIndex % 2));
-    addEdge(fringeNode, leafNode, clusterIndex % 2 === 0 ? "enemy" : "ally", 1);
-
-    if (clusterIndex % 3 === 1) {
-      addEdge(fringeAnchor, fringeNode, "enemy", 1);
-    }
+    const component = components[componentIndex];
+    const componentAnchors = pickUnique(component, 0, Math.min(component.length, 3));
+    const blueTeam = buildTeam(
+      componentAnchors,
+      pickUnique(corePool, repairCursor, 5, componentAnchors),
+    );
+    const redTeam = buildTeam(
+      pickUnique(corePool, repairCursor + 11, 5, blueTeam),
+    );
+    addMatch(blueTeam, redTeam);
+    repairCursor += 17;
   }
 
-  for (let clusterIndex = 0; clusterIndex < clusters.length - 1; clusterIndex += 1) {
-    const current = clusters[clusterIndex];
-    const next = clusters[clusterIndex + 1];
-    addEdge(current[0], next[0], "enemy", 1 + (clusterIndex % 2));
-    addEdge(current[1], next[2], "enemy", 1);
-    addEdge(current[4], next[6], "ally", 2 + (clusterIndex % 3));
+  const finalComponents = buildBattleComponents(nodeIds, matches);
+  if (finalComponents.length !== 1) {
+    throw new Error(
+      `Mock graph construction failed. Battle-path graph must be connected, but ${finalComponents.length} components remain.`,
+    );
   }
 
-  for (let clusterIndex = 0; clusterIndex < clusters.length - 2; clusterIndex += 1) {
-    const current = clusters[clusterIndex];
-    const next = clusters[clusterIndex + 2];
-    addEdge(current[8], next[10], "enemy", 1);
-    addEdge(current[12], next[14], "ally", 2);
-  }
+  const pairStats = buildPairStats(matches);
 
-  addEdge(clusters[0][0], clusters[clusters.length - 1][0], "enemy", 2);
-  addEdge(clusters[2][3], clusters[7][4], "enemy", 1);
-  addEdge(clusters[5][5], clusters[9][6], "ally", 3);
-
-  // Add a few explicitly unstable local structures so the mock dataset is easier to explain.
-  for (const clusterIndex of [0, 3, 6, 9]) {
-    const members = clusters[clusterIndex];
-    addEdge(members[0], members[7], "ally", 3);
-    addEdge(members[0], members[11], "ally", 2);
-    addEdge(members[7], members[11], "enemy", 1);
-  }
-
-  for (const clusterIndex of [1, 5, 8]) {
-    const members = clusters[clusterIndex];
-    addEdge(members[2], members[9], "enemy", 1);
-    addEdge(members[9], members[14], "enemy", 1);
-    addEdge(members[2], members[14], "enemy", 1);
-  }
-
-  for (let clusterIndex = 0; clusterIndex < clusters.length - 1; clusterIndex += 2) {
-    const currentLeaf = clusters[clusterIndex][19];
-    const nextHub = clusters[clusterIndex + 1][0];
-    addEdge(currentLeaf, nextHub, "enemy", 1);
+  const edges: GraphEdge[] = [];
+  for (const [key, stats] of pairStats.entries()) {
+    const [from, to] = key.split("|");
+    const relation: RelationType = stats.ally >= stats.enemy ? "ally" : "enemy";
+    const weight = Math.max(stats.ally, stats.enemy);
+    edges.push({ from, to, relation, weight });
   }
 
   return { nodes, edges };

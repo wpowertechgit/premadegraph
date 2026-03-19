@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { RiCloseLine } from "react-icons/ri";
 import PlaybackControls from "./PlaybackControls";
 import PlayerLookupField from "./PlayerLookupField";
 import PathfinderGraphScene from "./PathfinderGraphScene";
 import {
   type AlgorithmId,
   type CanvasFrame,
+  type GraphNode,
   type GraphSnapshot,
   type PathfinderRunResponse,
   type PathMode,
@@ -85,6 +87,7 @@ export default function PathfinderGraphOverlay({
   const [draftAlgorithm, setDraftAlgorithm] = useState<AlgorithmId>(algorithm);
   const [draftPathMode, setDraftPathMode] = useState<PathMode>(pathMode);
   const [draftWeightedMode, setDraftWeightedMode] = useState(weightedMode);
+  const [selectedGraphNode, setSelectedGraphNode] = useState<GraphNode | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -96,6 +99,7 @@ export default function PathfinderGraphOverlay({
     setDraftAlgorithm(algorithm);
     setDraftPathMode(pathMode);
     setDraftWeightedMode(weightedMode);
+    setSelectedGraphNode(null);
   }, [algorithm, open, pathMode, sourcePlayerId, targetPlayerId, weightedMode]);
 
   const totalTraceSteps = run?.trace.length ?? 0;
@@ -105,23 +109,20 @@ export default function PathfinderGraphOverlay({
 
   return (
     <div
+      className="pathfinder-overlay"
       style={{
         position: "fixed",
-        inset: 0,
         background: "rgba(10, 12, 16, 0.78)",
         opacity: open ? 1 : 0,
         pointerEvents: open ? "auto" : "none",
         transition: "opacity 180ms ease",
         zIndex: 1200,
-        padding: "0.75rem",
         boxSizing: "border-box",
       }}
     >
       <div
+        className="pathfinder-overlay__dialog"
         style={{
-          width: "calc(100vw - 1.5rem)",
-          height: "calc(100vh - 1.5rem)",
-          margin: "0 auto",
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) minmax(520px, 620px)",
           gap: "0.85rem",
@@ -177,11 +178,106 @@ export default function PathfinderGraphOverlay({
               snapshot={snapshot}
               run={run}
               frame={frame}
-              sourcePlayerId={sourcePlayerId}
-              targetPlayerId={targetPlayerId}
+              sourcePlayerId={draftSourcePlayerId}
+              targetPlayerId={draftTargetPlayerId}
               variant="overlay"
+              onNodeActivate={setSelectedGraphNode}
             />
           </div>
+
+          {selectedGraphNode ? (
+            <div
+              style={{
+                borderRadius: "18px",
+                border: "1px solid rgba(126, 155, 183, 0.22)",
+                background: "rgba(12, 18, 26, 0.9)",
+                padding: "0.85rem 0.95rem",
+                display: "grid",
+                gap: "0.55rem",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
+                <div>
+                  <div style={{ color: "#9ca3af", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {t.pathfinder.selectedNode}
+                  </div>
+                  <div style={{ color: "#f3f4f6", fontWeight: 700, marginTop: "0.2rem" }}>{selectedGraphNode.label}</div>
+                </div>
+                <button
+                  type="button"
+                  aria-label={t.common.no}
+                  title={t.common.no}
+                  onClick={() => setSelectedGraphNode(null)}
+                  style={{
+                    borderRadius: "999px",
+                    border: "1px solid #3a414a",
+                    background: "#252a31",
+                    color: "#cbd5e1",
+                    width: "2rem",
+                    height: "2rem",
+                    padding: 0,
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  <RiCloseLine size={14} aria-hidden="true" />
+                </button>
+              </div>
+              <div style={{ color: "#8ea0b3", fontSize: "0.84rem", wordBreak: "break-all" }}>{selectedGraphNode.id}</div>
+              <div style={{ color: "#9ca3af", fontSize: "0.88rem", lineHeight: 1.45 }}>{t.pathfinder.selectedNodeHint}</div>
+              <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setDraftSourcePlayerId(selectedGraphNode.id)}
+                  disabled={draftSourcePlayerId === selectedGraphNode.id}
+                  style={{
+                    borderRadius: "12px",
+                    border: "1px solid #4f677f",
+                    background: draftSourcePlayerId === selectedGraphNode.id ? "#20303c" : "#2f455b",
+                    color: "#f3f4f6",
+                    padding: "0.7rem 0.9rem",
+                    fontWeight: 700,
+                    opacity: draftSourcePlayerId === selectedGraphNode.id ? 0.6 : 1,
+                    cursor: draftSourcePlayerId === selectedGraphNode.id ? "not-allowed" : "pointer",
+                  }}
+                  title={draftSourcePlayerId === selectedGraphNode.id ? t.pathfinder.nodeAlreadySelected : t.pathfinder.useAsSource}
+                >
+                  {t.pathfinder.useAsSource}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftTargetPlayerId(selectedGraphNode.id)}
+                  disabled={draftTargetPlayerId === selectedGraphNode.id}
+                  style={{
+                    borderRadius: "12px",
+                    border: "1px solid #4f677f",
+                    background: draftTargetPlayerId === selectedGraphNode.id ? "#20303c" : "#2f455b",
+                    color: "#f3f4f6",
+                    padding: "0.7rem 0.9rem",
+                    fontWeight: 700,
+                    opacity: draftTargetPlayerId === selectedGraphNode.id ? 0.6 : 1,
+                    cursor: draftTargetPlayerId === selectedGraphNode.id ? "not-allowed" : "pointer",
+                  }}
+                  title={draftTargetPlayerId === selectedGraphNode.id ? t.pathfinder.nodeAlreadySelected : t.pathfinder.useAsTarget}
+                >
+                  {t.pathfinder.useAsTarget}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: "18px",
+                border: "1px dashed rgba(126, 155, 183, 0.18)",
+                background: "rgba(12, 18, 26, 0.52)",
+                padding: "0.85rem 0.95rem",
+                color: "#94a3b8",
+                fontSize: "0.88rem",
+              }}
+            >
+              {t.pathfinder.clickNodePrompt}
+            </div>
+          )}
         </div>
 
         <aside

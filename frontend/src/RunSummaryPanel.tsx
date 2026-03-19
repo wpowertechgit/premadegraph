@@ -1,6 +1,7 @@
 import React from "react";
 import { type PathfinderRunResponse, type SavedReplayRecord } from "./pathfinderTypes";
 import { getAlgorithmLabel, getPathModeLabel, getStatusLabel, translateBackendText, useI18n } from "./i18n";
+import { buttonStyle, metricCardStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
 
 interface RunSummaryPanelProps {
   run: PathfinderRunResponse | null;
@@ -18,14 +19,12 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div
       style={{
-        background: "#20252c",
-        border: "1px solid #313842",
-        borderRadius: "14px",
+        ...metricCardStyle(),
         padding: "0.75rem",
       }}
     >
-      <div style={{ fontSize: "0.75rem", color: "#9ca3af", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ marginTop: "0.25rem", fontSize: "1.15rem", color: "#f3f4f6" }}>{value}</div>
+      <div style={sectionLabelStyle()}>{label}</div>
+      <div style={{ marginTop: "0.25rem", fontSize: "1.15rem", color: "var(--text-primary)" }}>{value}</div>
     </div>
   );
 }
@@ -41,11 +40,8 @@ export default function RunSummaryPanel({
   return (
     <section
       style={{
-        background: "#1d2127",
-        border: "1px solid #303741",
-        borderRadius: "18px",
+        ...surfaceCardStyle(),
         padding: "1rem",
-        color: "#f3f4f6",
       }}
     >
       <div style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>{t.pathfinder.runSummary}</div>
@@ -59,19 +55,17 @@ export default function RunSummaryPanel({
               style={{
                 marginBottom: "0.9rem",
                 padding: "0.8rem",
-                borderRadius: "14px",
-                background: "#20252c",
-                border: "1px solid #313842",
+                ...metricCardStyle(),
               }}
             >
-              <div style={{ color: "#9ca3af", fontSize: "0.75rem", textTransform: "uppercase" }}>
+              <div style={sectionLabelStyle()}>
                 {t.pathfinder.replayTitle}
               </div>
               <div style={{ marginTop: "0.25rem", fontSize: "1rem", fontWeight: 700 }}>
                 {run.replayMeta.title}
               </div>
               {run.replayMeta.loadedFromSave ? (
-                <div style={{ marginTop: "0.3rem", color: "#8bb6de", fontSize: "0.88rem" }}>
+                <div style={{ marginTop: "0.3rem", color: "var(--accent-strong)", fontSize: "0.88rem" }}>
                   {t.pathfinder.loadedFromMemory}
                 </div>
               ) : null}
@@ -99,26 +93,24 @@ export default function RunSummaryPanel({
             style={{
               marginTop: "0.9rem",
               padding: "0.8rem",
-              borderRadius: "14px",
-              background: "#20252c",
-              border: "1px solid #313842",
+              ...metricCardStyle(),
             }}
           >
-            <div style={{ color: "#f3f4f6", fontWeight: 600 }}>{t.pathfinder.comparisonNote}</div>
-            <div style={{ color: "#9ca3af", marginTop: "0.3rem" }}>{translateBackendText(language, comparisonNote)}</div>
+            <div style={{ color: "var(--text-primary)", fontWeight: 600 }}>{t.pathfinder.comparisonNote}</div>
+            <div style={{ color: "var(--text-muted)", marginTop: "0.3rem" }}>{translateBackendText(language, comparisonNote)}</div>
           </div>
 
           {run.warnings.length > 0 ? (
             <div
-              style={{
-                marginTop: "0.9rem",
-                padding: "0.8rem",
-                borderRadius: "14px",
-                background: "#30261f",
-                border: "1px solid #62493a",
-                color: "#d9b08c",
-              }}
-            >
+            style={{
+              marginTop: "0.9rem",
+              padding: "0.8rem",
+              borderRadius: "14px",
+              background: "rgba(56, 34, 18, 0.68)",
+              border: "1px solid rgba(234, 179, 108, 0.28)",
+              color: "var(--warning)",
+            }}
+          >
               {run.warnings.map((warning) => (
                 <div key={warning}>{translateBackendText(language, warning)}</div>
               ))}
@@ -129,14 +121,12 @@ export default function RunSummaryPanel({
             style={{
               marginTop: "0.9rem",
               padding: "0.8rem",
-              borderRadius: "14px",
-              background: "#20252c",
-              border: "1px solid #313842",
+              ...metricCardStyle(),
             }}
           >
-            <div style={{ color: "#f3f4f6", fontWeight: 600 }}>{t.pathfinder.cachedReplays}</div>
+            <div style={{ color: "var(--text-primary)", fontWeight: 600 }}>{t.pathfinder.cachedReplays}</div>
             {savedReplays.length === 0 ? (
-              <div style={{ color: "#9ca3af", marginTop: "0.3rem" }}>{t.pathfinder.runSummaryEmpty}</div>
+              <div style={{ color: "var(--text-muted)", marginTop: "0.3rem" }}>{t.pathfinder.runSummaryEmpty}</div>
             ) : (
                 <div style={{ display: "grid", gap: "0.6rem", marginTop: "0.7rem" }}>
                   {savedReplays.map((savedReplay) => (
@@ -154,18 +144,14 @@ export default function RunSummaryPanel({
                         onClick={() => onLoadSavedReplay(savedReplay)}
                         style={{
                           textAlign: "left",
-                          borderRadius: "12px",
-                          border: "1px solid #39424d",
-                          background: "#1a1f25",
-                          color: "#f3f4f6",
+                          ...buttonStyle("ghost"),
                           padding: "0.75rem 0.8rem",
-                          cursor: "pointer",
                         }}
                       >
                         <div style={{ fontWeight: 600 }}>
                           {savedReplay.title}
                         </div>
-                        <div style={{ marginTop: "0.25rem", color: "#9ca3af", fontSize: "0.88rem" }}>
+                        <div style={{ marginTop: "0.25rem", color: "var(--text-muted)", fontSize: "0.88rem" }}>
                           {getAlgorithmLabel(language, savedReplay.selectedAlgorithm)} • {getPathModeLabel(language, savedReplay.pathMode)} • {savedReplay.algorithmRuns.map((algorithmRun) => `${getAlgorithmLabel(language, algorithmRun.request.algorithm)} ${formatRuntime(algorithmRun.summary.runtimeMs)}`).join(" • ")}
                         </div>
                       </button>
@@ -175,15 +161,12 @@ export default function RunSummaryPanel({
                         title={t.pathfinder.deleteReplay}
                         onClick={() => onDeleteSavedReplay(savedReplay)}
                         style={{
+                          ...buttonStyle("danger"),
                           width: "34px",
                           height: "34px",
-                          borderRadius: "10px",
-                          border: "1px solid #4b3a3a",
-                          background: "#2a1f1f",
-                          color: "#f4b4b4",
-                          cursor: "pointer",
                           fontSize: "1rem",
                           lineHeight: 1,
+                          padding: 0,
                         }}
                       >
                         x

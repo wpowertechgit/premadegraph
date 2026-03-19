@@ -7,6 +7,7 @@ import {
   type PlayerOption,
 } from "./pathfinderTypes";
 import { getAlgorithmLabel, getPathModeLabel, useI18n } from "./i18n";
+import { buttonStyle, inputStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
 
 interface PathfinderControlsProps {
   players: PlayerOption[];
@@ -31,30 +32,14 @@ interface PathfinderControlsProps {
 }
 
 const panelStyle: React.CSSProperties = {
-  background: "#1d2127",
-  border: "1px solid #303741",
-  borderRadius: "18px",
+  ...surfaceCardStyle(),
   padding: "1rem",
-  color: "#f3f4f6",
 };
 
 const labelStyle: React.CSSProperties = {
+  ...sectionLabelStyle(),
   display: "block",
-  fontSize: "0.82rem",
-  fontWeight: 700,
-  letterSpacing: "0.05em",
-  textTransform: "uppercase",
   marginBottom: "0.35rem",
-  color: "#9ca3af",
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: "12px",
-  border: "1px solid #39424d",
-  background: "#20252c",
-  color: "#f3f4f6",
-  padding: "0.8rem 0.9rem",
 };
 
 export default function PathfinderControls({
@@ -95,13 +80,7 @@ export default function PathfinderControls({
                 type="button"
                 onClick={() => onExecutionModeChange(option.id)}
                 style={{
-                  borderRadius: "12px",
-                  border: active ? "1px solid #4f677f" : "1px solid #39424d",
-                  background: active ? "#24303b" : "#20252c",
-                  color: "#f3f4f6",
-                  padding: "0.8rem 0.95rem",
-                  fontWeight: 700,
-                  cursor: "pointer",
+                  ...buttonStyle(active ? "primary" : "secondary"),
                 }}
               >
                 {option.label}
@@ -113,11 +92,7 @@ export default function PathfinderControls({
             onClick={onReloadPlayers}
             disabled={playersLoading || executionMode === "frontend-demo"}
             style={{
-              borderRadius: "12px",
-              border: "1px solid #39424d",
-              background: "#20252c",
-              color: "#d1d5db",
-              padding: "0.8rem 0.95rem",
+              ...buttonStyle("ghost"),
               cursor: playersLoading || executionMode === "frontend-demo" ? "not-allowed" : "pointer",
               opacity: executionMode === "frontend-demo" ? 0.6 : 1,
             }}
@@ -127,8 +102,15 @@ export default function PathfinderControls({
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
-        <div style={{ flex: 1 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: "0.75rem",
+          minWidth: 0,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
           <PlayerLookupField
             label={t.pathfinder.sourcePlayer}
             players={players}
@@ -137,7 +119,7 @@ export default function PathfinderControls({
             placeholder={playersLoading ? t.pathfinder.loadingPlayerList : t.pathfinder.typePlayerName}
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ minWidth: 0 }}>
           <PlayerLookupField
             label={t.pathfinder.targetPlayer}
             players={players}
@@ -161,7 +143,7 @@ export default function PathfinderControls({
           <select
             value={algorithm}
             onChange={(event) => onAlgorithmChange(event.target.value as AlgorithmId)}
-            style={inputStyle}
+            style={inputStyle()}
           >
             {supportedAlgorithms.map((item) => (
               <option key={item} value={item}>
@@ -183,12 +165,7 @@ export default function PathfinderControls({
                   onClick={() => onPathModeChange(mode)}
                   style={{
                     flex: 1,
-                    borderRadius: "12px",
-                    border: active
-                      ? "1px solid #5680a7"
-                      : "1px solid #39424d",
-                    background: active ? "#2c3540" : "#20252c",
-                    color: "#f3f4f6",
+                    ...buttonStyle(active ? "primary" : "secondary"),
                     padding: "0.8rem 0.5rem",
                   }}
                 >
@@ -207,12 +184,16 @@ export default function PathfinderControls({
             title={algorithm === "dijkstra" || algorithm === "astar" ? t.pathfinder.weightedTitleEnabled : t.pathfinder.weightedTitleDisabled}
             onClick={() => onWeightedModeChange(!weightedMode)}
             style={{
-              ...inputStyle,
+              ...inputStyle(),
               textAlign: "left",
               opacity: algorithm === "dijkstra" || algorithm === "astar" ? 1 : 0.65,
               cursor: algorithm === "dijkstra" || algorithm === "astar" ? "pointer" : "not-allowed",
-              background: weightedMode && (algorithm === "dijkstra" || algorithm === "astar") ? "#263844" : "#20252c",
-              border: weightedMode && (algorithm === "dijkstra" || algorithm === "astar") ? "1px solid #5680a7" : "1px solid #39424d",
+              background: weightedMode && (algorithm === "dijkstra" || algorithm === "astar")
+                ? "rgba(102, 184, 255, 0.14)"
+                : "var(--surface-soft)",
+              border: weightedMode && (algorithm === "dijkstra" || algorithm === "astar")
+                ? "1px solid rgba(102, 184, 255, 0.45)"
+                : "1px solid var(--border-strong)",
             }}
           >
             {weightedMode && (algorithm === "dijkstra" || algorithm === "astar")
@@ -233,12 +214,10 @@ export default function PathfinderControls({
           <button
             type="button"
             disabled={loading || playersLoading || !sourcePlayerId || !targetPlayerId}
-            onClick={onRun}
-            style={{
-              background: "#2f455b",
-            color: "#f3f4f6",
+          onClick={onRun}
+          style={{
+            ...buttonStyle("primary"),
             minWidth: "144px",
-            border: "1px solid #4f677f",
           }}
           >
             {loading ? t.pathfinder.running : t.pathfinder.runSearch}
@@ -247,10 +226,8 @@ export default function PathfinderControls({
           type="button"
           onClick={onReset}
           style={{
-            background: "#20252c",
-            color: "#d1d5db",
+            ...buttonStyle("secondary"),
             minWidth: "144px",
-            border: "1px solid #39424d",
           }}
         >
           {t.pathfinder.reset}

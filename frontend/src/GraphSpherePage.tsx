@@ -1,8 +1,10 @@
 import React, { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { RiCloseLine, RiInformationLine } from "react-icons/ri";
 import GraphSphereScene from "./GraphSphereScene";
 import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta } from "./pathfinderApi";
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
 import { useI18n } from "./i18n";
+import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "./theme";
 
 type FocusRequest = {
   index: number;
@@ -24,13 +26,7 @@ function parseMetric(metrics: Uint32Array, index: number, offset: number) {
 }
 
 function overlayCardStyle() {
-  return {
-    borderRadius: "18px",
-    border: "1px solid rgba(116, 136, 158, 0.28)",
-    background: "rgba(9, 13, 18, 0.82)",
-    backdropFilter: "blur(20px)",
-    boxShadow: "0 28px 80px rgba(0, 0, 0, 0.35)",
-  } as const;
+  return glassCardStyle();
 }
 
 export default function GraphSpherePage() {
@@ -45,6 +41,9 @@ export default function GraphSpherePage() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [introOpen, setIntroOpen] = useState(true);
+  const [showPanelScrollCue, setShowPanelScrollCue] = useState(false);
+  const [panelScrollViewport, setPanelScrollViewport] = useState<HTMLDivElement | null>(null);
   const deferredQuery = useDeferredValue(searchQuery.trim().toLowerCase());
 
   useEffect(() => {
@@ -125,6 +124,27 @@ export default function GraphSpherePage() {
       }
     : null;
 
+  useEffect(() => {
+    if (!panelScrollViewport || !panelOpen) {
+      setShowPanelScrollCue(false);
+      return;
+    }
+
+    const updateCue = () => {
+      const remaining = panelScrollViewport.scrollHeight - panelScrollViewport.scrollTop - panelScrollViewport.clientHeight;
+      setShowPanelScrollCue(remaining > 24);
+    };
+
+    updateCue();
+    panelScrollViewport.addEventListener("scroll", updateCue);
+    window.addEventListener("resize", updateCue);
+
+    return () => {
+      panelScrollViewport.removeEventListener("scroll", updateCue);
+      window.removeEventListener("resize", updateCue);
+    };
+  }, [panelOpen, panelScrollViewport, searchResults.length, activeIndex, manifest]);
+
   const requestFocus = (index: number) => {
     startTransition(() => {
       setSelectedIndex(index);
@@ -139,10 +159,10 @@ export default function GraphSpherePage() {
     return (
       <div
         style={{
-          height: "calc(100vh - 72px)",
+          height: "calc(100vh - var(--nav-height))",
           minHeight: "620px",
-          background: "radial-gradient(circle at top, #16202f 0%, #05070b 62%, #020306 100%)",
-          color: "#f3f4f6",
+          background: "radial-gradient(circle at top, rgba(24, 46, 72, 0.92) 0%, rgba(6, 11, 18, 0.98) 62%, rgba(2, 4, 8, 1) 100%)",
+          color: "var(--text-primary)",
           display: "grid",
           placeItems: "center",
         }}
@@ -159,10 +179,10 @@ export default function GraphSpherePage() {
     return (
       <div
         style={{
-          height: "calc(100vh - 72px)",
+          height: "calc(100vh - var(--nav-height))",
           minHeight: "620px",
-          background: "radial-gradient(circle at top, #16202f 0%, #05070b 62%, #020306 100%)",
-          color: "#f3f4f6",
+          background: "radial-gradient(circle at top, rgba(24, 46, 72, 0.92) 0%, rgba(6, 11, 18, 0.98) 62%, rgba(2, 4, 8, 1) 100%)",
+          color: "var(--text-primary)",
           display: "grid",
           placeItems: "center",
           padding: "1.5rem",
@@ -180,9 +200,10 @@ export default function GraphSpherePage() {
     <div
       style={{
         position: "relative",
-        height: "calc(100vh - 72px)",
+        ...pageShellStyle(true),
+        height: "calc(100vh - var(--nav-height))",
         minHeight: "620px",
-        background: "radial-gradient(circle at top, #16202f 0%, #05070b 62%, #020306 100%)",
+        background: "radial-gradient(circle at top, rgba(24, 46, 72, 0.92) 0%, rgba(6, 11, 18, 0.98) 62%, rgba(2, 4, 8, 1) 100%)",
         overflow: "hidden",
       }}
     >
@@ -206,21 +227,65 @@ export default function GraphSpherePage() {
           pointerEvents: "none",
         }}
       >
-        <div
-          style={{
-            ...overlayCardStyle(),
-            pointerEvents: "auto",
-            padding: "0.9rem 1rem",
-            maxWidth: "420px",
-            display: "grid",
-            gap: "0.35rem",
-          }}
-        >
-          <div style={{ color: "#7ba6d8", fontSize: "0.77rem", textTransform: "uppercase", letterSpacing: "0.12em" }}>
-            {t.graphSphere.pageLabel}
-          </div>
-          <div style={{ color: "#f5f7fb", fontSize: "1.15rem", fontWeight: 700 }}>{t.graphSphere.pageTitle}</div>
-          <div style={{ color: "#94a4b8", lineHeight: 1.5, fontSize: "0.92rem" }}>{t.graphSphere.pageDescription}</div>
+        <div style={{ display: "grid", justifyItems: "start", gap: "0.55rem" }}>
+          <button
+            type="button"
+            onClick={() => setIntroOpen((open) => !open)}
+            aria-label={introOpen ? "Hide graph sphere info" : "Show graph sphere info"}
+            title={introOpen ? "Hide graph sphere info" : "Show graph sphere info"}
+            style={{
+              ...overlayCardStyle(),
+              ...buttonStyle("ghost"),
+              pointerEvents: "auto",
+              width: "2.6rem",
+              height: "2.6rem",
+              borderRadius: "999px",
+              padding: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#dce9f8",
+            }}
+          >
+            <RiInformationLine size={18} aria-hidden="true" />
+          </button>
+
+          {introOpen ? (
+            <div
+              style={{
+                ...overlayCardStyle(),
+                pointerEvents: "auto",
+                padding: "0.9rem 1rem",
+                maxWidth: "420px",
+                display: "grid",
+                gap: "0.45rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: "0.75rem" }}>
+                <div style={sectionLabelStyle()}>
+                  {t.graphSphere.pageLabel}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIntroOpen(false)}
+                  aria-label="Hide graph sphere info"
+                  title="Hide graph sphere info"
+                  style={{
+                    ...buttonStyle("ghost"),
+                    borderRadius: "999px",
+                    minWidth: "2rem",
+                    height: "2rem",
+                    padding: "0 0.6rem",
+                    pointerEvents: "auto",
+                    color: "#9db3ca",
+                  }}
+                >
+                  <RiCloseLine size={16} aria-hidden="true" />
+                </button>
+              </div>
+              <div style={{ color: "#f5f7fb", fontSize: "1.15rem", fontWeight: 700 }}>{t.graphSphere.pageTitle}</div>
+              <div style={{ color: "#94a4b8", lineHeight: 1.5, fontSize: "0.92rem" }}>{t.graphSphere.pageDescription}</div>
+            </div>
+          ) : null}
         </div>
 
         {activeInfo ? (
@@ -266,28 +331,31 @@ export default function GraphSpherePage() {
             ...overlayCardStyle(),
             pointerEvents: "auto",
             borderRadius: "999px",
-            color: "#f2f6fb",
-            background: panelOpen ? "rgba(22, 29, 39, 0.88)" : "rgba(10, 14, 18, 0.82)",
+            ...buttonStyle(panelOpen ? "secondary" : "ghost"),
             padding: "0.8rem 1rem",
-            cursor: "pointer",
-            fontWeight: 700,
           }}
         >
           {panelOpen ? t.graphSphere.hidePanel : t.graphSphere.showPanel}
         </button>
 
         {panelOpen ? (
-          <aside
+          <div
+            className="graph-sphere-panel"
             style={{
               ...overlayCardStyle(),
               pointerEvents: "auto",
               width: "min(360px, calc(100vw - 2rem))",
               maxHeight: "calc(100vh - 150px)",
-              overflowY: "auto",
+              color: "#e8edf6",
+            }}
+          >
+          <aside
+            ref={setPanelScrollViewport}
+            className="graph-sphere-panel__scroll app-hidden-scrollbar"
+            style={{
               padding: "1rem",
               display: "grid",
               gap: "0.95rem",
-              color: "#e8edf6",
             }}
           >
             <section style={{ display: "grid", gap: "0.55rem" }}>
@@ -304,14 +372,15 @@ export default function GraphSpherePage() {
                 placeholder={t.graphSphere.searchPlaceholder}
                 style={{
                   borderRadius: "12px",
-                  border: "1px solid rgba(116, 136, 158, 0.24)",
+                  border: "1px solid var(--border-subtle)",
                   background: "rgba(5, 8, 12, 0.74)",
-                  color: "#f3f4f6",
+                  color: "var(--text-primary)",
                   padding: "0.82rem 0.92rem",
                 }}
               />
               {searchResults.length > 0 ? (
                 <div
+                  className="app-hidden-scrollbar"
                   style={{
                     display: "grid",
                     gap: "0.45rem",
@@ -326,9 +395,9 @@ export default function GraphSpherePage() {
                       onClick={() => requestFocus(result.index)}
                       style={{
                         borderRadius: "12px",
-                        border: "1px solid rgba(116, 136, 158, 0.24)",
-                        background: selectedIndex === result.index ? "rgba(50, 72, 98, 0.84)" : "rgba(12, 16, 22, 0.78)",
-                        color: "#f3f4f6",
+                        border: "1px solid var(--border-subtle)",
+                        background: selectedIndex === result.index ? "rgba(102, 184, 255, 0.16)" : "rgba(12, 16, 22, 0.78)",
+                        color: "var(--text-primary)",
                         textAlign: "left",
                         padding: "0.72rem 0.78rem",
                         display: "grid",
@@ -355,13 +424,8 @@ export default function GraphSpherePage() {
                     type="button"
                     onClick={() => requestFocus(activeIndex)}
                     style={{
-                      borderRadius: "12px",
-                      border: "1px solid rgba(100, 132, 168, 0.42)",
-                      background: "rgba(38, 53, 72, 0.82)",
-                      color: "#f3f4f6",
+                      ...buttonStyle("secondary"),
                       padding: "0.78rem 0.86rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
                     }}
                   >
                     {t.graphSphere.focusNode}
@@ -404,6 +468,13 @@ export default function GraphSpherePage() {
               </div>
             </section>
           </aside>
+          {showPanelScrollCue ? (
+            <div className="app-scroll-cue graph-sphere-panel__scroll-cue" aria-hidden="true">
+              <div className="app-scroll-fade" />
+              <div className="app-scroll-arrow">↓</div>
+            </div>
+          ) : null}
+          </div>
         ) : null}
       </div>
     </div>

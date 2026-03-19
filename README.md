@@ -1,106 +1,73 @@
-# Premade Graph
+# <img src="frontend/public/mushroom-icon-256.png" alt="Premade Graph logo" width="42" align="left"> Premade Graph
+
+<br />
 
 [English](README.md) | [Magyar](README.hu.md)
 
-`premadegraph` is a thesis project for building, analyzing, and visualizing player relationship graphs from League of Legends match data.
+![Thesis](https://img.shields.io/badge/focus-thesis%20project-1f6feb?style=flat-square)
+![Frontend](https://img.shields.io/badge/ui-React%20%2B%20Vite-0f766e?style=flat-square)
+![Backend](https://img.shields.io/badge/backend-Node%20%2B%20Rust-7c3aed?style=flat-square)
+![Analytics](https://img.shields.io/badge/analytics-signed%20graphs%20%2F%20pathfinding-c2410c?style=flat-square)
+![License](https://img.shields.io/badge/license-MIT-111827?style=flat-square)
 
-The repository combines:
+**Premade Graph** is a League of Legends player-network thesis project for collecting match history, building repeated co-play graphs, analyzing signed relationships, and exploring the result through a polished interactive frontend.
+
+It combines:
 
 - match collection and player normalization
-- Python-based graph generation and clustering
-- a Node/Express backend
-- a React/Vite frontend
-- a Rust pathfinding engine for real graph search
-
-## Overview
-
-The project turns repeated player co-occurrence into a graph and uses it for two related goals:
-
-- population analysis and cluster visualization
-- pathfinding between players with interactive frontend playback
-
-The current system supports:
-
-- filtered graph generation with `min_weight >= 2`
+- Python graph generation and clustering
 - SQLite-backed cluster persistence
-- Rust-backed BFS, Dijkstra, Bidirectional search, and exact A*
-- global graph, player focus, and route-oriented runtime views
+- a Node/Express API layer
+- a Rust runtime for exact pathfinding and graph analytics
+- a React/Vite frontend for immersive exploration
 
-## Repository Structure
+## Why This Project Is Interesting
 
-### Root
+This repository is not just a static network viewer. It is a research-and-systems playground built around an unusual dataset: a **signed social graph** where repeated ally and enemy interactions can both be analyzed.
 
-- `package.json`: root dev entrypoint for frontend + backend
-- `docker-compose.yml`: containerized frontend/backend setup
-- `playersrefined.db`: enriched SQLite database used by graph generation and Rust runtime
-- `docs/`: technical documentation
+The current project direction emphasizes:
 
-### Backend
+- interpretable graph analytics
+- reproducible Rust-side computation
+- thesis-friendly experiments
+- visually strong interactive demos
 
-- `backend/server.js`: Express API shell
-- `backend/build_graph.py`: graph builder with connected-component style clustering
-- `backend/new_build_graph.py`: newer modularity/community-based graph builder
-- `backend/cluster_persistence.py`: shared SQLite cluster persistence helper
-- `backend/match_collector.py`: Riot API crawler
-- `backend/add_new_players.js`: raw player ingestion
-- `backend/normalize_players_by_puuid.js`: player normalization
-- `backend/pathfinder/`: Node pathfinder implementation and Rust bridge
-- `backend/pathfinder-rust/`: Rust graph runtime and search engine
-- `backend/data/`: raw match JSON files
-- `backend/clusters/`: exported cluster JSON files
-- `backend/output/`: generated HTML graph output
+## Recent UI And Analytics Upgrades
 
-### Frontend
+The current build now includes a much richer 3D graph presentation and analysis flow:
 
-- `frontend/`: React + Vite application
-- `frontend/src/PathfinderLabPage.tsx`: main pathfinder view
-- `frontend/src/PathfinderGraphOverlay.tsx`: fullscreen graph exploration overlay
+- a precomputed **full 3D graph sphere** for large-scale exploration
+- a **lit globe / gas-giant style shell** so the sphere stays readable from far away
+- a **background star field** for cleaner spatial depth
+- **denser cluster rendering** with soft outline shells for visual separation
+- **zoom-reactive edge visibility** so actual match links become more legible up close
+- a **collapsible info card** in the sphere view, tucked behind an info icon
+- Rust-backed **signed structural-balance analysis**
+- cluster-aware pathfinding views with BFS, Dijkstra, Bidirectional search, and exact A*
 
-## Graph And Cluster Model
+## Frontend Experience
 
-The project now stores clusters as first-class database entities.
+| Surface | What it is for |
+| --- | --- |
+| `Pathfinder Lab` | interactive shortest-path exploration with playback and algorithm comparison |
+| `Full 3D Graph Sphere` | bird's-eye exploration of the whole named-player network |
+| `Signed Balance` | structural-balance experiment over ally/enemy relationships |
+| player focus / global graph views | runtime graph inspection from the Rust engine |
 
-Two cluster families coexist:
+## Architecture Snapshot
 
-- `python_population`
-  - produced by the Python graph pipeline
-  - used for population analysis and country inference
-- `rust_pathfinding`
-  - produced by the Rust runtime
-  - used for filtered runtime graph structure, player focus, and A* heuristics
+| Layer | Responsibility |
+| --- | --- |
+| Python pipeline | match-derived graph building, clustering, export workflows |
+| SQLite | shared persistence for clusters and enriched player metadata |
+| Node/Express backend | API shell, orchestration, frontend-facing endpoints |
+| Rust runtime | exact pathfinding, runtime graph views, signed-balance analysis |
+| React/Vite frontend | graph UI, controls, overlays, 3D exploration |
 
-Both are persisted in SQLite through:
+<details open>
+<summary><strong>Quick Start</strong></summary>
 
-- `clusters`
-- `cluster_members`
-
-Weak one-off noise is filtered by default through repeated-tie thresholds, currently centered on `weight >= 2`.
-
-## Pathfinder Model
-
-The pathfinder currently supports:
-
-- `social-path`
-  - ally-only traversal
-- `battle-path`
-  - traversal across both ally and enemy relationships
-
-Weighted mode means stronger repeated relationships become cheaper to traverse.
-
-In practice:
-
-- unweighted mode treats every valid edge equally
-- weighted mode prefers stronger repeated ties
-
-Rust A* uses:
-
-- landmark-based lower bounds
-- cluster-hop lower bounds
-- layout distance only as a tie-break
-
-## Quick Start
-
-### Local Development
+### Local development
 
 From the repository root:
 
@@ -122,11 +89,12 @@ If Docker Desktop is running:
 docker compose up --build
 ```
 
-This starts the frontend and backend containers together.
+</details>
 
-## Main Workflows
+<details>
+<summary><strong>Main Workflows</strong></summary>
 
-### 1. Collect Match Data
+### 1. Collect match data
 
 Run from `backend/`:
 
@@ -134,14 +102,14 @@ Run from `backend/`:
 python match_collector.py
 ```
 
-Important script-level settings include:
+Important script-level knobs include:
 
 - `MATCHES_PER_PLAYER`
 - `MAX_ITERATIONS`
 - `QUEUE_TYPE`
-- Riot API pacing / rate limit controls
+- Riot API pacing / rate-limit controls
 
-### 2. Add And Normalize Players
+### 2. Add and normalize players
 
 Run from `backend/`:
 
@@ -150,7 +118,7 @@ node add_new_players.js
 node normalize_players_by_puuid.js
 ```
 
-### 3. Generate The Filtered Graph
+### 3. Generate the filtered graph
 
 Run from `backend/`:
 
@@ -161,13 +129,13 @@ python new_build_graph.py --connected-only --min-weight 2
 This will:
 
 - build the co-presence graph from real matches
-- enrich nodes from `playersrefined.db`
+- enrich players from `playersrefined.db`
 - detect communities
 - write JSON artifacts into `backend/clusters/`
 - persist `python_population` clusters into SQLite
 - generate `backend/output/premade_network.html`
 
-### 4. Country Prediction Pipeline
+### 4. Country-prediction pipeline
 
 Optional scripts in `backend/`:
 
@@ -176,9 +144,7 @@ python fetch_clusters.py
 python assign_countries.py
 ```
 
-These use cluster exports plus player names to estimate regional origin and update player records in SQLite.
-
-### 5. Rust Pathfinder Runtime
+### 5. Rust runtime commands
 
 Run from `backend/pathfinder-rust/`:
 
@@ -186,23 +152,96 @@ Run from `backend/pathfinder-rust/`:
 cargo run -- options
 ```
 
-To run a search:
+Example search run:
 
 ```bash
 echo '{"sourcePlayerId":"...","targetPlayerId":"...","algorithm":"astar","pathMode":"social-path","weightedMode":true,"options":{"includeTrace":false,"maxSteps":5000}}' | cargo run -- run
 ```
 
-Signed structural-balance analysis is also available from the same Rust runtime:
+Signed structural-balance analysis:
 
 ```bash
 echo '{"minEdgeSupport":2,"tiePolicy":"exclude","maxTopNodes":10,"includeClusterSummaries":true}' | cargo run -- signed-balance
 ```
 
-The backend exposes the same analysis through:
+Backend endpoint:
 
 ```text
 POST /api/pathfinder-rust/signed-balance
 ```
+
+</details>
+
+<details>
+<summary><strong>Repository Map</strong></summary>
+
+### Root
+
+- `package.json`: root development entrypoint
+- `docker-compose.yml`: frontend/backend container setup
+- `playersrefined.db`: enriched SQLite database
+- `docs/`: technical notes and architecture writeups
+
+### Backend
+
+- `backend/server.js`: Express API shell
+- `backend/build_graph.py`: original graph builder
+- `backend/new_build_graph.py`: modularity/community-based graph builder
+- `backend/cluster_persistence.py`: shared cluster persistence helper
+- `backend/match_collector.py`: Riot crawler
+- `backend/add_new_players.js`: raw player ingestion
+- `backend/normalize_players_by_puuid.js`: player normalization
+- `backend/pathfinder/`: Node pathfinder and Rust bridge
+- `backend/pathfinder-rust/`: Rust graph runtime and analytics
+- `backend/data/`: raw match JSON files
+- `backend/clusters/`: exported cluster JSON files
+- `backend/output/`: generated HTML/network artifacts
+
+### Frontend
+
+- `frontend/`: React + Vite application
+- `frontend/src/PathfinderLabPage.tsx`: pathfinder experience
+- `frontend/src/GraphSpherePage.tsx`: full 3D graph sphere
+- `frontend/src/SignedBalancePage.tsx`: signed-balance UI
+
+</details>
+
+## Graph And Cluster Model
+
+The project stores clusters as first-class database entities.
+
+Two cluster families coexist:
+
+- `python_population`
+  - produced by the Python pipeline
+  - used for population analysis and country inference
+- `rust_pathfinding`
+  - produced by the Rust runtime
+  - used for runtime graph structure, player focus, and heuristic support
+
+Persistence tables:
+
+- `clusters`
+- `cluster_members`
+
+Weak one-off noise is filtered by repeated-tie thresholds, currently centered on `weight >= 2`.
+
+## Pathfinder Model
+
+Supported path modes:
+
+- `social-path`
+  - ally-only traversal
+- `battle-path`
+  - traversal across ally and enemy relationships
+
+Weighted mode makes stronger repeated relationships cheaper to traverse.
+
+Rust A* currently uses:
+
+- landmark-based lower bounds
+- cluster-hop lower bounds
+- layout distance only as a tie-break
 
 ## Environment Variables
 
@@ -217,9 +256,32 @@ Useful variables across the project:
 
 ## Documentation
 
+The documentation set is intentionally cross-linked so the project can later be lifted into a thesis-style LaTeX structure with minimal reshuffling.
+
+- start from [New GUI Overview](docs/new-gui-overview.md) for the frontend narrative
+- use [Route Transition Overlay](docs/route-transition-overlay.md) for the motion-system subsection
+- use [Bird's-Eye 3D Sphere](docs/birdseye-3d-sphere.md) for the global 3D visualization subsection
+- use [Signed Balance Theory And Implementation](docs/signed-balance-theory.md) for the signed-network experiment subsection
+- use [Mock Datasets And Chaos Design](docs/mock-datasets-and-chaos-design.md) for synthetic evaluation and demo methodology
+- use [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md) for storage/runtime architecture
+- use [Pathfinder Backend Prototype Notes](docs/pathfinder-backend-prototype.md) for backend migration history
+
+- [New GUI Overview](docs/new-gui-overview.md)
+- [Route Transition Overlay](docs/route-transition-overlay.md)
+- [Bird's-Eye 3D Sphere](docs/birdseye-3d-sphere.md)
+- [Signed Balance Theory And Implementation](docs/signed-balance-theory.md)
+- [Mock Datasets And Chaos Design](docs/mock-datasets-and-chaos-design.md)
 - [Rust Backend Prototype Notes](docs/pathfinder-backend-prototype.md)
 - [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md)
 
 ## License
 
 This repository is licensed under the [MIT License](LICENSE).
+
+## Conclusions
+
+At this stage, the repository is best understood as a combined research and systems project:
+
+- the Rust runtime carries the algorithmic core
+- the frontend turns that core into a coherent interactive experience
+- the analytics and mock layers make the system easier to validate, explain, and later adapt into thesis chapters

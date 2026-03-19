@@ -1,6 +1,14 @@
 import React from "react";
+import {
+  RiPauseFill,
+  RiPlayFill,
+  RiRestartLine,
+  RiSkipBackFill,
+  RiSkipForwardFill,
+} from "react-icons/ri";
 import { type PlaybackState } from "./pathfinderTypes";
 import { useI18n } from "./i18n";
+import { buttonStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
 
 interface PlaybackControlsProps {
   playbackState: PlaybackState;
@@ -14,6 +22,45 @@ interface PlaybackControlsProps {
   onStepForward: () => void;
   onStepBackward: () => void;
   onSpeedChange: (value: number) => void;
+}
+
+function PlaybackIconButton({
+  label,
+  icon,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-disabled={disabled ? "true" : undefined}
+      title={label}
+      onClick={() => {
+        if (!disabled) {
+          onClick();
+        }
+      }}
+      style={{
+        ...buttonStyle("ghost"),
+        minWidth: "46px",
+        width: "46px",
+        height: "46px",
+        padding: 0,
+        display: "grid",
+        placeItems: "center",
+        opacity: disabled ? 0.42 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {icon}
+    </button>
+  );
 }
 
 export default function PlaybackControls({
@@ -33,11 +80,10 @@ export default function PlaybackControls({
   return (
     <section
       style={{
-        background: "#1d2127",
-        border: "1px solid #303741",
-        borderRadius: "18px",
+        ...surfaceCardStyle(),
         padding: "1rem",
-        color: "#f3f4f6",
+        color: "var(--text-primary)",
+        minWidth: 0,
       }}
     >
       {title ? (
@@ -51,28 +97,48 @@ export default function PlaybackControls({
             flexWrap: "wrap",
           }}
         >
-          <div style={{ fontWeight: 700, color: "#f3f4f6" }}>{title}</div>
-          {progressLabel ? <div style={{ color: "#9ca3af", fontSize: "0.88rem" }}>{progressLabel}</div> : null}
+          <div>
+            <div style={sectionLabelStyle()}>{t.pathfinder.playback}</div>
+            <div style={{ marginTop: "0.25rem", fontWeight: 700, color: "var(--text-primary)" }}>{title}</div>
+          </div>
+          {progressLabel ? <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>{progressLabel}</div> : null}
         </div>
       ) : null}
-      <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap", alignItems: "center" }}>
-        <button type="button" disabled={!canStep || playbackState === "playing"} onClick={onPlay}>
-          {t.pathfinder.play}
-        </button>
-        <button type="button" disabled={!canStep || playbackState !== "playing"} onClick={onPause}>
-          {t.pathfinder.pause}
-        </button>
-        <button type="button" disabled={!canStep} onClick={onStepBackward}>
-          {t.pathfinder.stepBack}
-        </button>
-        <button type="button" disabled={!canStep} onClick={onStepForward}>
-          {t.pathfinder.stepForward}
-        </button>
-        <button type="button" disabled={!canStep} onClick={onRestart}>
-          {t.pathfinder.restart}
-        </button>
+      <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap", alignItems: "center", minWidth: 0 }}>
+        <div style={{ display: "inline-flex", gap: "0.55rem", flexWrap: "wrap" }}>
+          <PlaybackIconButton
+            label={t.pathfinder.play}
+            disabled={!canStep || playbackState === "playing"}
+            onClick={onPlay}
+            icon={<RiPlayFill size={18} aria-hidden="true" />}
+          />
+          <PlaybackIconButton
+            label={t.pathfinder.pause}
+            disabled={!canStep || playbackState !== "playing"}
+            onClick={onPause}
+            icon={<RiPauseFill size={18} aria-hidden="true" />}
+          />
+          <PlaybackIconButton
+            label={t.pathfinder.stepBack}
+            disabled={!canStep}
+            onClick={onStepBackward}
+            icon={<RiSkipBackFill size={18} aria-hidden="true" />}
+          />
+          <PlaybackIconButton
+            label={t.pathfinder.stepForward}
+            disabled={!canStep}
+            onClick={onStepForward}
+            icon={<RiSkipForwardFill size={18} aria-hidden="true" />}
+          />
+          <PlaybackIconButton
+            label={t.pathfinder.restart}
+            disabled={!canStep}
+            onClick={onRestart}
+            icon={<RiRestartLine size={18} aria-hidden="true" />}
+          />
+        </div>
 
-        <label style={{ marginLeft: "auto", color: "#9ca3af", fontSize: "0.88rem" }}>
+        <label style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.88rem" }}>
           {t.pathfinder.speed}{" "}
           <select
             value={playbackSpeed}
@@ -80,9 +146,9 @@ export default function PlaybackControls({
             style={{
               marginLeft: "0.45rem",
               borderRadius: "10px",
-              border: "1px solid #39424d",
-              background: "#20252c",
-              color: "#f3f4f6",
+              border: "1px solid var(--border-strong)",
+              background: "rgba(10, 19, 28, 0.72)",
+              color: "var(--text-primary)",
               padding: "0.45rem 0.6rem",
             }}
           >
