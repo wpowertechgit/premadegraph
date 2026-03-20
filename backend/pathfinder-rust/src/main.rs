@@ -2,10 +2,11 @@ mod engine;
 mod models;
 
 use engine::{
-    build_graph_state, compare_algorithms, engine_spec_response, export_birdseye_bundle,
-    global_view_response, options_response, player_focus_response, run_search, signed_balance_analysis,
+    assortativity_analysis, build_graph_state, compare_algorithms, engine_spec_response,
+    export_birdseye_bundle, global_view_response, options_response, player_focus_response,
+    run_search, signed_balance_analysis,
 };
-use models::{CompareRequest, PathfinderRequest, SignedBalanceRequest};
+use models::{AssortativityRequest, CompareRequest, PathfinderRequest, SignedBalanceRequest};
 use std::env;
 use std::io::{self, Read};
 
@@ -74,6 +75,19 @@ fn main() {
                 serde_json::from_str(&input).expect("invalid signed balance payload")
             };
             serde_json::to_string(&signed_balance_analysis(
+                graph.get_or_insert_with(build_graph_state),
+                request,
+            ))
+            .unwrap()
+        }
+        "assortativity" => {
+            let input = read_stdin();
+            let request: AssortativityRequest = if input.trim().is_empty() {
+                serde_json::from_str("{}").expect("failed to build default assortativity request")
+            } else {
+                serde_json::from_str(&input).expect("invalid assortativity payload")
+            };
+            serde_json::to_string(&assortativity_analysis(
                 graph.get_or_insert_with(build_graph_state),
                 request,
             ))

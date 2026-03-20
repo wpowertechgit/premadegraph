@@ -19,6 +19,12 @@ This prototype keeps the existing frontend demo intact while adding an optional 
 - signed graph search execution
 - future migration planning to a faster engine runtime
 
+## In Plain Language
+
+This document explains the earlier stage where pathfinding started moving out of frontend-only logic and into a backend service.
+
+In simple terms, it is the "how we began turning the route-finding demo into a more serious backend-powered system" document.
+
 ![Pathfinder replay panel backed by the runtime contract](assets/demo_shots/pathfinder-replay-panel.png)
 
 ## Prototype Endpoints

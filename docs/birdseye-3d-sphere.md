@@ -24,6 +24,12 @@ It is built from two major parts:
 
 The key idea is simple: compute the heavy layout and graph artifacts ahead of time, then let the browser focus on rendering and interaction.
 
+## In Plain Language
+
+This document explains the big 3D graph view of the project.
+
+If someone just wants the simple version: this is the "fly around the whole player network" page. The backend prepares the heavy graph data first, and the frontend turns it into an explorable 3D scene.
+
 ![Bird's-eye sphere current state](assets/demo_shots/birds-eye-current-state.png)
 
 ![Association graph companion view](assets/demo_shots/associative-graph.png)

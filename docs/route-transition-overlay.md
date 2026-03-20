@@ -20,6 +20,12 @@ The implementation primarily lives in:
 - `frontend/src/RouteTransitionOverlay.tsx`
 - `frontend/src/index.css`
 
+## In Plain Language
+
+This document explains the animated page transitions between screens in the app.
+
+The simple purpose is to make navigation feel intentional instead of jarring. When the user changes pages, the old page fades out, the new page fades in, and the app feels more polished and easier to follow.
+
 ## Core Mechanism
 
 The app uses a two-stage navigation model:

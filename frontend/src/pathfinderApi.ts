@@ -9,16 +9,32 @@ import type {
 } from "./pathfinderTypes";
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
 import type { SignedBalanceRequest, SignedBalanceResponse } from "./signedBalanceTypes";
+import type { AssortativityRequest, AssortativityResponse } from "./assortativityTypes";
 
 const API_BASE = "http://localhost:3001/api/pathfinder";
 const RUST_API_BASE = "http://localhost:3001/api/pathfinder-rust";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload?.error || "Pathfinder backend request failed.");
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.error || "Pathfinder backend request failed.");
+    }
+    return payload as T;
   }
-  return payload as T;
+
+  const rawText = await response.text();
+  if (rawText.trimStart().startsWith("<!DOCTYPE") || rawText.trimStart().startsWith("<html")) {
+    throw new Error(
+      "The backend returned HTML instead of JSON. The backend server likely needs a restart so the new assortativity endpoint becomes available.",
+    );
+  }
+
+  throw new Error(
+    rawText.trim() || "Pathfinder backend returned a non-JSON response.",
+  );
 }
 
 export async function fetchPathfinderOptions(): Promise<PathfinderOptionsResponse> {
@@ -169,4 +185,16 @@ export async function runRustSignedBalance(request: SignedBalanceRequest): Promi
   });
 
   return parseJsonResponse<SignedBalanceResponse>(response);
+}
+
+export async function runRustAssortativity(request: AssortativityRequest): Promise<AssortativityResponse> {
+  const response = await fetch(`${RUST_API_BASE}/assortativity`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  return parseJsonResponse<AssortativityResponse>(response);
 }

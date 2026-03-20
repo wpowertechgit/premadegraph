@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
+  FaChartLine,
   FaChevronLeft,
   FaChevronRight,
   FaFireAlt,
@@ -129,6 +130,12 @@ export default function AppNavbar({
       label: t.app.nav.signedBalance,
       description: t.app.nav.signedBalanceDescription,
       icon: <FaFireAlt />,
+    },
+    {
+      to: "/assortativity",
+      label: t.app.nav.assortativity,
+      description: t.app.nav.assortativityDescription,
+      icon: <FaChartLine />,
     },
     {
       to: "/pathfinder-lab",

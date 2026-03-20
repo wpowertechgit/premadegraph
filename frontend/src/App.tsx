@@ -9,6 +9,7 @@ import RouteTransitionOverlay from "./RouteTransitionOverlay";
 const MatchAnalysisPage = lazy(() => import("./MatchAnalysisForm"));
 const GraphPage = lazy(() => import("./GraphPage"));
 const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
+const AssortativityPage = lazy(() => import("./AssortativityPage"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
 const TRANSITION_TOTAL_MS = 3000;
@@ -93,6 +94,14 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
             element={(
               <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
                 <SignedBalancePage />
+              </Suspense>
+            )}
+          />
+          <Route
+            path="/assortativity"
+            element={(
+              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                <AssortativityPage />
               </Suspense>
             )}
           />

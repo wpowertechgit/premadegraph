@@ -91,6 +91,15 @@ function normalizeSignedBalancePayload(payload = {}) {
   };
 }
 
+function normalizeAssortativityPayload(payload = {}) {
+  return {
+    minEdgeSupport: payload.minEdgeSupport,
+    minPlayerMatchCount: payload.minPlayerMatchCount,
+    strongTieThreshold: payload.strongTieThreshold,
+    includeClusterBreakdown: payload.includeClusterBreakdown,
+  };
+}
+
 function runSignedBalanceQueued(payload = {}) {
   const normalized = normalizeSignedBalancePayload(payload);
   const requestKey = JSON.stringify(normalized);
@@ -654,6 +663,17 @@ app.post("/api/pathfinder-rust/signed-balance", async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Rust signed balance analysis failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/assortativity", async (req, res) => {
+  try {
+    const payload = normalizeAssortativityPayload(req.body || {});
+    const response = await executeRustCommand("assortativity", payload);
+    res.json(response);
+  } catch (error) {
+    console.error("Rust assortativity analysis failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

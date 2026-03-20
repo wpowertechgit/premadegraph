@@ -2,7 +2,8 @@ use super::graph::GraphState;
 use crate::models::{
     SignedBalanceClusterSummary, SignedBalanceDecisions, SignedBalanceGraphSummary,
     SignedBalanceNodeSummary, SignedBalanceRequest, SignedBalanceResponse,
-    SignedBalanceTriadSummary, SignedTiePolicy, SignedTriadTypeCount,
+    SignedBalanceTriadSummary, SignedTiePolicy, SignedTriadExample, SignedTriadExampleEdge,
+    SignedTriadExampleNode, SignedTriadTypeCount,
 };
 use std::collections::{BTreeSet, HashMap};
 
@@ -107,6 +108,7 @@ struct AnalysisComputation {
     balanced_count: usize,
     unbalanced_count: usize,
     triad_distribution: [usize; 4],
+    example_triads: Vec<SignedTriadExample>,
     top_unbalanced_nodes: Vec<SignedBalanceNodeSummary>,
     cluster_summaries: Vec<SignedBalanceClusterSummary>,
 }
@@ -185,6 +187,7 @@ pub(super) fn signed_balance_response(
             balanced_ratio: ratio(computation.balanced_count, computation.triad_total),
         },
         triad_type_distribution,
+        example_triads: computation.example_triads,
         top_unbalanced_nodes: computation.top_unbalanced_nodes,
         cluster_summaries: computation.cluster_summaries,
         warnings,
@@ -257,6 +260,8 @@ fn analyze_projected_graph(
     }
 
     let mut triad_distribution = [0usize; 4];
+    let mut triad_examples: [Vec<SignedTriadExample>; 4] =
+        [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
     let mut triad_total = 0usize;
     let mut balanced_count = 0usize;
     let mut unbalanced_count = 0usize;
@@ -299,6 +304,19 @@ fn analyze_projected_graph(
                 let balanced = pattern.is_balanced();
                 triad_distribution[pattern.index()] += 1;
                 triad_total += 1;
+
+                if triad_examples[pattern.index()].len() < 2 {
+                    triad_examples[pattern.index()].push(build_example_triad(
+                        graph,
+                        left,
+                        middle,
+                        right,
+                        left_middle,
+                        left_right,
+                        middle_right,
+                        pattern,
+                    ));
+                }
 
                 if balanced {
                     balanced_count += 1;
@@ -388,8 +406,71 @@ fn analyze_projected_graph(
         balanced_count,
         unbalanced_count,
         triad_distribution,
+        example_triads: triad_examples.into_iter().flatten().collect(),
         top_unbalanced_nodes,
         cluster_summaries,
+    }
+}
+
+fn build_example_triad(
+    graph: &GraphState,
+    left: &str,
+    middle: &str,
+    right: &str,
+    left_middle: EdgeSign,
+    left_right: EdgeSign,
+    middle_right: EdgeSign,
+    pattern: TriadPattern,
+) -> SignedTriadExample {
+    SignedTriadExample {
+        triad_type: pattern.as_str().to_string(),
+        balanced: pattern.is_balanced(),
+        nodes: vec![
+            SignedTriadExampleNode {
+                player_id: left.to_string(),
+                label: node_label(graph, left),
+            },
+            SignedTriadExampleNode {
+                player_id: middle.to_string(),
+                label: node_label(graph, middle),
+            },
+            SignedTriadExampleNode {
+                player_id: right.to_string(),
+                label: node_label(graph, right),
+            },
+        ],
+        edges: vec![
+            SignedTriadExampleEdge {
+                from: left.to_string(),
+                to: middle.to_string(),
+                sign: edge_sign_value(left_middle),
+            },
+            SignedTriadExampleEdge {
+                from: left.to_string(),
+                to: right.to_string(),
+                sign: edge_sign_value(left_right),
+            },
+            SignedTriadExampleEdge {
+                from: middle.to_string(),
+                to: right.to_string(),
+                sign: edge_sign_value(middle_right),
+            },
+        ],
+    }
+}
+
+fn node_label(graph: &GraphState, player_id: &str) -> String {
+    graph
+        .node_map
+        .get(player_id)
+        .map(|node| node.label.clone())
+        .unwrap_or_else(|| player_id.to_string())
+}
+
+fn edge_sign_value(sign: EdgeSign) -> i8 {
+    match sign {
+        EdgeSign::Positive => 1,
+        EdgeSign::Negative => -1,
     }
 }
 
@@ -439,6 +520,7 @@ mod tests {
             node_map: HashMap::new(),
             adjacency: HashMap::new(),
             pair_relations: HashMap::new(),
+            player_rows: HashMap::new(),
             dataset: PrototypeDataset {
                 nodes: Vec::new(),
                 edges: Vec::new(),

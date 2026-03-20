@@ -41,6 +41,24 @@ export interface SignedTriadTypeCount {
   count: number;
 }
 
+export interface SignedTriadExampleNode {
+  playerId: string;
+  label: string;
+}
+
+export interface SignedTriadExampleEdge {
+  from: string;
+  to: string;
+  sign: 1 | -1;
+}
+
+export interface SignedTriadExample {
+  triadType: "+++" | "++-" | "+--" | "---" | string;
+  balanced: boolean;
+  nodes: SignedTriadExampleNode[];
+  edges: SignedTriadExampleEdge[];
+}
+
 export interface SignedBalanceNodeSummary {
   playerId: string;
   label: string;
@@ -64,6 +82,7 @@ export interface SignedBalanceResponse {
   graphSummary: SignedBalanceGraphSummary;
   triads: SignedBalanceTriadSummary;
   triadTypeDistribution: SignedTriadTypeCount[];
+  exampleTriads?: SignedTriadExample[];
   topUnbalancedNodes: SignedBalanceNodeSummary[];
   clusterSummaries: SignedBalanceClusterSummary[];
   warnings: string[];

@@ -18,6 +18,8 @@ interface PathfinderGraphSceneProps {
   onNodeActivate?: (node: GraphNode) => void;
 }
 
+const DEFAULT_VIEWPORT_ZOOM = 0.8;
+
 function edgeKey(from: string, to: string): string {
   return [from, to].sort().join("|");
 }
@@ -197,7 +199,7 @@ export default function PathfinderGraphScene({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [dimensions, setDimensions] = useState({ width: 960, height: variant === "overlay" ? 660 : 360 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(DEFAULT_VIEWPORT_ZOOM);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragStateRef = useRef<{ active: boolean; x: number; y: number; startX: number; startY: number; moved: boolean }>({
     active: false,
@@ -209,7 +211,7 @@ export default function PathfinderGraphScene({
   });
 
   useEffect(() => {
-    setZoom(1);
+    setZoom(DEFAULT_VIEWPORT_ZOOM);
     setOffset({ x: 0, y: 0 });
   }, [snapshot]);
 
@@ -485,7 +487,7 @@ export default function PathfinderGraphScene({
           type="button"
           style={toolButtonStyle}
           onClick={() => {
-            setZoom(1);
+            setZoom(DEFAULT_VIEWPORT_ZOOM);
             setOffset({ x: 0, y: 0 });
           }}
         >

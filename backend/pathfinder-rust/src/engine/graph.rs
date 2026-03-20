@@ -102,6 +102,7 @@ pub struct GraphState {
     pub(super) node_map: HashMap<String, GraphNode>,
     pub(super) adjacency: HashMap<String, Vec<Neighbor>>,
     pub(super) pair_relations: HashMap<String, PairRelation>,
+    pub(super) player_rows: HashMap<String, PlayerDbRow>,
     pub(super) dataset: PrototypeDataset,
     pub(super) population_snapshot: GraphSnapshot,
     pub(super) cluster_membership: HashMap<String, String>,
@@ -112,11 +113,12 @@ pub struct GraphState {
     pub(super) node_indices: HashMap<String, usize>,
 }
 
-#[derive(Default, Clone)]
-struct PlayerDbRow {
-    label: String,
-    opscore: f64,
-    feedscore: f64,
+#[derive(Default, Clone, Debug)]
+pub(super) struct PlayerDbRow {
+    pub(super) label: String,
+    pub(super) opscore: Option<f64>,
+    pub(super) feedscore: Option<f64>,
+    pub(super) match_count: u32,
 }
 
 #[derive(Default)]
@@ -301,6 +303,7 @@ pub fn build_graph_state() -> GraphState {
         node_map,
         adjacency,
         pair_relations,
+        player_rows,
         dataset,
         population_snapshot,
         cluster_membership,
@@ -423,7 +426,7 @@ fn open_read_write_db(db_path: &Path) -> rusqlite::Result<Connection> {
 fn load_player_rows(db_path: &Path) -> HashMap<String, PlayerDbRow> {
     let conn = open_read_only_db(db_path);
     let mut stmt = conn
-        .prepare("SELECT puuid, names, feedscore, opscore FROM players")
+        .prepare("SELECT puuid, names, feedscore, opscore, match_count FROM players")
         .expect("failed to prepare player query");
     let rows = stmt
         .query_map([], |row| {
@@ -431,12 +434,14 @@ fn load_player_rows(db_path: &Path) -> HashMap<String, PlayerDbRow> {
             let names: Option<String> = row.get(1)?;
             let feedscore: Option<f64> = row.get(2)?;
             let opscore: Option<f64> = row.get(3)?;
+            let match_count: Option<u32> = row.get(4)?;
             Ok((
                 puuid,
                 PlayerDbRow {
                     label: latest_name(names.as_deref().unwrap_or("")),
-                    opscore: opscore.unwrap_or(0.0),
-                    feedscore: feedscore.unwrap_or(0.0),
+                    opscore,
+                    feedscore,
+                    match_count: match_count.unwrap_or(0),
                 },
             ))
         })
@@ -584,13 +589,17 @@ fn build_clusters(
         for member in &members {
             cluster_membership.insert(member.clone(), cluster_id.clone());
             if let Some(row) = player_rows.get(member) {
-                if row.opscore > best_op_score {
-                    best_op_score = row.opscore;
-                    best_op = Some(member.clone());
+                if let Some(opscore) = row.opscore {
+                    if opscore > best_op_score {
+                        best_op_score = opscore;
+                        best_op = Some(member.clone());
+                    }
                 }
-                if row.feedscore > worst_feed_score {
-                    worst_feed_score = row.feedscore;
-                    worst_feed = Some(member.clone());
+                if let Some(feedscore) = row.feedscore {
+                    if feedscore > worst_feed_score {
+                        worst_feed_score = feedscore;
+                        worst_feed = Some(member.clone());
+                    }
                 }
             }
         }

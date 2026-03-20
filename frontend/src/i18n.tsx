@@ -15,6 +15,8 @@ type TranslationTree = {
       graphSphereDescription: string;
       signedBalance: string;
       signedBalanceDescription: string;
+      assortativity: string;
+      assortativityDescription: string;
       pathfinderLab: string;
       pathfinderLabDescription: string;
       generateGraph: string;
@@ -337,6 +339,18 @@ type TranslationTree = {
       clusterSize: string;
       localTriads: string;
       clusterSummariesText: string;
+      triadExamples: string;
+      triadExamplesText: string;
+      triadLegendPositive: string;
+      triadLegendNegative: string;
+      triadTypeAllPositive: string;
+      triadTypeTwoPositive: string;
+      triadTypeOnePositive: string;
+      triadTypeAllNegative: string;
+      triadMeaningAllPositive: string;
+      triadMeaningTwoPositive: string;
+      triadMeaningOnePositive: string;
+      triadMeaningAllNegative: string;
       documentationTitle: string;
       documentationIntro: string;
       docWhatTitle: string;
@@ -365,6 +379,8 @@ const translations: Record<Language, TranslationTree> = {
         graphSphereDescription: "Immersive 3D cluster and node exploration",
         signedBalance: "Signed Balance",
         signedBalanceDescription: "Signed-network balance experiment workspace",
+        assortativity: "Assortativity",
+        assortativityDescription: "Performance-metric correlation experiment page",
         pathfinderLab: "Pathfinder Lab",
         pathfinderLabDescription: "Algorithm comparison and replay theater",
         generateGraph: "Generate Graph",
@@ -687,6 +703,18 @@ const translations: Record<Language, TranslationTree> = {
       clusterSize: "Cluster size",
       localTriads: "Local triads",
       clusterSummariesText: "Cluster summaries are optional local views, useful for checking whether imbalance concentrates in a few communities.",
+      triadExamples: "Visual triad examples",
+      triadExamplesText: "These mini signed graphs make the four triad families visible before you interpret the counts. Green edges are ally ties and red edges are enemy ties.",
+      triadLegendPositive: "positive ally edge",
+      triadLegendNegative: "negative enemy edge",
+      triadTypeAllPositive: "friend of my friend is my friend",
+      triadTypeTwoPositive: "friend of my friend is my enemy",
+      triadTypeOnePositive: "enemy of my enemy is my friend",
+      triadTypeAllNegative: "enemy of my enemy is still my enemy",
+      triadMeaningAllPositive: "All three relationships are positive, so the local structure reads as mutually friendly and balanced.",
+      triadMeaningTwoPositive: "Two positive edges and one negative edge create a local contradiction, so this family is treated as unbalanced.",
+      triadMeaningOnePositive: "One positive edge and two negative edges resolve into the classic enemy-of-enemy-is-friend pattern, so this family is balanced.",
+      triadMeaningAllNegative: "All three relationships are negative, which leaves the triad fully hostile and structurally unbalanced in this interpretation.",
       documentationTitle: "What this experiment means",
       documentationIntro: "This section is the quick thesis/demo explanation for what you are looking at and how the controls change the output.",
       docWhatTitle: "What is a signed triad?",
@@ -713,6 +741,8 @@ const translations: Record<Language, TranslationTree> = {
         graphSphereDescription: "Magával ragadó 3D klaszter- és csomópontfelfedezés",
         signedBalance: "Strukturális egyensúly",
         signedBalanceDescription: "Előjeles hálózati egyensúlykísérlet munkaterület",
+        assortativity: "Asszortativitás",
+        assortativityDescription: "Teljesítménymutató-korrelációs kísérleti oldal",
         pathfinderLab: "Pathfinder Labor",
         pathfinderLabDescription: "Algoritmus-összehasonlítás és visszajátszás",
         generateGraph: "Gráf generálása",
@@ -1035,6 +1065,18 @@ const translations: Record<Language, TranslationTree> = {
       clusterSize: "Klaszter méret",
       localTriads: "Lokális triádok",
       clusterSummariesText: "A klaszterösszegzések opcionális lokális nézetek, hasznosak annak ellenőrzésére, hogy az egyensúlytalanság néhány közösségben sűrűsödik-e.",
+      triadExamples: "Vizuális triád példák",
+      triadExamplesText: "Ezek a mini előjeles gráfok láthatóvá teszik a négy triádcsaládot, mielőtt a számlálásokat értelmeznéd. A zöld élek ally kapcsolatokat, a piros élek enemy kapcsolatokat jelentenek.",
+      triadLegendPositive: "pozitív ally él",
+      triadLegendNegative: "negatív enemy él",
+      triadTypeAllPositive: "a barátom barátja a barátom",
+      triadTypeTwoPositive: "a barátom barátja az ellenségem",
+      triadTypeOnePositive: "az ellenségem ellensége a barátom",
+      triadTypeAllNegative: "az ellenségem ellensége is ellenség marad",
+      triadMeaningAllPositive: "Mindhárom kapcsolat pozitív, ezért a lokális szerkezet kölcsönösen barátinak és kiegyensúlyozottnak olvasható.",
+      triadMeaningTwoPositive: "Két pozitív és egy negatív él lokális ellentmondást hoz létre, ezért ezt a családot kiegyensúlyozatlannak kezeljük.",
+      triadMeaningOnePositive: "Egy pozitív és két negatív él a klasszikus ellenségem ellensége a barátom mintát adja, ezért ez a család kiegyensúlyozott.",
+      triadMeaningAllNegative: "Mindhárom kapcsolat negatív, így a triád teljesen ellenséges marad, ami ebben az értelmezésben strukturálisan kiegyensúlyozatlan.",
       documentationTitle: "Mit jelent ez a kísérlet?",
       documentationIntro: "Ez a rész a gyors thesis/demo magyarázat arra, hogy mit látsz, és hogyan módosítják a vezérlők a kimenetet.",
       docWhatTitle: "Mi az az előjeles triád?",

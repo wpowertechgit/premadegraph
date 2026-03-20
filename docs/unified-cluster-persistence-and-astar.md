@@ -21,6 +21,12 @@ The project now has two cluster systems that coexist in the same database:
 - `python_population`: population / country-analysis clusters produced by the Python graph pipeline
 - `rust_pathfinding`: strong-connection runtime clusters produced by the Rust graph engine
 
+## In Plain Language
+
+This document explains how the project's graph data is stored and how the faster route-finding system works.
+
+For a non-specialist, the short version is: player clusters are now saved properly in the database, and route finding is no longer just a lightweight demo trick. The system has a more serious Rust backend with exact A* search and reusable graph data.
+
 They serve different purposes and do not replace each other.
 
 ## Main Goals

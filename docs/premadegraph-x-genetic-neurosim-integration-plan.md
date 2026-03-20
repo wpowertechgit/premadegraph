@@ -18,6 +18,12 @@ It is intentionally planning-only.
 
 The purpose of the integration is not to claim an objective ranking of all players, and not to replace rank, MMR, or matchmaking systems. The purpose is to create an exploratory simulation framework in which player clusters derived from real match and graph data can be compared under a shared evolutionary environment.
 
+## In Plain Language
+
+This document is a future-work idea, not a description of something already built.
+
+In simple terms, it asks: if we take the player groups discovered by this project and feed them into a separate simulation system, what kinds of long-term patterns might appear? It is about exploration and research framing, not about declaring "who is best."
+
 ## Core Framing
 
 The integration should be described using the following principles:

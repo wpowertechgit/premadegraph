@@ -881,6 +881,7 @@ mod tests {
             node_map,
             adjacency,
             pair_relations,
+            player_rows: HashMap::new(),
             dataset: PrototypeDataset {
                 nodes,
                 edges: dataset_edges,

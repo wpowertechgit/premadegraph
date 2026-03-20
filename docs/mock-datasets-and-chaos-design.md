@@ -20,6 +20,12 @@ The main implementation lives in:
 - `frontend/src/pathfinderMocks.ts`
 - `frontend/src/signedBalanceMock.ts`
 
+## In Plain Language
+
+This document explains the fake but carefully designed demo datasets used by the project.
+
+The short version is: sometimes the real graph is too large or too messy for UI work and demos, so the project also keeps a smaller controlled graph that behaves in useful, explainable ways.
+
 ![Mock dataset pathfinder run](assets/demo_shots/mock-test-pathfinder-end.png)
 
 ## Why The Project Uses Mocks At All

@@ -21,6 +21,12 @@ The current GUI is no longer a single-purpose graph page. It has evolved into a 
 - a full 3D bird's-eye sphere
 - a signed-balance analysis page
 
+## In Plain Language
+
+This document is the easiest high-level introduction to the frontend.
+
+If somebody asks "what pages does this app have now, and what is each one for?", this is the document that answers that question without forcing them to dive into backend or algorithm details first.
+
 ![Match analysis page](assets/demo_shots/match-analysis-page.png)
 
 The main implementation lives in:

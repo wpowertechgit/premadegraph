@@ -22,6 +22,12 @@ Relevant implementation surfaces include:
 - `frontend/src/signedBalanceTypes.ts`
 - `frontend/src/signedBalanceMock.ts`
 
+## In Plain Language
+
+This document explains a simple social-graph question: when three players form a triangle of repeated ally and enemy relationships, does that triangle look stable or contradictory?
+
+The phrase "signed balance" sounds academic, but the core idea is familiar: friend-of-my-friend patterns often feel stable, while mixed friend-enemy patterns can feel inconsistent. This document explains how that idea is applied to the player graph.
+
 ![Signed balance theory page](assets/demo_shots/sign-page.png)
 
 ## Core Research Question
@@ -100,6 +106,15 @@ It includes:
 - interpretation notes
 
 The page tries to answer not only "what is the ratio?" but also "why did the ratio come out this way?"
+
+To support thesis demos and first-time users, the page should also keep a small visual triad gallery for the four canonical signed families:
+
+- `+++`
+- `++-`
+- `+--`
+- `---`
+
+These examples are not substitutes for the measured dataset. They are explanatory mini-graphs that help the user map each symbol pattern to a concrete local structure before interpreting the aggregate counts.
 
 ## Development Process Reasoning
 

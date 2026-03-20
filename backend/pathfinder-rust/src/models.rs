@@ -66,6 +66,18 @@ fn default_signed_balance_top_nodes() -> usize {
     10
 }
 
+fn default_assortativity_min_edge_support() -> u32 {
+    1
+}
+
+fn default_assortativity_min_player_match_count() -> u32 {
+    1
+}
+
+fn default_assortativity_strong_tie_threshold() -> u32 {
+    3
+}
+
 fn default_true() -> bool {
     true
 }
@@ -95,6 +107,19 @@ pub struct SignedBalanceRequest {
     pub max_top_nodes: usize,
     #[serde(default = "default_true")]
     pub include_cluster_summaries: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativityRequest {
+    #[serde(default = "default_assortativity_min_edge_support")]
+    pub min_edge_support: u32,
+    #[serde(default = "default_assortativity_min_player_match_count")]
+    pub min_player_match_count: u32,
+    #[serde(default = "default_assortativity_strong_tie_threshold")]
+    pub strong_tie_threshold: u32,
+    #[serde(default = "default_true")]
+    pub include_cluster_breakdown: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -295,6 +320,30 @@ pub struct SignedTriadTypeCount {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SignedTriadExampleNode {
+    pub player_id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedTriadExampleEdge {
+    pub from: String,
+    pub to: String,
+    pub sign: i8,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedTriadExample {
+    pub triad_type: String,
+    pub balanced: bool,
+    pub nodes: Vec<SignedTriadExampleNode>,
+    pub edges: Vec<SignedTriadExampleEdge>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignedBalanceNodeSummary {
     pub player_id: String,
     pub label: String,
@@ -322,7 +371,56 @@ pub struct SignedBalanceResponse {
     pub graph_summary: SignedBalanceGraphSummary,
     pub triads: SignedBalanceTriadSummary,
     pub triad_type_distribution: Vec<SignedTriadTypeCount>,
+    pub example_triads: Vec<SignedTriadExample>,
     pub top_unbalanced_nodes: Vec<SignedBalanceNodeSummary>,
     pub cluster_summaries: Vec<SignedBalanceClusterSummary>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativityDecisions {
+    pub graph_scope: String,
+    pub graph_modes: Vec<String>,
+    pub metrics: Vec<String>,
+    pub graph_mode_rule: String,
+    pub node_eligibility_rule: String,
+    pub assortativity_formula: String,
+    pub min_edge_support: u32,
+    pub min_player_match_count: u32,
+    pub strong_tie_threshold: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativitySample {
+    pub coefficient: Option<f64>,
+    pub sample_size: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativityMetricResult {
+    pub graph_mode: String,
+    pub metric: String,
+    pub eligible_nodes: usize,
+    pub candidate_edges: usize,
+    pub analyzed_edges: usize,
+    pub skipped_low_edge_support_edges: usize,
+    pub skipped_missing_metric_edges: usize,
+    pub skipped_low_match_count_edges: usize,
+    pub global: AssortativitySample,
+    pub within_cluster: AssortativitySample,
+    pub cross_cluster: AssortativitySample,
+    pub strong_ties: AssortativitySample,
+    pub weak_ties: AssortativitySample,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativityResponse {
+    pub status: String,
+    pub decisions: AssortativityDecisions,
+    pub results: Vec<AssortativityMetricResult>,
     pub warnings: Vec<String>,
 }

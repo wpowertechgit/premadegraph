@@ -5,6 +5,7 @@ import type {
   SignedBalanceNodeSummary,
   SignedBalanceRequest,
   SignedBalanceResponse,
+  SignedTriadExample,
   SignedTriadTypeCount,
 } from "./signedBalanceTypes";
 
@@ -120,6 +121,7 @@ export async function runSignedBalanceMock(
   } = buildMockProjection(request);
 
   const triadCounts = new Map<string, SignedTriadTypeCount>();
+  const triadExamples = new Map<string, SignedTriadExample[]>();
   const nodeStats = new Map<string, { total: number; unbalanced: number }>();
   const clusterStats = new Map<string, SignedBalanceClusterSummary>();
 
@@ -164,6 +166,23 @@ export async function runSignedBalanceMock(
         const current = triadCounts.get(triadType) ?? { triadType, balanced, count: 0 };
         current.count += 1;
         triadCounts.set(triadType, current);
+        const currentExamples = triadExamples.get(triadType) ?? [];
+        if (currentExamples.length < 2) {
+          currentExamples.push({
+            triadType,
+            balanced,
+            nodes: [a, b, c].map((playerId) => ({
+              playerId,
+              label: nodeById.get(playerId)?.label ?? playerId,
+            })),
+            edges: [
+              { from: a, to: b, sign: ab.sign },
+              { from: a, to: c, sign: ac.sign },
+              { from: b, to: c, sign: bc.sign },
+            ],
+          });
+          triadExamples.set(triadType, currentExamples);
+        }
 
         if (balanced) {
           balancedCount += 1;
@@ -273,6 +292,8 @@ export async function runSignedBalanceMock(
         balancedRatio,
       },
       triadTypeDistribution: sortTriadTypes(Array.from(triadCounts.values())),
+      exampleTriads: sortTriadTypes(Array.from(triadCounts.values()))
+        .flatMap((item) => triadExamples.get(item.triadType) ?? []),
       topUnbalancedNodes,
       clusterSummaries: request.includeClusterSummaries ? clusterSummaries : [],
       warnings: ["Mock dataset mode is enabled. This run uses the smaller Pathfinder Lab demo graph for explanation and demos."],

@@ -1,8 +1,10 @@
+mod assortativity;
 mod birdseye;
 mod graph;
 mod search;
 mod signed_balance;
 
+use self::assortativity::assortativity_response;
 use self::birdseye::export_birdseye_3d_artifacts;
 use self::graph::{
     global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
@@ -345,6 +347,13 @@ pub fn signed_balance_analysis(
     request: SignedBalanceRequest,
 ) -> SignedBalanceResponse {
     signed_balance_response(graph, request)
+}
+
+pub fn assortativity_analysis(
+    graph: &GraphState,
+    request: AssortativityRequest,
+) -> AssortativityResponse {
+    assortativity_response(graph, request)
 }
 
 pub fn export_birdseye_bundle() -> std::path::PathBuf {
