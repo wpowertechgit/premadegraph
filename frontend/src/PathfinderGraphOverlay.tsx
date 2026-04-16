@@ -104,6 +104,18 @@ export default function PathfinderGraphOverlay({
     setSelectedGraphNode(null);
   }, [algorithm, open, pathMode, sourcePlayerId, targetPlayerId, weightedMode]);
 
+  useEffect(() => {
+    if (!open) {
+      document.body.classList.remove("pathfinder-overlay-open");
+      return undefined;
+    }
+
+    document.body.classList.add("pathfinder-overlay-open");
+    return () => {
+      document.body.classList.remove("pathfinder-overlay-open");
+    };
+  }, [open]);
+
   const totalTraceSteps = run?.trace.length ?? 0;
   const playbackProgressLabel = totalTraceSteps > 0
     ? `${t.pathfinder.currentStep}: ${Math.min(currentStepIndex + 1, totalTraceSteps)} / ${totalTraceSteps}`
@@ -114,7 +126,13 @@ export default function PathfinderGraphOverlay({
       className="pathfinder-overlay"
       style={{
         position: "fixed",
-        background: "rgba(10, 12, 16, 0.78)",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: "var(--sidebar-width, 340px)",
+        background: "rgba(7, 10, 14, 0.42)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
         opacity: open ? 1 : 0,
         pointerEvents: open ? "auto" : "none",
         transition: "opacity 180ms ease",
@@ -126,11 +144,11 @@ export default function PathfinderGraphOverlay({
         className="pathfinder-overlay__dialog"
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(520px, 620px)",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(360px, 440px)",
           gap: "0.85rem",
-          background: "#171a1f",
-          border: "1px solid #313740",
-          borderRadius: "22px",
+          background: "rgba(23, 26, 31, 0.9)",
+          border: "1px solid rgba(84, 95, 110, 0.55)",
+          borderRadius: "28px",
           boxShadow: "0 30px 90px rgba(0, 0, 0, 0.45)",
           padding: "0.85rem",
           overflow: "hidden",

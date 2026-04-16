@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { Location } from "react-router-dom";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Alert, Snackbar } from "@mui/material";
 import { useI18n } from "./i18n";
 import AppNavbar from "./AppNavbar";
 import GraphSpherePage from "./GraphSpherePage";
@@ -12,9 +13,14 @@ const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 const AssortativityPage = lazy(() => import("./AssortativityPage"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
-const TRANSITION_TOTAL_MS = 3000;
-const TRANSITION_SWAP_MS = 1500;
+const TRANSITION_TOTAL_MS = 320;
+const TRANSITION_SWAP_MS = 160;
 const INSTANT_ROUTE_PATHS = new Set(["/graph-sphere"]);
+
+type FeedbackState = {
+  message: string;
+  severity: "success" | "error" | "info";
+};
 
 function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
   const { t } = useI18n();
@@ -123,10 +129,44 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
 function App() {
   const { t } = useI18n();
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [isMobileLayout, setIsMobileLayout] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 1200px)").matches : false,
+  );
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   React.useEffect(() => {
     document.title = t.app.title;
   }, [t.app.title]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1200px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobileLayout(event.matches);
+      if (!event.matches) {
+        setMobileNavOpen(false);
+      }
+    };
+
+    setIsMobileLayout(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      return;
+    }
+
+    setMobileNavOpen(false);
+  }, [isMobileLayout]);
+
+  const showFeedback = (message: string, severity: FeedbackState["severity"]) => {
+    setFeedback({ message, severity });
+  };
 
   const normalizePlayers = async () => {
     try {
@@ -139,10 +179,13 @@ function App() {
         throw new Error(result.error || t.app.alerts.normalizationError);
       }
 
-      alert(t.app.alerts.normalizationSuccess);
+      showFeedback(t.app.alerts.normalizationSuccess, "success");
     } catch (error) {
       console.error("Normalization request failed:", error);
-      alert(error instanceof Error ? `${t.app.alerts.errorPrefix}: ${error.message}` : t.app.alerts.normalizationError);
+      showFeedback(
+        error instanceof Error ? `${t.app.alerts.errorPrefix}: ${error.message}` : t.app.alerts.normalizationError,
+        "error",
+      );
     }
   };
 
@@ -156,23 +199,47 @@ function App() {
         throw new Error(t.app.alerts.graphGenerationFailed);
       }
 
-      alert(`${t.app.alerts.graphGenerated} ${t.app.alerts.refreshGraph}`);
+      showFeedback(`${t.app.alerts.graphGenerated} ${t.app.alerts.refreshGraph}`, "success");
     } catch (error) {
       console.error("Graph generation failed:", error);
-      alert(error instanceof Error ? `${t.app.alerts.genericError}: ${error.message}` : t.app.alerts.graphGenerationFailed);
+      showFeedback(
+        error instanceof Error ? `${t.app.alerts.genericError}: ${error.message}` : t.app.alerts.graphGenerationFailed,
+        "error",
+      );
     }
   };
 
   return (
     <BrowserRouter>
-      <div className={`app-shell${navCollapsed ? " is-collapsed" : ""}`}>
+      <div
+        className={`app-shell${navCollapsed ? " is-collapsed" : ""}${isMobileLayout ? " is-mobile-layout" : ""}${mobileNavOpen ? " is-mobile-nav-open" : ""}`}
+      >
         <AppNavbar
-          collapsed={navCollapsed}
+          collapsed={isMobileLayout ? false : navCollapsed}
           onToggleCollapsed={() => setNavCollapsed((current) => !current)}
           onGenerateGraph={generateGraph}
           onNormalizePlayers={normalizePlayers}
+          isMobileLayout={isMobileLayout}
+          mobileOpen={mobileNavOpen}
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          onCloseMobileNav={() => setMobileNavOpen(false)}
         />
-        <AppRoutes navCollapsed={navCollapsed} />
+        <AppRoutes navCollapsed={isMobileLayout ? false : navCollapsed} />
+        <Snackbar
+          open={Boolean(feedback)}
+          autoHideDuration={4200}
+          onClose={() => setFeedback(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        >
+          <Alert
+            onClose={() => setFeedback(null)}
+            severity={feedback?.severity ?? "info"}
+            variant="filled"
+            sx={{ width: "100%" }}
+          >
+            {feedback?.message ?? ""}
+          </Alert>
+        </Snackbar>
       </div>
     </BrowserRouter>
   );

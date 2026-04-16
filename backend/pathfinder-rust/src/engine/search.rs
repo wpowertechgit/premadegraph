@@ -102,6 +102,10 @@ fn should_record_trace(
         && (trace.len() < MAX_TRACE_STEPS_RESPONSE || phase == "resolve" || phase == "complete")
 }
 
+fn union_visited(left: &HashSet<String>, right: &HashSet<String>) -> HashSet<String> {
+    left.union(right).cloned().collect()
+}
+
 #[derive(Clone, Eq, PartialEq)]
 struct AStarState {
     total_cost: usize,
@@ -592,8 +596,8 @@ fn expand_frontier(
     };
     *expansions += 1;
 
-    let combined_visited: HashSet<String> = own_visited.union(other_visited).cloned().collect();
     if should_record_trace(request.options.include_trace, trace, "expand") {
+        let combined_visited = union_visited(own_visited, other_visited);
         push_trace_step(
             trace,
             *trace_step,
@@ -619,8 +623,8 @@ fn expand_frontier(
             queue.push_back(neighbor.id.clone());
         }
 
-        let combined_now: HashSet<String> = own_visited.union(other_visited).cloned().collect();
         if should_record_trace(request.options.include_trace, trace, "discover") {
+            let combined_now = union_visited(own_visited, other_visited);
             push_trace_step(
                 trace,
                 *trace_step,
@@ -715,8 +719,7 @@ pub(super) fn search_bidirectional(
         );
     }
 
-    let combined_visited: HashSet<String> =
-        source_visited.union(&target_visited).cloned().collect();
+    let combined_visited = union_visited(&source_visited, &target_visited);
 
     if meeting_node.is_none() {
         if should_record_trace(request.options.include_trace, &trace, "complete") {
@@ -877,7 +880,7 @@ mod tests {
             .map(|node| (node.id.clone(), node))
             .collect();
 
-        GraphState {
+        let mut graph = GraphState {
             node_map,
             adjacency,
             pair_relations,
@@ -896,21 +899,51 @@ mod tests {
             landmark_distances: HashMap::new(),
             min_costs: HashMap::new(),
             node_indices: HashMap::new(),
-        }
+        };
+
+        let mut ordered_nodes: Vec<String> = graph.node_map.keys().cloned().collect();
+        ordered_nodes.sort();
+        graph.node_indices = ordered_nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node_id)| (node_id.clone(), index))
+            .collect();
+
+        graph
     }
 
-    fn request(source: &str, target: &str, weighted_mode: bool) -> PathfinderRequest {
+    fn request(
+        source: &str,
+        target: &str,
+        algorithm: &str,
+        path_mode: &str,
+        weighted_mode: bool,
+    ) -> PathfinderRequest {
         PathfinderRequest {
             source_player_id: source.to_string(),
             target_player_id: target.to_string(),
-            algorithm: "dijkstra".to_string(),
-            path_mode: "social-path".to_string(),
+            algorithm: algorithm.to_string(),
+            path_mode: path_mode.to_string(),
             weighted_mode,
             options: PathfinderOptions {
                 include_trace: false,
                 max_steps: 100,
             },
         }
+    }
+
+    fn assert_astar_matches_dijkstra(graph: &GraphState, request: &PathfinderRequest) {
+        let mut dijkstra_request = request.clone();
+        dijkstra_request.algorithm = "dijkstra".to_string();
+        let mut astar_request = request.clone();
+        astar_request.algorithm = "astar".to_string();
+
+        let dijkstra = search_dijkstra(graph, &dijkstra_request);
+        let astar = search_astar(graph, &astar_request);
+
+        assert_eq!(astar.found, dijkstra.found);
+        assert_eq!(astar.path_nodes, dijkstra.path_nodes);
+        assert_eq!(astar.path_edges.len(), dijkstra.path_edges.len());
     }
 
     #[test]
@@ -920,7 +953,10 @@ mod tests {
             ("source", "zzz", "ally", 1, 1),
         ]);
 
-        let result = search_dijkstra(&graph, &request("source", "target", false));
+        let result = search_dijkstra(
+            &graph,
+            &request("source", "target", "dijkstra", "social-path", false),
+        );
 
         assert!(result.found);
         assert_eq!(result.path_nodes, vec!["source", "target"]);
@@ -935,9 +971,145 @@ mod tests {
             ("bridge", "target", "ally", 10, 10),
         ]);
 
-        let result = search_dijkstra(&graph, &request("source", "target", true));
+        let result = search_dijkstra(
+            &graph,
+            &request("source", "target", "dijkstra", "social-path", true),
+        );
 
         assert!(result.found);
         assert_eq!(result.path_nodes, vec!["source", "bridge", "target"]);
+    }
+
+    #[test]
+    fn astar_matches_dijkstra_on_unweighted_social_paths() {
+        let graph = graph_with_edges(&[
+            ("source", "a", "ally", 1, 1),
+            ("a", "target", "ally", 1, 1),
+            ("source", "b", "ally", 1, 1),
+            ("b", "c", "ally", 1, 1),
+            ("c", "target", "ally", 1, 1),
+        ]);
+
+        assert_astar_matches_dijkstra(
+            &graph,
+            &request("source", "target", "astar", "social-path", false),
+        );
+    }
+
+    #[test]
+    fn astar_matches_dijkstra_on_weighted_social_paths() {
+        let graph = graph_with_edges(&[
+            ("source", "target", "ally", 1, 1),
+            ("source", "bridge", "ally", 40, 40),
+            ("bridge", "target", "ally", 40, 40),
+            ("source", "detour", "ally", 5, 5),
+            ("detour", "target", "ally", 5, 5),
+        ]);
+
+        assert_astar_matches_dijkstra(
+            &graph,
+            &request("source", "target", "astar", "social-path", true),
+        );
+    }
+
+    #[test]
+    fn astar_matches_dijkstra_on_battle_paths() {
+        let graph = graph_with_edges(&[
+            ("source", "enemy_hop", "enemy", 0, 3),
+            ("enemy_hop", "target", "enemy", 0, 4),
+            ("source", "friend", "ally", 1, 1),
+            ("friend", "target", "ally", 1, 1),
+        ]);
+
+        assert_astar_matches_dijkstra(
+            &graph,
+            &request("source", "target", "astar", "battle-path", false),
+        );
+    }
+
+    #[test]
+    fn astar_handles_partial_cluster_metadata_safely() {
+        let mut graph = graph_with_edges(&[
+            ("source", "clustered", "ally", 3, 3),
+            ("clustered", "target", "ally", 3, 3),
+            ("source", "unclustered", "ally", 1, 1),
+            ("unclustered", "target", "ally", 1, 1),
+        ]);
+        graph
+            .cluster_membership
+            .insert("source".to_string(), "cluster-1".to_string());
+        graph
+            .cluster_membership
+            .insert("clustered".to_string(), "cluster-1".to_string());
+        graph
+            .cluster_membership
+            .insert("target".to_string(), "cluster-2".to_string());
+
+        assert_astar_matches_dijkstra(
+            &graph,
+            &request("source", "target", "astar", "social-path", false),
+        );
+    }
+
+    #[test]
+    fn astar_matches_dijkstra_on_tie_heavy_graphs() {
+        let graph = graph_with_edges(&[
+            ("source", "a", "ally", 1, 1),
+            ("a", "target", "ally", 1, 1),
+            ("source", "b", "ally", 1, 1),
+            ("b", "target", "ally", 1, 1),
+            ("source", "c", "ally", 1, 1),
+            ("c", "target", "ally", 1, 1),
+        ]);
+
+        assert_astar_matches_dijkstra(
+            &graph,
+            &request("source", "target", "astar", "social-path", false),
+        );
+    }
+
+    #[test]
+    fn astar_and_dijkstra_report_no_path_consistently() {
+        let graph = graph_with_edges(&[
+            ("source", "a", "ally", 1, 1),
+            ("target", "b", "ally", 1, 1),
+        ]);
+
+        assert_astar_matches_dijkstra(
+            &graph,
+            &request("source", "target", "astar", "social-path", false),
+        );
+        assert!(!search_astar(&graph, &request("source", "target", "astar", "social-path", false)).found);
+    }
+
+    #[test]
+    fn astar_handles_same_source_and_target() {
+        let graph = graph_with_edges(&[("source", "other", "ally", 1, 1)]);
+
+        let result = search_astar(
+            &graph,
+            &request("source", "source", "astar", "social-path", false),
+        );
+
+        assert!(result.found);
+        assert_eq!(result.path_nodes, vec!["source"]);
+    }
+
+    #[test]
+    fn bidirectional_finds_shortest_unweighted_path() {
+        let graph = graph_with_edges(&[
+            ("source", "target", "ally", 1, 1),
+            ("source", "long1", "ally", 1, 1),
+            ("long1", "long2", "ally", 1, 1),
+            ("long2", "target", "ally", 1, 1),
+        ]);
+
+        let result = search_bidirectional(
+            &graph,
+            &request("source", "target", "bidirectional", "social-path", false),
+        );
+
+        assert!(result.found);
+        assert_eq!(result.path_nodes, vec!["source", "target"]);
     }
 }

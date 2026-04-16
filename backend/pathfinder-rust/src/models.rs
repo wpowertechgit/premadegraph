@@ -171,6 +171,10 @@ pub struct PathfinderSummary {
     pub edges_considered: usize,
     pub runtime_ms: f64,
     pub backend_runtime_ms: f64,
+    pub graph_build_ms: f64,
+    pub search_runtime_ms: f64,
+    pub response_assembly_ms: f64,
+    pub total_runtime_ms: f64,
     pub trace_step_count: usize,
 }
 

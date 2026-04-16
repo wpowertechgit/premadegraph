@@ -1,9 +1,12 @@
 const fs = require("fs");
 const path = require("path");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 
 const rustProjectDir = path.resolve(__dirname, "..", "pathfinder-rust");
 const DEFAULT_MAX_BUFFER = 64 * 1024 * 1024;
+
+let daemonState = null;
+let nextRequestId = 1;
 
 function resolveMaxBuffer() {
   const parsed = Number(process.env.PATHFINDER_RUST_MAX_BUFFER || "");
@@ -23,23 +26,106 @@ function getRustBinaryCandidates() {
   ].filter(Boolean);
 }
 
-function resolveRustCommand(command) {
+function resolveRustExecutable() {
   for (const candidate of getRustBinaryCandidates()) {
     if (fs.existsSync(candidate)) {
-      return {
-        executable: candidate,
-        args: [command],
-      };
+      return candidate;
     }
   }
 
   return null;
 }
 
-function executeRustProcess(command, payload, { parseJson = true } = {}) {
-  const resolved = resolveRustCommand(command);
+function ensureDaemon() {
+  if (daemonState?.child && !daemonState.child.killed) {
+    return daemonState;
+  }
 
-  if (!resolved) {
+  const executable = resolveRustExecutable();
+  if (!executable) {
+    throw new Error(
+      "Rust pathfinder binary not found. Build backend/pathfinder-rust first or set PATHFINDER_RUST_BIN.",
+    );
+  }
+
+  const child = spawn(executable, ["serve"], {
+    cwd: rustProjectDir,
+    windowsHide: true,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const pending = new Map();
+  let stdoutBuffer = "";
+
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    stdoutBuffer += chunk;
+    let newlineIndex = stdoutBuffer.indexOf("\n");
+    while (newlineIndex >= 0) {
+      const line = stdoutBuffer.slice(0, newlineIndex).trim();
+      stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+      if (line) {
+        handleDaemonLine(pending, line);
+      }
+      newlineIndex = stdoutBuffer.indexOf("\n");
+    }
+  });
+
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk) => {
+    const text = chunk.trim();
+    if (text) {
+      console.log(`[rustBridge][daemon][stderr] ${text}`);
+    }
+  });
+
+  child.on("exit", (code, signal) => {
+    const error = new Error(`Rust daemon exited unexpectedly (code=${code ?? "null"}, signal=${signal ?? "null"}).`);
+    for (const entry of pending.values()) {
+      entry.reject(error);
+    }
+    pending.clear();
+    daemonState = null;
+  });
+
+  child.on("error", (error) => {
+    for (const entry of pending.values()) {
+      entry.reject(error);
+    }
+    pending.clear();
+    daemonState = null;
+  });
+
+  daemonState = { child, pending };
+  return daemonState;
+}
+
+function handleDaemonLine(pending, line) {
+  let message;
+  try {
+    message = JSON.parse(line);
+  } catch (error) {
+    console.error(`[rustBridge][daemon] invalid JSON line: ${line}`);
+    return;
+  }
+
+  const request = pending.get(message.id);
+  if (!request) {
+    return;
+  }
+  pending.delete(message.id);
+
+  if (!message.ok) {
+    request.reject(new Error(message.error || "Rust daemon command failed."));
+    return;
+  }
+
+  request.resolve(message.result);
+}
+
+function executeRustProcess(command, payload, { parseJson = true } = {}) {
+  const executable = resolveRustExecutable();
+
+  if (!executable) {
     return Promise.reject(
       new Error(
         "Rust pathfinder binary not found. Build backend/pathfinder-rust first or set PATHFINDER_RUST_BIN.",
@@ -50,11 +136,11 @@ function executeRustProcess(command, payload, { parseJson = true } = {}) {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
     console.log(
-      `[rustBridge] starting command="${command}" parseJson=${parseJson} executable="${resolved.executable}"`,
+      `[rustBridge] starting command="${command}" parseJson=${parseJson} executable="${executable}"`,
     );
     const child = execFile(
-      resolved.executable,
-      resolved.args,
+      executable,
+      [command],
       {
         cwd: rustProjectDir,
         windowsHide: true,
@@ -99,7 +185,33 @@ function executeRustProcess(command, payload, { parseJson = true } = {}) {
 }
 
 function executeRustCommand(command, payload) {
-  return executeRustProcess(command, payload, { parseJson: true });
+  if (command === "birdseye-3d-export") {
+    return executeRustProcess(command, payload, { parseJson: true });
+  }
+
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const daemon = ensureDaemon();
+    const id = nextRequestId++;
+    daemon.pending.set(id, {
+      resolve: (result) => {
+        const elapsedMs = Date.now() - startedAt;
+        console.log(
+          `[rustBridge][daemon] command="${command}" completed in ${elapsedMs}ms`,
+        );
+        resolve(result);
+      },
+      reject: (error) => {
+        const elapsedMs = Date.now() - startedAt;
+        console.error(
+          `[rustBridge][daemon] command="${command}" failed after ${elapsedMs}ms: ${error.message}`,
+        );
+        reject(error);
+      },
+    });
+
+    daemon.child.stdin.write(`${JSON.stringify({ id, command, payload: payload ?? null })}\n`);
+  });
 }
 
 function executeRustCommandRaw(command, payload) {

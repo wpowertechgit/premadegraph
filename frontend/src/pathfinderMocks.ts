@@ -905,14 +905,18 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
     return {
       request: baseRequest,
       status: "invalid_input",
-      summary: {
-      pathLength: 0,
-        nodesVisited: 0,
-        edgesConsidered: 0,
-        runtimeMs: 0,
-        backendRuntimeMs: 0,
-        traceStepCount: 0,
-      },
+	      summary: {
+	      pathLength: 0,
+	        nodesVisited: 0,
+	        edgesConsidered: 0,
+	        runtimeMs: 0,
+	        backendRuntimeMs: 0,
+	        graphBuildMs: 0,
+	        searchRuntimeMs: 0,
+	        responseAssemblyMs: 0,
+	        totalRuntimeMs: 0,
+	        traceStepCount: 0,
+	      },
       path: { nodes: [], edges: [] },
       trace: [],
       graphSnapshot: { nodes: [], edges: [] },
@@ -921,8 +925,12 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
   }
 
   const result = pickSearch(request);
-  const runtimeMs = makeRuntime(request.algorithm, result.trace.length, result.found);
-  const scenarioId = getScenarioId(request, result);
+	  const trace = request.options.includeTrace ? result.trace : [];
+	  const runtimeMs = makeRuntime(request.algorithm, trace.length, result.found);
+	  const searchRuntimeMs = Math.max(runtimeMs * 0.72, 0.01);
+	  const responseAssemblyMs = Math.max(runtimeMs * 0.18, 0.01);
+	  const graphBuildMs = Math.max(runtimeMs - searchRuntimeMs - responseAssemblyMs, 0.01);
+	  const scenarioId = getScenarioId(request, result);
 
   const warnings: string[] = [];
   if (scenarioId === "friend_only_disconnected") {
@@ -944,19 +952,23 @@ function buildResponse(request: PathfinderRequest): PathfinderRunResponse {
         : result.found
           ? "found"
           : "not_found",
-    summary: {
-      pathLength: Math.max(result.pathNodes.length - 1, 0),
-      nodesVisited: result.visitedCount,
-      edgesConsidered: result.edgesConsidered,
-      runtimeMs,
-      backendRuntimeMs: runtimeMs,
-      traceStepCount: result.trace.length,
-    },
+	    summary: {
+	      pathLength: Math.max(result.pathNodes.length - 1, 0),
+	      nodesVisited: result.visitedCount,
+	      edgesConsidered: result.edgesConsidered,
+	      runtimeMs,
+	      backendRuntimeMs: runtimeMs,
+	      graphBuildMs,
+	      searchRuntimeMs,
+	      responseAssemblyMs,
+	      totalRuntimeMs: runtimeMs,
+	      traceStepCount: trace.length,
+	    },
     path: {
       nodes: result.pathNodes,
       edges: result.pathEdges,
     },
-    trace: result.trace,
+	    trace,
     graphSnapshot: getMockGraphSnapshot(request.pathMode, request.sourcePlayerId, request.targetPlayerId),
     warnings,
   };
@@ -1008,21 +1020,21 @@ export function getComparisonRows(
       algorithm,
       pathMode: "social-path",
       weightedMode,
-      options: {
-        includeTrace: true,
-        maxSteps: 5000,
-      },
-    });
+	      options: {
+	        includeTrace: false,
+	        maxSteps: 5000,
+	      },
+	    });
     const battleRun = buildResponse({
       sourcePlayerId,
       targetPlayerId,
       algorithm,
       pathMode: "battle-path",
       weightedMode,
-      options: {
-        includeTrace: true,
-        maxSteps: 5000,
-      },
+	      options: {
+	        includeTrace: false,
+	        maxSteps: 5000,
+	      },
     });
     const activeRun = currentMode === "social-path" ? socialRun : battleRun;
 

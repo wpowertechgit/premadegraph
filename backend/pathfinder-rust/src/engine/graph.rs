@@ -13,7 +13,7 @@ const MIN_CLUSTER_EDGE_WEIGHT: u32 = 2;
 const MAX_SNAPSHOT_CLUSTER_NODES: usize = 10;
 const MIN_LANDMARKS: usize = 8;
 const MAX_LANDMARKS: usize = 64;
-const WEIGHT_COST_SCALE: usize = 1000;
+const WEIGHT_COST_SCALE: usize = 1_000_000;
 const INF_DISTANCE: usize = usize::MAX / 4;
 
 #[derive(Debug, Clone)]
@@ -294,7 +294,12 @@ pub fn build_graph_state() -> GraphState {
         .map(|(index, node_id)| (node_id.clone(), index))
         .collect();
     let cluster_hops = build_cluster_hops(&pair_relations, &cluster_membership);
-    let landmarks = choose_landmarks(&cluster_records, &bridge_nodes);
+    let landmarks = choose_landmarks(
+        &adjacency,
+        &cluster_records,
+        &bridge_nodes,
+        &cluster_membership,
+    );
     let min_costs = build_min_costs(&adjacency);
     let landmark_distances =
         build_landmark_distances(&adjacency, &node_indices, &ordered_nodes, &landmarks);
@@ -897,35 +902,52 @@ fn build_cluster_hops(
 }
 
 fn choose_landmarks(
+    adjacency: &HashMap<String, Vec<Neighbor>>,
     cluster_records: &[ClusterRecord],
     bridge_nodes: &HashSet<String>,
+    cluster_membership: &HashMap<String, String>,
 ) -> Vec<String> {
-    let total_nodes = cluster_records
-        .iter()
-        .map(|cluster| cluster.members.len())
-        .sum::<usize>();
+    let total_nodes = adjacency.len();
     let landmark_budget = adaptive_landmark_budget(total_nodes);
     if landmark_budget == 0 {
         return Vec::new();
     }
 
-    let cluster_candidates: Vec<Vec<String>> = cluster_records
+    let representative_nodes: HashSet<String> = cluster_records
         .iter()
-        .map(|cluster| cluster_landmark_candidates(cluster, bridge_nodes))
+        .flat_map(|cluster| {
+            cluster
+                .best_op
+                .iter()
+                .cloned()
+                .chain(cluster.highlighted_members.iter().cloned())
+        })
         .collect();
-    let mut cluster_offsets = vec![0usize; cluster_candidates.len()];
+    let component_candidates: Vec<Vec<String>> = connected_components(adjacency)
+        .into_iter()
+        .map(|component| {
+            component_landmark_candidates(
+                adjacency,
+                &component,
+                bridge_nodes,
+                cluster_membership,
+                &representative_nodes,
+            )
+        })
+        .collect();
+    let mut component_offsets = vec![0usize; component_candidates.len()];
     let mut landmarks = Vec::new();
     let mut used = HashSet::new();
 
     loop {
         let mut progressed = false;
-        for (cluster_index, candidates) in cluster_candidates.iter().enumerate() {
+        for (component_index, candidates) in component_candidates.iter().enumerate() {
             if landmarks.len() >= landmark_budget {
                 break;
             }
 
-            while let Some(candidate) = candidates.get(cluster_offsets[cluster_index]) {
-                cluster_offsets[cluster_index] += 1;
+            while let Some(candidate) = candidates.get(component_offsets[component_index]) {
+                component_offsets[component_index] += 1;
                 if used.insert(candidate.clone()) {
                     landmarks.push(candidate.clone());
                     progressed = true;
@@ -954,32 +976,69 @@ fn adaptive_landmark_budget(total_nodes: usize) -> usize {
         .clamp(MIN_LANDMARKS, MAX_LANDMARKS)
 }
 
-fn cluster_landmark_candidates(
-    cluster: &ClusterRecord,
+fn component_landmark_candidates(
+    adjacency: &HashMap<String, Vec<Neighbor>>,
+    component: &[String],
     bridge_nodes: &HashSet<String>,
+    cluster_membership: &HashMap<String, String>,
+    representative_nodes: &HashSet<String>,
 ) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut candidates = Vec::new();
-
-    for member in &cluster.members {
-        if bridge_nodes.contains(member) && seen.insert(member.clone()) {
-            candidates.push(member.clone());
-        }
-    }
-
-    if let Some(best_op) = &cluster.best_op {
-        if seen.insert(best_op.clone()) {
-            candidates.push(best_op.clone());
-        }
-    }
-
-    for member in &cluster.members {
-        if seen.insert(member.clone()) {
-            candidates.push(member.clone());
-        }
-    }
-
+    let mut candidates = component.to_vec();
+    candidates.sort_by(|left, right| {
+        let left_bridge = bridge_nodes.contains(left);
+        let right_bridge = bridge_nodes.contains(right);
+        let left_representative = representative_nodes.contains(left);
+        let right_representative = representative_nodes.contains(right);
+        let left_clustered = cluster_membership.contains_key(left);
+        let right_clustered = cluster_membership.contains_key(right);
+        right_bridge
+            .cmp(&left_bridge)
+            .then_with(|| right_representative.cmp(&left_representative))
+            .then_with(|| right_clustered.cmp(&left_clustered))
+            .then_with(|| {
+                node_strength_from_adjacency(adjacency, right)
+                    .cmp(&node_strength_from_adjacency(adjacency, left))
+            })
+            .then_with(|| {
+                adjacency
+                    .get(right)
+                    .map(|neighbors| neighbors.len())
+                    .unwrap_or(0)
+                    .cmp(&adjacency.get(left).map(|neighbors| neighbors.len()).unwrap_or(0))
+            })
+            .then_with(|| left.cmp(right))
+    });
     candidates
+}
+
+fn connected_components(adjacency: &HashMap<String, Vec<Neighbor>>) -> Vec<Vec<String>> {
+    let mut visited = HashSet::new();
+    let mut components = Vec::new();
+    let mut node_ids: Vec<String> = adjacency.keys().cloned().collect();
+    node_ids.sort();
+
+    for node_id in node_ids {
+        if !visited.insert(node_id.clone()) {
+            continue;
+        }
+
+        let mut queue = VecDeque::from([node_id]);
+        let mut component = Vec::new();
+        while let Some(current) = queue.pop_front() {
+            component.push(current.clone());
+            for neighbor in adjacency.get(&current).into_iter().flatten() {
+                if visited.insert(neighbor.id.clone()) {
+                    queue.push_back(neighbor.id.clone());
+                }
+            }
+        }
+
+        component.sort();
+        components.push(component);
+    }
+
+    components.sort_by_key(|component| Reverse(component.len()));
+    components
 }
 
 fn traversal_cost(weighted: bool, weight: u32) -> usize {
@@ -1125,8 +1184,14 @@ pub(super) fn build_path(
 }
 
 fn node_strength(graph: &GraphState, node_id: &str) -> u32 {
-    graph
-        .adjacency
+    node_strength_from_adjacency(&graph.adjacency, node_id)
+}
+
+fn node_strength_from_adjacency(
+    adjacency: &HashMap<String, Vec<Neighbor>>,
+    node_id: &str,
+) -> u32 {
+    adjacency
         .get(node_id)
         .map(|neighbors| {
             neighbors
@@ -1491,8 +1556,29 @@ mod tests {
             "c2".to_string(),
             "d4".to_string(),
         ]);
+        let mut adjacency = HashMap::new();
+        let mut cluster_membership = HashMap::new();
+        for cluster in &clusters {
+            for member in &cluster.members {
+                cluster_membership.insert(member.clone(), cluster.cluster_id.clone());
+                adjacency.insert(
+                    member.clone(),
+                    cluster
+                        .members
+                        .iter()
+                        .filter(|candidate| *candidate != member)
+                        .map(|candidate| Neighbor {
+                            id: candidate.clone(),
+                            ally_weight: 3,
+                            total_matches: 3,
+                            dominant_relation: "ally".to_string(),
+                        })
+                        .collect(),
+                );
+            }
+        }
 
-        let landmarks = choose_landmarks(&clusters, &bridge_nodes);
+        let landmarks = choose_landmarks(&adjacency, &clusters, &bridge_nodes, &cluster_membership);
 
         assert_eq!(landmarks.len(), 8);
         assert!(landmarks.contains(&"a2".to_string()));

@@ -27,7 +27,8 @@ RUN pip install --no-cache-dir networkx pyvis
 
 COPY . .
 
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
+    && chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 3001
 

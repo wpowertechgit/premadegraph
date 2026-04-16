@@ -359,18 +359,18 @@ export default function PathfinderLabPage() {
       : false;
 
     setLoading(true);
-    try {
-      const request = {
-        sourcePlayerId: nextSourcePlayerId,
-        targetPlayerId: nextTargetPlayerId,
-        algorithm: nextAlgorithm,
-        pathMode: nextPathMode,
-        weightedMode: nextWeightedMode,
-        options: {
-          includeTrace: true,
-          maxSteps: 50000,
-        },
-      };
+	    try {
+	      const request = {
+	        sourcePlayerId: nextSourcePlayerId,
+	        targetPlayerId: nextTargetPlayerId,
+	        algorithm: nextAlgorithm,
+	        pathMode: nextPathMode,
+	        weightedMode: nextWeightedMode,
+	        options: {
+	          includeTrace: false,
+	          maxSteps: 50000,
+	        },
+	      };
       const cacheKey = buildRunCacheKey(
         executionMode,
         nextSourcePlayerId,
@@ -378,14 +378,62 @@ export default function PathfinderLabPage() {
         nextPathMode,
         nextWeightedMode,
         datasetSummary.players,
-      );
-      const cachedReplay = replayCacheRef.current.get(cacheKey);
-      if (cachedReplay) {
-        const cachedRun = cachedReplay.algorithmRuns.find((item) => item.request.algorithm === nextAlgorithm);
-        if (cachedRun) {
-          const updatedReplay = {
-            ...cachedReplay,
-            selectedAlgorithm: nextAlgorithm,
+	      );
+	      const cachedReplay = replayCacheRef.current.get(cacheKey);
+	      if (cachedReplay) {
+	        const cachedRun = cachedReplay.algorithmRuns.find((item) => item.request.algorithm === nextAlgorithm);
+	        if (cachedRun) {
+	          if (cachedRun.trace.length === 0 && executionMode !== "frontend-demo") {
+	            const tracedRunRequest = {
+	              ...request,
+	              algorithm: nextAlgorithm,
+	              weightedMode: nextAlgorithm === "dijkstra" || nextAlgorithm === "astar"
+	                ? nextWeightedMode
+	                : false,
+	              options: {
+	                ...request.options,
+	                includeTrace: true,
+	              },
+	            };
+	            const tracedRun = executionMode === "backend"
+	              ? await runPathfinderBackend(tracedRunRequest)
+	              : await runRustPathfinderBackend(tracedRunRequest);
+	            const refreshedReplay = {
+	              ...cachedReplay,
+	              selectedAlgorithm: nextAlgorithm,
+	              algorithmRuns: cachedReplay.algorithmRuns.map((item) => (
+	                item.request.algorithm === nextAlgorithm ? tracedRun : item
+	              )),
+	            };
+	            replayCacheRef.current.set(refreshedReplay.cacheKey, refreshedReplay);
+	            setSavedReplays((current) => current.map((item) => item.id === refreshedReplay.id ? refreshedReplay : item));
+	            void savePathfinderReplay({
+	              cacheKey: refreshedReplay.cacheKey,
+	              title: refreshedReplay.title,
+	              executionMode: refreshedReplay.executionMode,
+	              sourcePlayerId: refreshedReplay.sourcePlayerId,
+	              targetPlayerId: refreshedReplay.targetPlayerId,
+	              sourceLabel: refreshedReplay.sourceLabel,
+	              targetLabel: refreshedReplay.targetLabel,
+	              datasetPlayerCount: refreshedReplay.datasetPlayerCount,
+	              pathMode: refreshedReplay.pathMode,
+	              weightedMode: refreshedReplay.weightedMode,
+	              selectedAlgorithm: refreshedReplay.selectedAlgorithm,
+	              comparisonRows: refreshedReplay.comparisonRows,
+	              algorithmRuns: refreshedReplay.algorithmRuns,
+	            }).catch((error) => {
+	              console.error("Failed to refresh traced replay run:", error);
+	            });
+	            setComparisonRows(refreshedReplay.comparisonRows);
+	            setRun(decorateRun(tracedRun, refreshedReplay, true));
+	            const matchingRow = refreshedReplay.comparisonRows.find((row) => row.algorithm === nextAlgorithm);
+	            setComparisonNote(matchingRow?.relativeNote ?? t.pathfinder.comparisonUnavailable);
+	            return;
+	          }
+
+	          const updatedReplay = {
+	            ...cachedReplay,
+	            selectedAlgorithm: nextAlgorithm,
           };
           replayCacheRef.current.set(updatedReplay.cacheKey, updatedReplay);
           setSavedReplays((current) => current.map((item) => item.id === updatedReplay.id ? updatedReplay : item));
@@ -414,16 +462,20 @@ export default function PathfinderLabPage() {
         }
       }
 
-      const executeRun = (algorithmToRun: AlgorithmId) => {
-        const perAlgorithmRequest = {
-          ...request,
-          algorithm: algorithmToRun,
-          weightedMode: algorithmToRun === "dijkstra" || algorithmToRun === "astar"
-            ? nextWeightedMode
-            : false,
-        };
-        return executionMode === "backend"
-          ? runPathfinderBackend(perAlgorithmRequest)
+	      const executeRun = (algorithmToRun: AlgorithmId) => {
+	        const perAlgorithmRequest = {
+	          ...request,
+	          algorithm: algorithmToRun,
+	          weightedMode: algorithmToRun === "dijkstra" || algorithmToRun === "astar"
+	            ? nextWeightedMode
+	            : false,
+	          options: {
+	            ...request.options,
+	            includeTrace: algorithmToRun === nextAlgorithm,
+	          },
+	        };
+	        return executionMode === "backend"
+	          ? runPathfinderBackend(perAlgorithmRequest)
           : executionMode === "rust-backend"
             ? runRustPathfinderBackend(perAlgorithmRequest)
             : runPathfinderMock(perAlgorithmRequest);
@@ -519,6 +571,28 @@ export default function PathfinderLabPage() {
               <p style={{ margin: 0, maxWidth: "860px", color: "var(--text-muted)" }}>
                 {t.pathfinder.pageDescription}
               </p>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "0.75rem",
+                  marginTop: "1rem",
+                  maxWidth: "960px",
+                }}
+              >
+                <div style={{ ...surfaceCardStyle(), padding: "0.85rem 0.95rem" }}>
+                  <div style={sectionLabelStyle()}>{t.pathfinder.whatGraphShows}</div>
+                  <div style={{ marginTop: "0.35rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
+                    {t.pathfinder.whatGraphShowsText}
+                  </div>
+                </div>
+                <div style={{ ...surfaceCardStyle(), padding: "0.85rem 0.95rem" }}>
+                  <div style={sectionLabelStyle()}>{t.pathfinder.pathModes}</div>
+                  <div style={{ marginTop: "0.35rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
+                    {t.pathfinder.pathModesText}
+                  </div>
+                </div>
+              </div>
             </div>
             <button
               type="button"
@@ -542,6 +616,20 @@ export default function PathfinderLabPage() {
             minWidth: 0,
           }}
           >
+          <div
+            style={{
+              ...surfaceCardStyle(),
+              borderRadius: "16px",
+              padding: "0.9rem 1rem",
+              minWidth: 0,
+              gridColumn: "1 / -1",
+            }}
+          >
+            <div style={sectionLabelStyle()}>{t.pathfinder.algorithmsPlayback}</div>
+            <div style={{ color: "var(--text-muted)", marginTop: "0.3rem", lineHeight: 1.55 }}>
+              {t.pathfinder.algorithmsPlaybackText}
+            </div>
+          </div>
           {[
             { label: t.pathfinder.availablePlayers, value: datasetSummary.players },
             { label: t.pathfinder.relationships, value: datasetSummary.relationships },
@@ -640,55 +728,6 @@ export default function PathfinderLabPage() {
           onRun={handleRun}
           onReset={resetPrototype}
         />
-
-        <section
-          style={{
-            ...surfaceCardStyle(),
-            padding: "1rem",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "1rem",
-            minWidth: 0,
-          }}
-        >
-          <div>
-            <div style={sectionLabelStyle()}>
-              {t.pathfinder.whatGraphShows}
-            </div>
-            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {t.pathfinder.whatGraphShowsText}
-            </div>
-          </div>
-          <div>
-            <div style={sectionLabelStyle()}>
-              {t.pathfinder.pathModes}
-            </div>
-            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {t.pathfinder.pathModesText}
-            </div>
-          </div>
-          <div>
-            <div style={sectionLabelStyle()}>
-              {t.pathfinder.algorithmsPlayback}
-            </div>
-            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {t.pathfinder.algorithmsPlaybackText}
-            </div>
-          </div>
-          <div>
-            <div style={sectionLabelStyle()}>
-              {t.pathfinder.activeExecution}
-            </div>
-            <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {t.pathfinder.currentModePrefix}: {getExecutionLabel(executionMode, {
-                nodeBackend: t.pathfinder.nodeBackend,
-                rustBackend: t.pathfinder.rustBackend,
-                browserReplay: t.pathfinder.browserReplay,
-              })}.
-              {engineSpec ? ` ${t.pathfinder.activeExecutionTextWithSpec}` : ` ${t.pathfinder.activeExecutionTextWithoutSpec}`}
-            </div>
-          </div>
-        </section>
 
         <div
           className="pathfinder-lab__two-up"

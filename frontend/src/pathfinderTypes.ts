@@ -69,6 +69,10 @@ export interface PathfinderRunResponse {
     edgesConsidered: number;
     runtimeMs: number;
     backendRuntimeMs: number;
+    graphBuildMs: number;
+    searchRuntimeMs: number;
+    responseAssemblyMs: number;
+    totalRuntimeMs: number;
     traceStepCount: number;
   };
   path: {

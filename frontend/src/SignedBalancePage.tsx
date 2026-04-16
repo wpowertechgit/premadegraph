@@ -648,9 +648,25 @@ export default function SignedBalancePage() {
           >
             <div style={{ display: "grid", gap: "0.8rem" }}>
               <div style={{ ...miniLabelStyle(), color: "#dcc7ff" }}>{t.signedBalance.controls}</div>
-              <div style={{ fontSize: "1.7rem", fontWeight: 750, lineHeight: 1.05 }}>Set the projection before you read the evidence</div>
+              <div style={{ fontSize: "1.7rem", fontWeight: 750, lineHeight: 1.05 }}>
+                {t.signedBalance.documentationTitle}
+              </div>
               <div style={{ color: AMETHYST.muted, lineHeight: 1.75 }}>
-                The experiment is only meaningful if the graph scope, sign decisions, and local detail level are explicit up front.
+                {t.signedBalance.documentationIntro}
+              </div>
+              <div style={{ display: "grid", gap: "0.7rem" }}>
+                <div style={{ ...foldedPaperStyle(), padding: "0.9rem 1rem", display: "grid", gap: "0.3rem" }}>
+                  <div style={{ fontWeight: 700 }}>{t.signedBalance.docWhatTitle}</div>
+                  <div style={{ color: AMETHYST.muted, lineHeight: 1.6 }}>{t.signedBalance.docWhatText}</div>
+                </div>
+                <div style={{ ...foldedPaperStyle(), padding: "0.9rem 1rem", display: "grid", gap: "0.3rem" }}>
+                  <div style={{ fontWeight: 700 }}>{t.signedBalance.docBalancedTitle}</div>
+                  <div style={{ color: AMETHYST.muted, lineHeight: 1.6 }}>{t.signedBalance.docBalancedText}</div>
+                </div>
+                <div style={{ ...foldedPaperStyle(), padding: "0.9rem 1rem", display: "grid", gap: "0.3rem" }}>
+                  <div style={{ fontWeight: 700 }}>{t.signedBalance.howToReadTitle}</div>
+                  <div style={{ color: AMETHYST.muted, lineHeight: 1.6 }}>{t.signedBalance.howToReadText}</div>
+                </div>
               </div>
               <div
                 style={{

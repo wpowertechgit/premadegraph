@@ -546,12 +546,12 @@ app.post("/api/pathfinder/run", (req, res) => {
       targetPlayerId: payload.targetPlayerId,
       algorithm: payload.algorithm,
       pathMode: payload.pathMode,
-      weightedMode: payload.weightedMode,
-      options: {
-        includeTrace: payload.options?.includeTrace !== false,
-        maxSteps: payload.options?.maxSteps || 5000,
-      },
-    });
+	      weightedMode: payload.weightedMode,
+	      options: {
+	        includeTrace: payload.options?.includeTrace === true,
+	        maxSteps: payload.options?.maxSteps || 5000,
+	      },
+	    });
     res.json(response);
   } catch (error) {
     console.error("Pathfinder prototype run failed:", error);
@@ -614,12 +614,12 @@ app.post("/api/pathfinder-rust/run", async (req, res) => {
       targetPlayerId: payload.targetPlayerId,
       algorithm: payload.algorithm,
       pathMode: payload.pathMode,
-      weightedMode: payload.weightedMode,
-      options: {
-        includeTrace: payload.options?.includeTrace !== false,
-        maxSteps: payload.options?.maxSteps || 5000,
-      },
-    });
+	      weightedMode: payload.weightedMode,
+	      options: {
+	        includeTrace: payload.options?.includeTrace === true,
+	        maxSteps: payload.options?.maxSteps || 5000,
+	      },
+	    });
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder run failed:", error.message);

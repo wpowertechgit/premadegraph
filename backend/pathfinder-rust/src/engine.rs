@@ -8,13 +8,14 @@ use self::assortativity::assortativity_response;
 use self::birdseye::export_birdseye_3d_artifacts;
 use self::graph::{
     global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
-    GraphState,
 };
 use self::search::{search_astar, search_bfs, search_bidirectional, search_dijkstra, SearchResult};
 use self::signed_balance::signed_balance_response;
 use crate::models::*;
 use rayon::prelude::*;
 use std::time::Instant;
+
+pub use self::graph::GraphState;
 
 fn invalid_response(
     request: &PathfinderRequest,
@@ -36,6 +37,10 @@ fn invalid_response(
             edges_considered: 0,
             runtime_ms: 0.0,
             backend_runtime_ms: 0.0,
+            graph_build_ms: 0.0,
+            search_runtime_ms: 0.0,
+            response_assembly_ms: 0.0,
+            total_runtime_ms: 0.0,
             trace_step_count: 0,
         },
         path: PathfinderPath {
@@ -51,6 +56,17 @@ fn invalid_response(
     };
 
     response
+}
+
+pub fn apply_runtime_breakdown(
+    response: &mut PathfinderResponse,
+    graph_build_ms: f64,
+    total_runtime_ms: f64,
+) {
+    response.summary.graph_build_ms = graph_build_ms;
+    response.summary.total_runtime_ms = total_runtime_ms;
+    response.summary.runtime_ms = total_runtime_ms;
+    response.summary.backend_runtime_ms = total_runtime_ms;
 }
 
 pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderResponse {
@@ -80,6 +96,10 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
                 edges_considered: 0,
                 runtime_ms: 0.0,
                 backend_runtime_ms: 0.0,
+                graph_build_ms: 0.0,
+                search_runtime_ms: 0.0,
+                response_assembly_ms: 0.0,
+                total_runtime_ms: 0.0,
                 trace_step_count: 0,
             },
             path: PathfinderPath {
@@ -99,7 +119,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         };
     }
 
-    let started_at = Instant::now();
+    let search_started_at = Instant::now();
     let result = if request.algorithm == "bfs" {
         search_bfs(graph, &request)
     } else if request.algorithm == "dijkstra" {
@@ -109,7 +129,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
     } else {
         search_bidirectional(graph, &request)
     };
-    let runtime_ms = started_at.elapsed().as_secs_f64() * 1000.0;
+    let search_runtime_ms = search_started_at.elapsed().as_secs_f64() * 1000.0;
 
     let SearchResult {
         found,
@@ -126,6 +146,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         Vec::new()
     };
 
+    let response_started_at = Instant::now();
     let mut warnings = Vec::new();
     if !found && request.path_mode == "social-path" {
         warnings.push("No friend-only route is available in the current graph.".to_string());
@@ -142,7 +163,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         warnings.push("A* uses landmark and cluster lower bounds while preserving exact shortest-path results.".to_string());
     }
 
-    let response = PathfinderResponse {
+    let mut response = PathfinderResponse {
         request: RequestEcho {
             source_player_id: request.source_player_id.clone(),
             target_player_id: request.target_player_id.clone(),
@@ -159,8 +180,12 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
             path_length: path_nodes.len().saturating_sub(1),
             nodes_visited: visited_count,
             edges_considered,
-            runtime_ms,
-            backend_runtime_ms: runtime_ms,
+            runtime_ms: search_runtime_ms,
+            backend_runtime_ms: search_runtime_ms,
+            graph_build_ms: 0.0,
+            search_runtime_ms,
+            response_assembly_ms: 0.0,
+            total_runtime_ms: search_runtime_ms,
             trace_step_count: trace.len(),
         },
         graph_snapshot: pathfinder_snapshot(
@@ -178,6 +203,13 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         trace,
         warnings,
     };
+
+    response.summary.response_assembly_ms =
+        response_started_at.elapsed().as_secs_f64() * 1000.0;
+    response.summary.total_runtime_ms =
+        response.summary.search_runtime_ms + response.summary.response_assembly_ms;
+    response.summary.runtime_ms = response.summary.total_runtime_ms;
+    response.summary.backend_runtime_ms = response.summary.total_runtime_ms;
 
     eprintln!(
         "{} finished. status={}, path_length={}, nodes_visited={}, runtime_ms={:.2}",
@@ -261,7 +293,7 @@ pub fn compare_algorithms(graph: &GraphState, request: CompareRequest) -> Compar
                 path_found: Some(active.status == "found" || active.status == "same_source_target"),
                 path_length: Some(active.summary.path_length),
                 nodes_visited: Some(active.summary.nodes_visited),
-                runtime_ms: Some(active.summary.runtime_ms),
+                runtime_ms: Some(active.summary.total_runtime_ms),
                 relative_note,
             }
         })
@@ -380,6 +412,10 @@ pub fn engine_spec_response() -> EngineSpecResponse {
                 "edgesConsidered": "number",
                 "runtimeMs": "number",
                 "backendRuntimeMs": "number",
+                "graphBuildMs": "number",
+                "searchRuntimeMs": "number",
+                "responseAssemblyMs": "number",
+                "totalRuntimeMs": "number",
                 "traceStepCount": "number"
             },
             "path": { "nodes": "string[]", "edges": "{ from, to, relation }[]" },
