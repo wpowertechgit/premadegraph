@@ -22,3 +22,4 @@ AGENTS.md
 *.f32
 backend/pathfinder-rust/cache
 *.db
+*cwd

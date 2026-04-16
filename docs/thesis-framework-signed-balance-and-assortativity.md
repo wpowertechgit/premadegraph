@@ -1,13 +1,25 @@
 # Thesis Framework: Signed Balance And Assortativity As Complementary Network Analysis
 
+## Data Context
+
+This thesis analyzes a **premade player network** built from League of Legends match data:
+
+- Start with a random player node
+- Crawl ~50 matches for that player
+- Identify co-players appearing >2-3 times (strong co-play signal)
+- Expand the network by recursively crawling those players
+- Result: A graph of players with intentional relationship structures (duos, premades, clans)
+
+**Why this matters:** Allies in this network represent repeated, intentional team formation, not matchmaking artifacts. Enemies represent opponents these premades faced together in competitive matches.
+
 ## Motivation
 
-The signed-balance and assortativity features address two independent but complementary structural questions about the player network:
+The signed-balance and assortativity features address two independent but complementary structural questions about this premade network:
 
-1. **Signed Balance Theory** answers: *Are ally/enemy relationships locally coherent?*
-2. **Assortativity Analysis** answers: *Do performance-similar players cluster in the network?*
+1. **Signed Balance Theory** answers: *Do repeated ally/enemy relationships form locally stable patterns?*
+2. **Assortativity Analysis** answers: *Do performance-similar players choose to play together?*
 
-Together, they provide evidence that the network exhibits both **structural stability** (via balance theory) and **similarity-based organization** (via assortativity).
+Together, they provide evidence that the premade network exhibits both **intentional relationship coherence** (via balance theory) and **skill-based social organization** (via assortativity).
 
 ## The Two Questions Are Different
 
@@ -35,14 +47,23 @@ Example: Do high-performers mostly ally other high-performers? Do mid-tier playe
 
 ## Why Both Matter For A Thesis
 
+### Network Intentionality
+
+Because allies in this graph represent >2-3 co-play signals (intentional team choices), both analyses address real player behavior:
+
+- Signed balance answers: *Do players who choose each other form stable local alliances, or do contradictory team compositions emerge?*
+- Assortativity answers: *Do similar-skilled players actively choose each other, or is skill orthogonal to team formation?*
+
+This is not measuring matchmaking artifacts—it's measuring intentional social structures in competitive gaming.
+
 ### Structural Validity
 
 A strong thesis result needs multiple angles to be credible:
 
-- Signed balance alone could show a coherent relationship graph, but not explain *why* it's coherent (performance similarity, role specialization, random chance?)
-- Assortativity alone could show performance clustering, but not explain whether the *relationship types* (ally vs. enemy) matter
+- Signed balance alone could show that premades form coherent teams, but not explain *why* (performance similarity, role fit, friendship circles?)
+- Assortativity alone could show that similar players cluster, but not explain whether that clustering forms *stable relationships* or temporary pairings
 
-Together: If both analyses return strong results, the network exhibits both **intentional structure** (performance-based grouping) and **stable relationship patterns** (ally/enemy coherence).
+Together: If both analyses return strong results, you have evidence that premade teams exhibit **performance-based selection** (assortativity) *and* **locally coherent relationship patterns** (balance). This suggests intentional, skill-aware team formation.
 
 ### Methodological Robustness
 
@@ -53,14 +74,14 @@ The two features use different algorithms and different data projections:
 
 If both independently return defensible results, you're less vulnerable to a single methodological critique.
 
-### Graph Semantics
+### Relationship Semantics Validation
 
-The two features answer the graph-semantics question differently:
+For premade networks, the two features jointly validate that relationship definitions matter:
 
-- Does the ally vs. enemy distinction matter? **Yes, if** signed balance shows structural coherence
-- Does the performance metric matter? **Yes, if** assortativity shows non-random clustering
+- Do ally relationships behave differently from enemy relationships? **Yes, if** signed balance shows structural coherence in ally triads vs. enemy triads
+- Do allied players cluster by skill? **Yes, if** assortativity is high on the ally-only graph mode
 
-This supports thesis framing around "networks encode both relationship semantics and similarity structure."
+This supports a thesis narrative around "premade teams form intentional structures that reflect both player skill and relationship stability."
 
 ## Interpreting The Results Together
 
@@ -121,50 +142,71 @@ This suggests ally relationships are both performance-sorted *and* locally coher
 
 ## Recommended Thesis Structure
 
-### 1. Motivation
+### 1. Motivation & Research Questions
 
-Present both research questions:
-- Do players organize by performance similarity?
-- Do ally/enemy relationships form stable local patterns?
+Frame two research questions grounded in premade team formation:
+
+- **RQ1**: When players choose to play together repeatedly (>2-3 matches), do they cluster by performance skill?
+- **RQ2**: Do repeated ally/enemy relationships in premade networks form locally stable patterns, or are they contradictory?
+
+This positions the analysis as studying **intentional team formation**, not matchmaking artifacts.
 
 ### 2. Data & Methods
 
-- Describe the player graph, the two-column signed projection, and the clustering structure
-- Explain signed-balance and assortativity methodology separately (reference existing docs)
+- Explain the network construction: random node crawl, >2-3 co-play thresholds, recursive expansion
+- Clarify what "ally" means in this context: >2-3 matches on the same team (intentional signal)
+- Explain what "enemy" means: opponents faced together in competitive matches
+- Describe signed-balance and assortativity methodology separately (reference existing docs)
+- Justify why both metrics matter for premade teams
 
 ### 3. Results
 
-- Present signed-balance findings (ratio, distribution, top unbalanced nodes)
-- Present assortativity findings (both graph modes, both metrics)
-- Highlight the cross-feature patterns (ally = performance-clustered + locally coherent)
+- Present assortativity findings: Do premades cluster by performance across graph modes?
+- Present signed-balance findings: Do premade ally/enemy triads exhibit balance properties?
+- Highlight joint patterns: Does balancing correlate with performance clustering?
+- Show sensitivity: How do projection choices (edge thresholds, tie policies) affect results?
 
 ### 4. Interpretation
 
-- Do not claim causation (similarity does not imply influence)
-- Do claim observable structure (the network exhibits both properties)
-- Discuss what the properties mean jointly:
-  - Strong ally assortativity + balance suggests intentional clustering
-  - Weak battle-path assortativity suggests enemy relationships are less performance-driven
-  - This supports selecting ally-only definitions for performance-based analysis
+- Contextualize within premade team formation: "Players who team repeatedly tend to be similar-skilled"
+- Connect to relationship stability: "Ally/enemy patterns are locally coherent, suggesting intentional team composition"
+- Discuss implications: Does this suggest skill-aware team formation? Strategic team building?
+- Frame as descriptive: These are observable network properties, not proof of causation or strategy sophistication
 
-### 5. Limitations
+### 5. Limitations & Robustness
 
-- Both analyses assume projection choices; vary parameters to show robustness
-- Both are correlation, not causation
-- Mock-mode results are demonstration only; thesis should use full-dataset results
+- Explain edge thresholds (>2-3 matches) and how they affect bias
+- Vary parameters to show robustness of findings
+- Acknowledge correlation vs. causation boundary
+- Discuss geographic/temporal limitations of match crawling
+- Note that mock-mode results are demonstration only
+
+## Connection To Thesis Narrative
+
+Position the overall argument:
+
+1. **Observation**: Players form premade teams through repeated play
+2. **Question**: What structure do these teams exhibit?
+3. **Analysis**: Two independent angles (performance clustering + relationship balance)
+4. **Finding**: Premades cluster by skill AND maintain locally coherent ally/enemy relationships
+5. **Implication**: This suggests skill-aware, intentional team formation in competitive gaming
+
+This is defensible because you're grounded in observable network properties of *intentional* social structures, not speculating about behavior.
 
 ## Avoiding Over-Interpretation
 
 Do not claim:
-- Players *cause* each other to cluster by performance
-- Balance or assortativity *explains* player behavior
-- The results prove toxicity, strategy, or social dynamics
+- Balance or assortativity *determine* player performance or behavior
+- The results prove toxicity, strategy depth, or specific social dynamics
+- Causation in either direction (do skillful players choose each other, or does team play improve skill?)
 
 Do claim:
-- The network exhibits performance-based clustering under the chosen metrics and graph projections
-- Ally relationships preserve more performance similarity than the broader battle graph
-- Ally/enemy patterns form locally more balanced triads than random expectations would suggest
+- Premade teams show measurable performance-based clustering under the chosen metrics (assortativity)
+- Repeated ally/enemy relationships in premades form locally coherent patterns (signed balance)
+- Ally relationships preserve more performance similarity than the broader co-play graph
+- Ally/enemy patterns exhibit balance properties consistent with intentional team formation
 - These structural properties are measurable, reproducible, and sensitive to projection choices
+- Premade teams appear to organize around both player skill and relationship coherence
 
 ## See Also
 
