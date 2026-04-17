@@ -22,6 +22,21 @@ type FeedbackState = {
   severity: "success" | "error" | "info";
 };
 
+export type DatasetRecord = {
+  id: string;
+  name: string;
+  description: string;
+  matchCount: number;
+  refinedPlayerCount: number;
+};
+
+export type RuntimeKeyRecord = {
+  keyName: "RIOT_API_KEY" | "OPENROUTER_API_KEY";
+  isSet: boolean;
+  maskedPreview: string | null;
+  storage: string;
+};
+
 function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
   const { t } = useI18n();
   const location = useLocation();
@@ -134,6 +149,11 @@ function App() {
     typeof window !== "undefined" ? window.matchMedia("(max-width: 1200px)").matches : false,
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
+  const [currentDatasetId, setCurrentDatasetId] = useState<string | null>(null);
+  const [datasetLoading, setDatasetLoading] = useState(false);
+  const [runtimeKeys, setRuntimeKeys] = useState<RuntimeKeyRecord[]>([]);
+  const [runtimeKeysLoading, setRuntimeKeysLoading] = useState(false);
 
   React.useEffect(() => {
     document.title = t.app.title;
@@ -166,6 +186,91 @@ function App() {
 
   const showFeedback = (message: string, severity: FeedbackState["severity"]) => {
     setFeedback({ message, severity });
+  };
+
+  const refreshDatasets = async () => {
+    setDatasetLoading(true);
+    try {
+      const response = await fetch("http://localhost:3001/api/datasets");
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to load datasets.");
+      }
+      setDatasets(Array.isArray(payload.datasets) ? payload.datasets : []);
+      setCurrentDatasetId(payload.current || null);
+    } finally {
+      setDatasetLoading(false);
+    }
+  };
+
+  const refreshRuntimeKeys = async () => {
+    setRuntimeKeysLoading(true);
+    try {
+      const response = await fetch("http://localhost:3001/api/runtime-keys");
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to load runtime key metadata.");
+      }
+      setRuntimeKeys(Array.isArray(payload.keys) ? payload.keys : []);
+    } finally {
+      setRuntimeKeysLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshDatasets().catch((error) => {
+      console.error("Dataset load failed:", error);
+      showFeedback(error instanceof Error ? error.message : "Failed to load datasets.", "error");
+    });
+    void refreshRuntimeKeys().catch((error) => {
+      console.error("Runtime key metadata load failed:", error);
+      showFeedback(error instanceof Error ? error.message : "Failed to load runtime key metadata.", "error");
+    });
+  }, []);
+
+  const createDataset = async (payload: { id: string; name: string; description: string }) => {
+    const response = await fetch("http://localhost:3001/api/datasets", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to create dataset.");
+    }
+    await refreshDatasets();
+    showFeedback(`Dataset "${payload.name || payload.id}" created.`, "success");
+  };
+
+  const selectDataset = async (datasetId: string) => {
+    const response = await fetch(`http://localhost:3001/api/datasets/${encodeURIComponent(datasetId)}/select`, {
+      method: "POST",
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to switch dataset.");
+    }
+    setCurrentDatasetId(result.current || datasetId);
+    showFeedback(`Dataset switched to ${result.dataset?.name || datasetId}.`, "success");
+    window.location.reload();
+  };
+
+  const saveRuntimeKey = async (keyName: RuntimeKeyRecord["keyName"], value: string) => {
+    const response = await fetch(`http://localhost:3001/api/runtime-keys/${encodeURIComponent(keyName)}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ value }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Failed to update runtime key.");
+    }
+    await refreshRuntimeKeys();
+    showFeedback(`${keyName} ${value.trim() ? "updated" : "cleared"}.`, "success");
   };
 
   const normalizePlayers = async () => {
@@ -223,6 +328,15 @@ function App() {
           mobileOpen={mobileNavOpen}
           onOpenMobileNav={() => setMobileNavOpen(true)}
           onCloseMobileNav={() => setMobileNavOpen(false)}
+          datasets={datasets}
+          currentDatasetId={currentDatasetId}
+          datasetLoading={datasetLoading}
+          onRefreshDatasets={refreshDatasets}
+          onSelectDataset={selectDataset}
+          onCreateDataset={createDataset}
+          runtimeKeys={runtimeKeys}
+          runtimeKeysLoading={runtimeKeysLoading}
+          onSaveRuntimeKey={saveRuntimeKey}
         />
         <AppRoutes navCollapsed={isMobileLayout ? false : navCollapsed} />
         <Snackbar

@@ -2,16 +2,34 @@ const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 
-function resolveDbFile() {
-  if (process.env.DB_PATH) {
-    return path.isAbsolute(process.env.DB_PATH)
-      ? process.env.DB_PATH
-      : path.resolve(__dirname, process.env.DB_PATH);
+function resolvePathFromEnv(...keys) {
+  for (const key of keys) {
+    if (!process.env[key]) {
+      continue;
+    }
+    return path.isAbsolute(process.env[key])
+      ? process.env[key]
+      : path.resolve(__dirname, process.env[key]);
+  }
+  return null;
+}
+
+function resolveDbFile(explicitPath) {
+  if (explicitPath) {
+    return path.isAbsolute(explicitPath)
+      ? explicitPath
+      : path.resolve(__dirname, explicitPath);
+  }
+
+  const envPath = resolvePathFromEnv("GRAPH_DB_PATH", "DB_PATH", "PLAYERS_REFINED_DB_PATH");
+  if (envPath) {
+    return envPath;
   }
 
   const candidates = [
-    path.resolve(__dirname, "players.db"),
+    path.resolve(__dirname, "playersrefined.db"),
     path.resolve(__dirname, "../playersrefined.db"),
+    path.resolve(__dirname, "players.db"),
   ];
 
   for (const candidate of candidates) {
@@ -21,8 +39,20 @@ function resolveDbFile() {
   return candidates[0];
 }
 
-const dbFile = resolveDbFile();
-const matchDir = path.join(__dirname, "data");
+function resolveMatchDir(explicitPath) {
+  if (explicitPath) {
+    return path.isAbsolute(explicitPath)
+      ? explicitPath
+      : path.resolve(__dirname, explicitPath);
+  }
+
+  const envPath = resolvePathFromEnv("PATHFINDER_MATCH_DIR", "MATCHES_DIR");
+  if (envPath) {
+    return envPath;
+  }
+
+  return path.join(__dirname, "data");
+}
 
 // Normalize opscore to 0-10 scale using actual data thresholds
 function normalizeOpScore(rawOpScore) {
@@ -68,8 +98,10 @@ function normalizeOpScore(rawOpScore) {
   return 0.0;
 }
 
-async function normalizePlayersByPuuid() {
+async function normalizePlayersByPuuid(options = {}) {
   return new Promise((resolve, reject) => {
+    const dbFile = resolveDbFile(options.dbFile);
+    const matchDir = resolveMatchDir(options.matchDir);
     const db = new sqlite3.Database(dbFile);
 
     const playersMap = new Map();
@@ -175,7 +207,7 @@ async function normalizePlayersByPuuid() {
           const normalizedOpScores = [];
           
           // Create log file for raw scores
-          const logFilePath = path.join(__dirname, "raw_scores_log.txt");
+          const logFilePath = path.join(path.dirname(dbFile), "raw_scores_log.txt");
           const logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
           logStream.write("puuid;avgopscore_before_normalization\n");
           

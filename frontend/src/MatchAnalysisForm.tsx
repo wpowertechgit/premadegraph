@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import React, { useState , useEffect} from "react";
+import React, { useState } from "react";
 import {
   Alert,
   Box,
@@ -107,22 +107,14 @@ type MatchData = {
   topFeederPuuid: string; // top feeder azonosítója (puuid) megjelöléshez
   topFeederCountry?: string;
 };
-const saveMatchToBackend = async (matchData: any) => {
-  try {
-    const response = await fetch("http://localhost:3001/api/save-match", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(matchData),
-    });
-
-    const result = await response.json();
-    console.log(`Match ${matchData.metadata.matchId} save result:`, result.message);
-  } catch (error) {
-    console.error("Failed to save match to backend:", error);
+async function fetchBackendJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.status?.message || payload.error || payload.message || "Backend request failed.");
   }
-};
+  return payload as T;
+}
 
 const feedermap: Record<string, number> = {};
 const MatchAnalysisForm = () => {
@@ -136,17 +128,6 @@ const MatchAnalysisForm = () => {
   const [queueType, setQueueType] = useState("all");
   const [start, setStart] = useState(0);
 
- const apiKey = import.meta.env.VITE_API_KEY;
-  
-  useEffect(() => {
-    if (!apiKey) {
-      console.error('API key not found');
-      return;
-    }
-    
-    // Use your API key here
-    console.log('API Key loaded:', apiKey);
-  }, [apiKey]);
   const handleSubmit = async () => {
     if (!name || !tag || !count) return;
 
@@ -159,23 +140,9 @@ const MatchAnalysisForm = () => {
 
     try {
       // Lekérjük a puuid-t a Riot ID alapján
-      const puuidRes = await fetch(
-        `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
-          name
-        )}/${encodeURIComponent(tag)}`,
-        {
-          headers: {
-            "X-Riot-Token": apiKey,
-          },
-        }
+      const puuidData = await fetchBackendJson<{ puuid: string }>(
+        `http://localhost:3001/api/riot/account/by-riot-id/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`,
       );
-
-      if (!puuidRes.ok) {
-        const errorData = await puuidRes.json();
-          throw new Error(errorData.status?.message || t.matchAnalysis.errors.riotIdNotFound);
-      }
-
-      const puuidData = await puuidRes.json();
       const puuid = puuidData.puuid;
       let queueParam = "";
       if (queueType === "solo") {
@@ -187,42 +154,17 @@ const MatchAnalysisForm = () => {
       } else if (queueType === "all") {
         queueParam = "";
       }
-      const matchIdsRes = await fetch(
-        `https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}${queueParam}`,
-        {
-          headers: {
-            "X-Riot-Token": apiKey,
-          },
-        }
+      const matchIds: string[] = await fetchBackendJson(
+        `http://localhost:3001/api/riot/matches/by-puuid/${encodeURIComponent(puuid)}/ids?start=${start}&count=${count}${queueParam}`,
       );
-
-      if (!matchIdsRes.ok) {
-        const errorData = await matchIdsRes.json();
-        throw new Error(errorData.status?.message || t.matchAnalysis.errors.matchIdsFailed);
-      }
-
-      const matchIds: string[] = await matchIdsRes.json();
 
       const matches: MatchData[] = [];
       const matchDetails: any[] = [];
       for (const matchId of matchIds) {
-        const matchRes = await fetch(
-          `https://europe.api.riotgames.com/lol/match/v5/matches/${matchId}`,
-          {
-            headers: {
-              "X-Riot-Token": apiKey,
-            },
-          }
+        const matchData = await fetchBackendJson<any>(
+          `http://localhost:3001/api/riot/matches/${encodeURIComponent(matchId)}`,
         );
-
-        if (!matchRes.ok) {
-          const errorData = await matchRes.json();
-          throw new Error(errorData.status?.message || `${t.matchAnalysis.errors.matchFetchFailed}: ${matchId}`);
-        }
-
-        const matchData = await matchRes.json();
         matchDetails.push(matchData);
-        await saveMatchToBackend(matchData);
 
         const participants = matchData.info.participants;
         const players = participants.map((p: any, i: number) => ({

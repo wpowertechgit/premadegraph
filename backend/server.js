@@ -6,7 +6,6 @@ const bodyParser = require("body-parser");
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const PORT = 3001;
-const MATCHES_DIR = path.join(__dirname, "data");
 const { execFile } = require("child_process");
 const { normalizePlayersByPuuid } = require("./normalize_players_by_puuid");
 const {
@@ -15,7 +14,20 @@ const {
   getOptions: getPrototypePathfinderOptions,
   getEngineSpec: getPrototypeEngineSpec,
 } = require("./pathfinder/prototypeEngine");
-const { executeRustCommand, executeRustCommandRaw } = require("./pathfinder/rustBridge");
+const { executeRustCommand, executeRustCommandRaw, shutdownDaemon } = require("./pathfinder/rustBridge");
+
+const DATA_ROOT = path.resolve(__dirname, "data");
+const DATASET_REGISTRY_PATH = path.join(DATA_ROOT, "datasets.json");
+const DATASET_DATABASES_ROOT = path.join(DATA_ROOT, "databases");
+const DATASET_MATCHES_ROOT = path.join(DATA_ROOT, "matches");
+const DATASET_CACHE_ROOT = path.join(DATA_ROOT, "cache");
+const LEGACY_MATCHES_DIR = DATA_ROOT;
+const LEGACY_RAW_DB_PATH = path.resolve(__dirname, "players.db");
+const LEGACY_REFINED_DB_PATH = path.resolve(__dirname, "..", "playersrefined.db");
+const LEGACY_CACHE_ROOT = path.resolve(__dirname, "pathfinder-rust", "cache");
+const ENV_FILE_PATH = path.join(__dirname, ".env");
+const DATASET_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const MANAGED_RUNTIME_KEYS = new Set(["RIOT_API_KEY", "OPENROUTER_API_KEY"]);
 
 const rustResponseCache = {
   options: null,
@@ -26,9 +38,10 @@ const rustInFlightRequests = new Map();
 let signedBalanceQueue = Promise.resolve();
 let signedBalanceActivePromise = null;
 let signedBalanceActiveKey = null;
-const birdseyeCurrentCacheDir = path.resolve(__dirname, "pathfinder-rust", "cache", "birdseye-3d-v2");
 let birdseyeCachePromise = null;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
+let activeDatasetRegistry = null;
+let activeDataset = null;
 
 function getBirdseyeArtifactPaths(cacheDir) {
   return {
@@ -41,7 +54,456 @@ function getBirdseyeArtifactPaths(cacheDir) {
   };
 }
 
-const birdseyeArtifactPaths = getBirdseyeArtifactPaths(birdseyeCurrentCacheDir);
+function clearRustRuntimeState() {
+  rustResponseCache.options = null;
+  rustResponseCache.spec = null;
+  rustResponseCache["global-view"] = null;
+  rustInFlightRequests.clear();
+  signedBalanceQueue = Promise.resolve();
+  signedBalanceActivePromise = null;
+  signedBalanceActiveKey = null;
+  birdseyeCachePromise = null;
+  shutdownDaemon();
+}
+
+function ensureDirectory(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+}
+
+function writeJsonFile(filePath, value) {
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function readEnvLines() {
+  if (!fs.existsSync(ENV_FILE_PATH)) {
+    return [];
+  }
+  return fs.readFileSync(ENV_FILE_PATH, "utf-8").split(/\r?\n/);
+}
+
+function parseEnvValue(keyName) {
+  for (const line of readEnvLines()) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const currentKey = trimmed.slice(0, separatorIndex).trim();
+    if (currentKey !== keyName) {
+      continue;
+    }
+    return trimmed.slice(separatorIndex + 1);
+  }
+  return process.env[keyName] || "";
+}
+
+function maskSecret(value) {
+  if (!value) {
+    return null;
+  }
+  if (value.length <= 8) {
+    return `${value.slice(0, 2)}***`;
+  }
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function runtimeKeyMetadata(keyName) {
+  const value = parseEnvValue(keyName);
+  return {
+    keyName,
+    isSet: Boolean(value),
+    maskedPreview: maskSecret(value),
+    storage: "backend/.env",
+  };
+}
+
+function sanitizeEnvValue(value) {
+  const normalized = String(value ?? "").trim();
+  if (normalized.includes("\n") || normalized.includes("\r")) {
+    throw new Error("Environment values must be single-line.");
+  }
+  return normalized;
+}
+
+function updateManagedEnvKey(keyName, nextValue) {
+  if (!MANAGED_RUNTIME_KEYS.has(keyName)) {
+    throw new Error("Key is not writable.");
+  }
+
+  const lines = readEnvLines();
+  const sanitizedValue = sanitizeEnvValue(nextValue);
+  const nextLine = sanitizedValue ? `${keyName}=${sanitizedValue}` : null;
+  let replaced = false;
+  const nextLines = lines
+    .map((line) => {
+      const separatorIndex = line.indexOf("=");
+      if (separatorIndex <= 0) {
+        return line;
+      }
+      const currentKey = line.slice(0, separatorIndex).trim();
+      if (currentKey !== keyName) {
+        return line;
+      }
+      replaced = true;
+      return nextLine;
+    })
+    .filter((line) => line !== null);
+
+  if (!replaced && nextLine) {
+    nextLines.push(nextLine);
+  }
+
+  const encoded = nextLines.join("\n").replace(/\n+$/u, "");
+  fs.writeFileSync(ENV_FILE_PATH, encoded ? `${encoded}\n` : "");
+
+  if (sanitizedValue) {
+    process.env[keyName] = sanitizedValue;
+  } else {
+    delete process.env[keyName];
+  }
+
+  return runtimeKeyMetadata(keyName);
+}
+
+function legacyTopLevelMatchFiles() {
+  if (!fs.existsSync(LEGACY_MATCHES_DIR)) {
+    return [];
+  }
+  return fs.readdirSync(LEGACY_MATCHES_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => entry.name);
+}
+
+function warnAboutLegacyMatchFiles() {
+  const legacyFiles = legacyTopLevelMatchFiles();
+  if (!legacyFiles.length) {
+    return;
+  }
+  console.warn(
+    `[datasets] Found ${legacyFiles.length} legacy match JSON files directly under backend/data. ` +
+    "Active dataset matches now live under backend/data/matches/<dataset-id>/; the top-level files are legacy migration leftovers.",
+  );
+}
+
+function ensureRiotApiKey() {
+  const key = parseEnvValue("RIOT_API_KEY");
+  if (!key) {
+    const error = new Error("RIOT_API_KEY is not configured in backend/.env.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return key;
+}
+
+async function relayRiotRequest(url) {
+  const response = await fetch(url, {
+    headers: {
+      "X-Riot-Token": ensureRiotApiKey(),
+    },
+  });
+
+  const rawText = await response.text();
+  let payload = {};
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      payload = { message: rawText };
+    }
+  }
+
+  if (!response.ok) {
+    const message = payload?.status?.message || payload?.message || "Riot API request failed.";
+    const error = new Error(message);
+    error.statusCode = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+function toPortablePath(value) {
+  return value.split(path.sep).join("/");
+}
+
+function safeCopyFile(sourcePath, destinationPath) {
+  if (!fs.existsSync(sourcePath) || fs.existsSync(destinationPath)) {
+    return;
+  }
+  ensureDirectory(path.dirname(destinationPath));
+  fs.copyFileSync(sourcePath, destinationPath);
+}
+
+function safeCopyJsonMatches(sourceDir, destinationDir) {
+  if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+    return;
+  }
+  ensureDirectory(destinationDir);
+  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destinationPath = path.join(destinationDir, entry.name);
+    if (!fs.existsSync(destinationPath)) {
+      fs.copyFileSync(sourcePath, destinationPath);
+    }
+  }
+}
+
+function resolveRegistryPath(relativePath, rootPath) {
+  const normalized = path.resolve(__dirname, relativePath);
+  const normalizedRoot = path.resolve(rootPath);
+  if (normalized !== normalizedRoot && !normalized.startsWith(`${normalizedRoot}${path.sep}`)) {
+    throw new Error(`Dataset path escapes allowed root: ${relativePath}`);
+  }
+  return normalized;
+}
+
+function materializeDatasetConfig(dataset) {
+  return {
+    ...dataset,
+    rawDbAbsolutePath: resolveRegistryPath(dataset.rawDbPath, DATASET_DATABASES_ROOT),
+    refinedDbAbsolutePath: resolveRegistryPath(dataset.refinedDbPath, DATASET_DATABASES_ROOT),
+    matchesAbsolutePath: resolveRegistryPath(dataset.matchesPath, DATASET_MATCHES_ROOT),
+    cacheAbsolutePath: resolveRegistryPath(dataset.cachePath, DATASET_CACHE_ROOT),
+  };
+}
+
+function createDatasetRecord(id, name = "Default Dataset", description = "Migrated from existing installation") {
+  const rawDbPath = toPortablePath(path.join("data", "databases", id, "players.db"));
+  const refinedDbPath = toPortablePath(path.join("data", "databases", id, "playersrefined.db"));
+  const matchesPath = toPortablePath(path.join("data", "matches", id));
+  const cachePath = toPortablePath(path.join("data", "cache", id));
+  return {
+    id,
+    name,
+    description,
+    rawDbPath,
+    refinedDbPath,
+    matchesPath,
+    cachePath,
+    tags: [],
+    created: new Date().toISOString(),
+    metadata: {},
+  };
+}
+
+function upgradeDatasetRecord(dataset) {
+  const upgraded = {
+    ...dataset,
+    id: dataset.id,
+    name: dataset.name || dataset.id,
+    description: dataset.description || "",
+    rawDbPath: dataset.rawDbPath || toPortablePath(path.join("data", "databases", dataset.id, "players.db")),
+    refinedDbPath: dataset.refinedDbPath || dataset.dbPath || toPortablePath(path.join("data", "databases", dataset.id, "playersrefined.db")),
+    matchesPath: dataset.matchesPath || toPortablePath(path.join("data", "matches", dataset.id)),
+    cachePath: dataset.cachePath || toPortablePath(path.join("data", "cache", dataset.id)),
+    tags: Array.isArray(dataset.tags) ? dataset.tags : [],
+    metadata: dataset.metadata || {},
+  };
+  delete upgraded.dbPath;
+  return upgraded;
+}
+
+function initializeRawDatabase(dbPath) {
+  const database = new sqlite3.Database(
+    dbPath,
+    sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX,
+  );
+  database.serialize(() => {
+    database.run(`PRAGMA foreign_keys = ON`);
+    database.run(`PRAGMA journal_mode = WAL`);
+    database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+    database.run(`
+      CREATE TABLE IF NOT EXISTS players (
+        puuid TEXT PRIMARY KEY,
+        names TEXT,
+        feedscore REAL,
+        opscore REAL,
+        country TEXT,
+        match_count INTEGER DEFAULT 1
+      )
+    `);
+  });
+  database.close();
+}
+
+function ensureDatasetStorage(dataset) {
+  const config = materializeDatasetConfig(dataset);
+  ensureDirectory(path.dirname(config.rawDbAbsolutePath));
+  ensureDirectory(path.dirname(config.refinedDbAbsolutePath));
+  ensureDirectory(config.matchesAbsolutePath);
+  ensureDirectory(config.cacheAbsolutePath);
+  if (!fs.existsSync(config.rawDbAbsolutePath)) {
+    initializeRawDatabase(config.rawDbAbsolutePath);
+  }
+}
+
+async function buildDatasetInfo(dataset) {
+  const config = materializeDatasetConfig(dataset);
+  const matches = fs.existsSync(config.matchesAbsolutePath)
+    ? fs.readdirSync(config.matchesAbsolutePath).filter((entry) => entry.endsWith(".json"))
+    : [];
+  const refinedPlayerCount = await new Promise((resolve) => {
+    if (!fs.existsSync(config.refinedDbAbsolutePath)) {
+      resolve(0);
+      return;
+    }
+    const database = new sqlite3.Database(config.refinedDbAbsolutePath, sqlite3.OPEN_READONLY, (openError) => {
+      if (openError) {
+        resolve(0);
+        return;
+      }
+      database.get("SELECT COUNT(*) AS count FROM players", [], (error, row) => {
+        database.close();
+        if (error) {
+          resolve(0);
+          return;
+        }
+        resolve(row?.count ?? 0);
+      });
+    });
+  });
+
+  return {
+    ...dataset,
+    matchCount: matches.length,
+    refinedPlayerCount,
+  };
+}
+
+function migrateLegacyDataIntoDataset(dataset) {
+  const config = materializeDatasetConfig(dataset);
+  ensureDatasetStorage(dataset);
+  safeCopyFile(LEGACY_RAW_DB_PATH, config.rawDbAbsolutePath);
+  safeCopyFile(LEGACY_REFINED_DB_PATH, config.refinedDbAbsolutePath);
+  safeCopyJsonMatches(LEGACY_MATCHES_DIR, config.matchesAbsolutePath);
+}
+
+function ensureDefaultDatasetExists() {
+  ensureDirectory(DATA_ROOT);
+  ensureDirectory(DATASET_DATABASES_ROOT);
+  ensureDirectory(DATASET_MATCHES_ROOT);
+  ensureDirectory(DATASET_CACHE_ROOT);
+
+  if (!fs.existsSync(DATASET_REGISTRY_PATH)) {
+    const defaultDataset = createDatasetRecord("default");
+    migrateLegacyDataIntoDataset(defaultDataset);
+    writeJsonFile(DATASET_REGISTRY_PATH, {
+      datasets: [defaultDataset],
+      currentDatasetId: defaultDataset.id,
+    });
+    return;
+  }
+
+  const registry = readJsonFile(DATASET_REGISTRY_PATH);
+  if (!Array.isArray(registry.datasets) || registry.datasets.length === 0) {
+    const defaultDataset = createDatasetRecord("default");
+    migrateLegacyDataIntoDataset(defaultDataset);
+    registry.datasets = [defaultDataset];
+    registry.currentDatasetId = defaultDataset.id;
+    writeJsonFile(DATASET_REGISTRY_PATH, registry);
+    return;
+  }
+
+  let changed = false;
+  registry.datasets = registry.datasets.map((dataset) => {
+    const upgraded = upgradeDatasetRecord(dataset);
+    if (JSON.stringify(upgraded) !== JSON.stringify(dataset)) {
+      changed = true;
+    }
+    return upgraded;
+  });
+
+  for (const dataset of registry.datasets) {
+    ensureDatasetStorage(dataset);
+  }
+  if (changed) {
+    writeJsonFile(DATASET_REGISTRY_PATH, registry);
+  }
+}
+
+function loadDatasetRegistry() {
+  ensureDefaultDatasetExists();
+  const registry = readJsonFile(DATASET_REGISTRY_PATH);
+  const currentDatasetId = registry.currentDatasetId || registry.datasets[0]?.id;
+  const currentDataset = registry.datasets.find((dataset) => dataset.id === currentDatasetId) || registry.datasets[0];
+  if (!currentDataset) {
+    throw new Error("No datasets are configured.");
+  }
+  activeDatasetRegistry = registry;
+  activeDataset = materializeDatasetConfig(currentDataset);
+  return registry;
+}
+
+function persistDatasetRegistry(registry) {
+  writeJsonFile(DATASET_REGISTRY_PATH, registry);
+  activeDatasetRegistry = registry;
+}
+
+function getActiveDataset() {
+  if (!activeDataset) {
+    loadDatasetRegistry();
+  }
+  return activeDataset;
+}
+
+function getActiveRawDbPath() {
+  return getActiveDataset().rawDbAbsolutePath;
+}
+
+function getActiveRefinedDbPath() {
+  return getActiveDataset().refinedDbAbsolutePath;
+}
+
+function getActiveMatchesPath() {
+  return getActiveDataset().matchesAbsolutePath;
+}
+
+function getActiveCachePath() {
+  return getActiveDataset().cacheAbsolutePath;
+}
+
+function getActiveBirdseyeCacheDir() {
+  return path.join(getActiveCachePath(), "birdseye-3d-v2");
+}
+
+function getActiveBirdseyeArtifactPaths() {
+  return getBirdseyeArtifactPaths(getActiveBirdseyeCacheDir());
+}
+
+function getActiveRustEnv() {
+  const dataset = getActiveDataset();
+  return {
+    DATASET_ID: dataset.id,
+    GRAPH_DB_PATH: dataset.refinedDbAbsolutePath,
+    PATHFINDER_MATCH_DIR: dataset.matchesAbsolutePath,
+    PATHFINDER_BIRDSEYE_CACHE_DIR: getActiveBirdseyeCacheDir(),
+  };
+}
+
+function selectActiveDataset(datasetId) {
+  const registry = readJsonFile(DATASET_REGISTRY_PATH);
+  const dataset = registry.datasets.find((entry) => entry.id === datasetId);
+  if (!dataset) {
+    return null;
+  }
+  ensureDatasetStorage(dataset);
+  registry.currentDatasetId = datasetId;
+  persistDatasetRegistry(registry);
+  activeDataset = materializeDatasetConfig(dataset);
+  clearRustRuntimeState();
+  return activeDataset;
+}
 
 async function getCachedRustResponse(command, { forceRefresh = false } = {}) {
   if (!forceRefresh && rustResponseCache[command]) {
@@ -52,7 +514,7 @@ async function getCachedRustResponse(command, { forceRefresh = false } = {}) {
     return rustInFlightRequests.get(command);
   }
 
-  const request = executeRustCommand(command)
+  const request = executeRustCommand(command, undefined, getActiveRustEnv())
     .then((response) => {
       rustResponseCache[command] = response;
       rustInFlightRequests.delete(command);
@@ -115,7 +577,7 @@ function runSignedBalanceQueued(payload = {}) {
         return signedBalanceActivePromise;
       }
 
-      const activePromise = executeRustCommand("signed-balance", normalized);
+      const activePromise = executeRustCommand("signed-balance", normalized, getActiveRustEnv());
       signedBalanceActivePromise = activePromise;
       signedBalanceActiveKey = requestKey;
 
@@ -134,11 +596,11 @@ function runSignedBalanceQueued(payload = {}) {
 }
 
 function hasBirdseyeArtifacts() {
-  return Object.values(birdseyeArtifactPaths).every((artifactPath) => fs.existsSync(artifactPath));
+  return Object.values(getActiveBirdseyeArtifactPaths()).every((artifactPath) => fs.existsSync(artifactPath));
 }
 
 function startBirdseyeExportIfNeeded() {
-  console.log(`[birdseye] ensure requested. cacheDir=${birdseyeCurrentCacheDir}`);
+  console.log(`[birdseye] ensure requested. cacheDir=${getActiveBirdseyeCacheDir()}`);
 
   if (birdseyeCachePromise) {
     console.log("[birdseye] cache build already in flight. Reusing active promise.");
@@ -147,13 +609,13 @@ function startBirdseyeExportIfNeeded() {
 
   const startedAt = Date.now();
   console.log("[birdseye] cache miss. Starting Rust export...");
-  birdseyeCachePromise = executeRustCommandRaw("birdseye-3d-export")
+  birdseyeCachePromise = executeRustCommandRaw("birdseye-3d-export", undefined, getActiveRustEnv())
     .then(() => {
       if (!hasBirdseyeArtifacts()) {
         throw new Error("Birdseye 3D artifact export completed, but required files are missing.");
       }
       console.log(`[birdseye] Rust export finished in ${Date.now() - startedAt}ms.`);
-      return birdseyeArtifactPaths;
+      return getActiveBirdseyeArtifactPaths();
     })
     .catch((error) => {
       console.error(`[birdseye] Rust export failed after ${Date.now() - startedAt}ms:`, error.message);
@@ -169,11 +631,11 @@ function startBirdseyeExportIfNeeded() {
 async function ensureBirdseyeArtifacts() {
   if (hasBirdseyeArtifacts()) {
     console.log("[birdseye] cache hit. Artifacts already exist on disk.");
-    return birdseyeArtifactPaths;
+    return getActiveBirdseyeArtifactPaths();
   }
 
   await startBirdseyeExportIfNeeded();
-  return birdseyeArtifactPaths;
+  return getActiveBirdseyeArtifactPaths();
 }
 
 async function streamBirdseyeArtifact(res, artifactKey, contentType) {
@@ -201,19 +663,23 @@ app.use(cors());
 app.use(bodyParser.json({ limit: "25mb" }));
 app.use('/graph-view', express.static(path.join(__dirname, 'output')));
 const backendDir = __dirname;
-const dbPath = path.resolve(__dirname, 'players.db'); //raw adatbazis amit kesobb kiegeszetiunk , celja a jatekosok adatainak tarolasa , de csak a nev alapjan
 const replayDbPath = path.resolve(__dirname, "pathfinder_replays.db");
-const db = new sqlite3.Database(
-  dbPath,
-  sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX,
-  (err) => {
-    if (err) {
-      console.error('Nem sikerült megnyitni az adatbázist:', err.message);
-    } else {
-      console.log('Adatbázis megnyitva.');
-    }
-  }
-);
+let rawDb = null;
+
+function openConfiguredDatabase(databasePath, label) {
+  return new sqlite3.Database(
+    databasePath,
+    sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX,
+    (err) => {
+      if (err) {
+        console.error(`Failed to open ${label}:`, err.message);
+      } else {
+        console.log(`${label} opened at ${databasePath}.`);
+      }
+    },
+  );
+}
+
 const replayDb = new sqlite3.Database(
   replayDbPath,
   sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX,
@@ -226,12 +692,40 @@ const replayDb = new sqlite3.Database(
   }
 );
 
-db.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
-db.serialize(() => {
-  db.run(`PRAGMA foreign_keys = ON`);
-  db.run(`PRAGMA journal_mode = WAL`);
-  db.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-});
+function configureDatabase(database) {
+  database.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
+  database.serialize(() => {
+    database.run(`PRAGMA foreign_keys = ON`);
+    database.run(`PRAGMA journal_mode = WAL`);
+    database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+  });
+}
+
+function ensureRawDatabaseSchema() {
+  if (!rawDb) {
+    return;
+  }
+  rawDb.run(`
+    CREATE TABLE IF NOT EXISTS players (
+      puuid TEXT PRIMARY KEY,
+      names TEXT,
+      feedscore REAL,
+      opscore REAL,
+      country TEXT,
+      match_count INTEGER DEFAULT 1
+    )
+  `);
+}
+
+function openActiveRawDatabase() {
+  if (rawDb) {
+    rawDb.close();
+  }
+  rawDb = openConfiguredDatabase(getActiveRawDbPath(), "Raw player database");
+  configureDatabase(rawDb);
+  ensureRawDatabaseSchema();
+}
+
 replayDb.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
 replayDb.serialize(() => {
   replayDb.run(`PRAGMA foreign_keys = ON`);
@@ -276,15 +770,15 @@ function sqliteAll(database, sql, params = []) {
 }
 
 function dbRun(sql, params = []) {
-  return sqliteRun(db, sql, params);
+  return sqliteRun(rawDb, sql, params);
 }
 
 function dbGet(sql, params = []) {
-  return sqliteGet(db, sql, params);
+  return sqliteGet(rawDb, sql, params);
 }
 
 function dbAll(sql, params = []) {
-  return sqliteAll(db, sql, params);
+  return sqliteAll(rawDb, sql, params);
 }
 
 function replayDbRun(sql, params = []) {
@@ -298,11 +792,6 @@ function replayDbGet(sql, params = []) {
 function replayDbAll(sql, params = []) {
   return sqliteAll(replayDb, sql, params);
 }
-// Ellenőrizd, hogy a data mappa létezik-e
-if (!fs.existsSync(MATCHES_DIR)) {
-  fs.mkdirSync(MATCHES_DIR);
-}
-
 // POST /api/save-match
 app.post("/api/save-match", (req, res) => {
   const match = req.body;
@@ -311,7 +800,9 @@ app.post("/api/save-match", (req, res) => {
     return res.status(400).json({ error: "Missing matchId" });
   }
 
-  const matchFilePath = path.join(MATCHES_DIR, `${matchId}.json`);
+  const matchesDir = getActiveMatchesPath();
+  ensureDirectory(matchesDir);
+  const matchFilePath = path.join(matchesDir, `${matchId}.json`);
 
   if (fs.existsSync(matchFilePath)) {
     return res.status(200).json({ message: "Match already exists" });
@@ -323,29 +814,174 @@ app.post("/api/save-match", (req, res) => {
 
 // GET /api/matches → összes meccs kilistázása
 app.get("/api/matches", (req, res) => {
-  const files = fs.readdirSync(MATCHES_DIR).filter(f => f.endsWith(".json"));
+  const matchesDir = getActiveMatchesPath();
+  ensureDirectory(matchesDir);
+  const files = fs.readdirSync(matchesDir).filter(f => f.endsWith(".json"));
   const allMatches = files.map(f => {
-    const content = fs.readFileSync(path.join(MATCHES_DIR, f), "utf-8");
+    const content = fs.readFileSync(path.join(matchesDir, f), "utf-8");
     return JSON.parse(content);
   });
   res.json(allMatches);
 });
-// Database setup
-db.run(`
-CREATE TABLE IF NOT EXISTS players (
-  puuid TEXT PRIMARY KEY,
-  names TEXT,
-  feedscore REAL,
-  opscore REAL,
-  country TEXT,
-  match_count INTEGER DEFAULT 1
-)
-`);
+
+app.get("/api/datasets", async (req, res) => {
+  try {
+    const registry = activeDatasetRegistry || loadDatasetRegistry();
+    const datasets = await Promise.all(registry.datasets.map((dataset) => buildDatasetInfo(dataset)));
+    res.json({
+      current: getActiveDataset().id,
+      datasets,
+    });
+  } catch (error) {
+    console.error("Failed to load dataset registry:", error.message);
+    res.status(500).json({ error: "Failed to load datasets." });
+  }
+});
+
+app.post("/api/datasets", (req, res) => {
+  try {
+    const payload = req.body || {};
+    const datasetId = String(payload.id || "").trim();
+    if (!DATASET_ID_PATTERN.test(datasetId)) {
+      return res.status(400).json({ error: "Dataset id must be lowercase letters, numbers, and hyphens only." });
+    }
+
+    const registry = activeDatasetRegistry || loadDatasetRegistry();
+    if (registry.datasets.some((dataset) => dataset.id === datasetId)) {
+      return res.status(400).json({ error: "Dataset already exists." });
+    }
+
+    const dataset = createDatasetRecord(
+      datasetId,
+      String(payload.name || datasetId),
+      String(payload.description || ""),
+    );
+    ensureDatasetStorage(dataset);
+    registry.datasets.push(dataset);
+    persistDatasetRegistry(registry);
+    res.status(201).json({ dataset });
+  } catch (error) {
+    console.error("Failed to create dataset:", error.message);
+    res.status(500).json({ error: "Failed to create dataset." });
+  }
+});
+
+app.post("/api/datasets/:datasetId/select", (req, res) => {
+  try {
+    const dataset = selectActiveDataset(req.params.datasetId);
+    if (!dataset) {
+      return res.status(404).json({ error: "Dataset not found." });
+    }
+    openActiveRawDatabase();
+    res.json({
+      current: dataset.id,
+      dataset: {
+        id: dataset.id,
+        name: dataset.name,
+        description: dataset.description,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to select dataset:", error.message);
+    res.status(500).json({ error: "Failed to select dataset." });
+  }
+});
+
+app.get("/api/datasets/:datasetId/info", async (req, res) => {
+  try {
+    const registry = activeDatasetRegistry || loadDatasetRegistry();
+    const dataset = registry.datasets.find((entry) => entry.id === req.params.datasetId);
+    if (!dataset) {
+      return res.status(404).json({ error: "Dataset not found." });
+    }
+    const details = await buildDatasetInfo(dataset);
+    res.json(details);
+  } catch (error) {
+    console.error("Failed to load dataset info:", error.message);
+    res.status(500).json({ error: "Failed to load dataset info." });
+  }
+});
+
+app.get("/api/runtime-keys", (req, res) => {
+  try {
+    const keys = Array.from(MANAGED_RUNTIME_KEYS, (keyName) => runtimeKeyMetadata(keyName));
+    res.json({ keys });
+  } catch (error) {
+    console.error("Failed to load runtime key metadata:", error.message);
+    res.status(500).json({ error: "Failed to load runtime key metadata." });
+  }
+});
+
+app.put("/api/runtime-keys/:keyName", (req, res) => {
+  try {
+    const keyName = String(req.params.keyName || "").trim();
+    if (!MANAGED_RUNTIME_KEYS.has(keyName)) {
+      return res.status(400).json({ error: "Key is not writable." });
+    }
+    const metadata = updateManagedEnvKey(keyName, req.body?.value ?? "");
+    res.json({ key: metadata });
+  } catch (error) {
+    console.error("Failed to update runtime key:", error.message);
+    res.status(400).json({ error: error.message || "Failed to update runtime key." });
+  }
+});
+
+app.get("/api/riot/account/by-riot-id/:name/:tag", async (req, res) => {
+  try {
+    const response = await relayRiotRequest(
+      `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(req.params.name)}/${encodeURIComponent(req.params.tag)}`,
+    );
+    res.json(response);
+  } catch (error) {
+    console.error("Riot account lookup failed:", error.message);
+    res.status(error.statusCode || 500).json(error.payload || { error: error.message });
+  }
+});
+
+app.get("/api/riot/matches/by-puuid/:puuid/ids", async (req, res) => {
+  try {
+    const url = new URL(`https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/${encodeURIComponent(req.params.puuid)}/ids`);
+    for (const [key, value] of Object.entries(req.query)) {
+      if (value === undefined || value === null || value === "") {
+        continue;
+      }
+      url.searchParams.set(key, String(value));
+    }
+    const response = await relayRiotRequest(url.toString());
+    res.json(response);
+  } catch (error) {
+    console.error("Riot match id lookup failed:", error.message);
+    res.status(error.statusCode || 500).json(error.payload || { error: error.message });
+  }
+});
+
+app.get("/api/riot/matches/:matchId", async (req, res) => {
+  try {
+    const response = await relayRiotRequest(
+      `https://europe.api.riotgames.com/lol/match/v5/matches/${encodeURIComponent(req.params.matchId)}`,
+    );
+    const activeMatchesPath = getActiveMatchesPath();
+    ensureDirectory(activeMatchesPath);
+    const matchId = response?.metadata?.matchId;
+    if (matchId) {
+      const targetPath = path.join(activeMatchesPath, `${matchId}.json`);
+      if (!fs.existsSync(targetPath)) {
+        fs.writeFileSync(targetPath, JSON.stringify(response, null, 2));
+      }
+    }
+    res.json(response);
+  } catch (error) {
+    console.error("Riot match detail lookup failed:", error.message);
+    res.status(error.statusCode || 500).json(error.payload || { error: error.message });
+  }
+});
 
 replayDb.run(`
 CREATE TABLE IF NOT EXISTS pathfinder_replays (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cache_key TEXT NOT NULL UNIQUE,
+  dataset_id TEXT NOT NULL DEFAULT 'default',
+  dataset_name TEXT,
   title TEXT NOT NULL,
   execution_mode TEXT NOT NULL,
   source_player_id TEXT NOT NULL,
@@ -375,6 +1011,27 @@ CREATE TABLE IF NOT EXISTS pathfinder_replay_runs (
 )
 `);
 
+function ensureReplayColumn(columnName, definition) {
+  replayDb.all(`PRAGMA table_info(pathfinder_replays)`, [], (error, rows) => {
+    if (error) {
+      console.error(`Failed to inspect replay schema for ${columnName}:`, error.message);
+      return;
+    }
+    const hasColumn = rows.some((row) => row.name === columnName);
+    if (hasColumn) {
+      return;
+    }
+    replayDb.run(`ALTER TABLE pathfinder_replays ADD COLUMN ${columnName} ${definition}`, (alterError) => {
+      if (alterError) {
+        console.error(`Failed to add replay column ${columnName}:`, alterError.message);
+      }
+    });
+  });
+}
+
+ensureReplayColumn("dataset_id", "TEXT NOT NULL DEFAULT 'default'");
+ensureReplayColumn("dataset_name", "TEXT");
+
 async function hydrateReplayRows(replayRows) {
   if (!replayRows.length) {
     return [];
@@ -400,6 +1057,8 @@ async function hydrateReplayRows(replayRows) {
   return replayRows.map((row) => ({
     id: row.id,
     cacheKey: row.cache_key,
+    datasetId: row.dataset_id,
+    datasetName: row.dataset_name,
     title: row.title,
     executionMode: row.execution_mode,
     sourcePlayerId: row.source_player_id,
@@ -434,7 +1093,7 @@ app.post('/api/save-player', (req, res) => {
     return res.status(400).json({ error: 'Missing player name' });
   }
 
-  db.get("SELECT * FROM players WHERE names = ?", [player.name], (err, row) => {
+  rawDb.get("SELECT * FROM players WHERE names = ?", [player.name], (err, row) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ error: 'Database error', details: err.message });
@@ -457,7 +1116,7 @@ app.post('/api/save-player', (req, res) => {
         WHERE names = ?
       `;
 
-      db.run(sqlUpdate, [newFeedscore, newOpscore, player.country, newCount, player.name], function (err) {
+      rawDb.run(sqlUpdate, [newFeedscore, newOpscore, player.country, newCount, player.name], function (err) {
         if (err) {
           console.error('Update error:', err);
           return res.status(500).json({ error: 'Update failed', details: err.message });
@@ -480,7 +1139,7 @@ app.post('/api/save-player', (req, res) => {
         VALUES (?, ?, ?, ?, 1)
       `;
 
-      db.run(sqlInsert, [player.name, parseFloat(player.feedscore), parseFloat(player.opscore), player.country], function (err) {
+      rawDb.run(sqlInsert, [player.name, parseFloat(player.feedscore), parseFloat(player.opscore), player.country], function (err) {
         if (err) {
           console.error('Insert error:', err);
           return res.status(500).json({ error: 'Insert failed', details: err.message });
@@ -501,7 +1160,11 @@ app.post('/api/save-player', (req, res) => {
 });
 
 app.post("/api/generate-graph", (req, res) => {
-  execFile("python", ["build_graph.py", "--connected-only", "--min-weight", "2"], { cwd: backendDir }, (error, stdout, stderr) => {
+  execFile(
+    "python",
+    ["build_graph.py", "--connected-only", "--min-weight", "2"],
+    { cwd: backendDir, env: { ...process.env, ...getActiveRustEnv() } },
+    (error, stdout, stderr) => {
     if (error) {
       console.error("Python script error:", error);
       return res.status(500).json({ message: "Python script execution failed." });
@@ -511,7 +1174,8 @@ app.post("/api/generate-graph", (req, res) => {
     }
     console.log("Graph generated successfully.");
     res.json({ message: "Graph generation completed." });
-  });
+    },
+  );
 });
 
 app.get("/api/graph", (req, res) => {
@@ -522,7 +1186,10 @@ app.get("/api/graph", (req, res) => {
 
 app.post("/api/normalize-players", async (req, res) => {
   try {
-    await normalizePlayersByPuuid();
+    await normalizePlayersByPuuid({
+      dbFile: getActiveRefinedDbPath(),
+      matchDir: getActiveMatchesPath(),
+    });
     res.status(200).json({ message: "Players normalized successfully." });
   } catch (err) {
     console.error("Normalization error:", err);
@@ -619,7 +1286,7 @@ app.post("/api/pathfinder-rust/run", async (req, res) => {
 	        includeTrace: payload.options?.includeTrace === true,
 	        maxSteps: payload.options?.maxSteps || 5000,
 	      },
-	    });
+	    }, getActiveRustEnv());
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder run failed:", error.message);
@@ -635,7 +1302,7 @@ app.post("/api/pathfinder-rust/compare", async (req, res) => {
       targetPlayerId: payload.targetPlayerId,
       pathMode: payload.pathMode || "social-path",
       weightedMode: Boolean(payload.weightedMode),
-    });
+    }, getActiveRustEnv());
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder compare failed:", error.message);
@@ -648,7 +1315,7 @@ app.post("/api/pathfinder-rust/player-focus", async (req, res) => {
     const payload = req.body || {};
     const response = await executeRustCommand("player-focus", {
       playerId: payload.playerId,
-    });
+    }, getActiveRustEnv());
     res.json(response);
   } catch (error) {
     console.error("Rust pathfinder player focus failed:", error.message);
@@ -670,7 +1337,7 @@ app.post("/api/pathfinder-rust/signed-balance", async (req, res) => {
 app.post("/api/pathfinder-rust/assortativity", async (req, res) => {
   try {
     const payload = normalizeAssortativityPayload(req.body || {});
-    const response = await executeRustCommand("assortativity", payload);
+    const response = await executeRustCommand("assortativity", payload, getActiveRustEnv());
     res.json(response);
   } catch (error) {
     console.error("Rust assortativity analysis failed:", error.message);
@@ -680,11 +1347,14 @@ app.post("/api/pathfinder-rust/assortativity", async (req, res) => {
 
 app.get("/api/pathfinder-replays", async (req, res) => {
   try {
+    const dataset = getActiveDataset();
     const replayRows = await replayDbAll(
       `SELECT *
        FROM pathfinder_replays
+       WHERE dataset_id = ?
        ORDER BY datetime(created_at) DESC, id DESC
        LIMIT 24`,
+      [dataset.id],
     );
     const replays = await hydrateReplayRows(replayRows);
     res.json({ replays });
@@ -708,13 +1378,15 @@ app.post("/api/pathfinder-replays", async (req, res) => {
   }
 
   try {
+    const dataset = getActiveDataset();
     await replayDbRun("BEGIN IMMEDIATE TRANSACTION");
 
     const existingReplay = await replayDbGet(
       `SELECT id
        FROM pathfinder_replays
-       WHERE cache_key = ?`,
-      [payload.cacheKey],
+       WHERE cache_key = ?
+         AND dataset_id = ?`,
+      [payload.cacheKey, dataset.id],
     );
 
     let replayId = existingReplay?.id ?? null;
@@ -722,6 +1394,8 @@ app.post("/api/pathfinder-replays", async (req, res) => {
       await replayDbRun(
         `UPDATE pathfinder_replays
          SET title = ?,
+             dataset_id = ?,
+             dataset_name = ?,
              execution_mode = ?,
              source_player_id = ?,
              target_player_id = ?,
@@ -736,6 +1410,8 @@ app.post("/api/pathfinder-replays", async (req, res) => {
          WHERE id = ?`,
         [
           payload.title,
+          dataset.id,
+          dataset.name,
           payload.executionMode,
           payload.sourcePlayerId,
           payload.targetPlayerId,
@@ -754,6 +1430,8 @@ app.post("/api/pathfinder-replays", async (req, res) => {
       const insertResult = await replayDbRun(
         `INSERT INTO pathfinder_replays (
           cache_key,
+          dataset_id,
+          dataset_name,
           title,
           execution_mode,
           source_player_id,
@@ -765,9 +1443,11 @@ app.post("/api/pathfinder-replays", async (req, res) => {
           weighted_mode,
           selected_algorithm,
           comparison_rows_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           payload.cacheKey,
+          dataset.id,
+          dataset.name,
           payload.title,
           payload.executionMode,
           payload.sourcePlayerId,
@@ -884,6 +1564,9 @@ app.get("/api/pathfinder-rust/birdseye-3d/edge-props", async (req, res) => {
 });
 
 app.listen(PORT, () => {
+  loadDatasetRegistry();
+  openActiveRawDatabase();
+  warnAboutLegacyMatchFiles();
   console.log(`Backend listening at http://localhost:${PORT}`);
   void prewarmRustMetadata();
 });

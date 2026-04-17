@@ -5,8 +5,11 @@ import {
   FaChartLine,
   FaChevronLeft,
   FaChevronRight,
+  FaDatabase,
   FaFireAlt,
   FaGlobe,
+  FaKey,
+  FaPlus,
   FaProjectDiagram,
   FaRoute,
   FaSearch,
@@ -14,6 +17,7 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import { useI18n } from "./i18n";
+import type { DatasetRecord, RuntimeKeyRecord } from "./App";
 
 type AppNavbarProps = {
   collapsed: boolean;
@@ -24,6 +28,15 @@ type AppNavbarProps = {
   onOpenMobileNav: () => void;
   onCloseMobileNav: () => void;
   onNormalizePlayers: () => Promise<void>;
+  datasets: DatasetRecord[];
+  currentDatasetId: string | null;
+  datasetLoading: boolean;
+  onRefreshDatasets: () => Promise<void>;
+  onSelectDataset: (datasetId: string) => Promise<void>;
+  onCreateDataset: (payload: { id: string; name: string; description: string }) => Promise<void>;
+  runtimeKeys: RuntimeKeyRecord[];
+  runtimeKeysLoading: boolean;
+  onSaveRuntimeKey: (keyName: RuntimeKeyRecord["keyName"], value: string) => Promise<void>;
 };
 
 type NavItem = {
@@ -112,12 +125,68 @@ export default function AppNavbar({
   onOpenMobileNav,
   onCloseMobileNav,
   onNormalizePlayers,
+  datasets,
+  currentDatasetId,
+  datasetLoading,
+  onRefreshDatasets,
+  onSelectDataset,
+  onCreateDataset,
+  runtimeKeys,
+  runtimeKeysLoading,
+  onSaveRuntimeKey,
 }: AppNavbarProps) {
   const { language, setLanguage, t } = useI18n();
   const [generateLoading, setGenerateLoading] = useState(false);
   const [normalizeLoading, setNormalizeLoading] = useState(false);
   const [showScrollCue, setShowScrollCue] = useState(false);
+  const [datasetForm, setDatasetForm] = useState({ id: "", name: "", description: "" });
+  const [createDatasetLoading, setCreateDatasetLoading] = useState(false);
+  const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
+  const [runtimeKeyDrafts, setRuntimeKeyDrafts] = useState<Record<string, string>>({});
+  const [savingRuntimeKey, setSavingRuntimeKey] = useState<string | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
+
+  const navCopy = language === "hu"
+    ? {
+        datasetTitle: "Aktiv adathalmaz",
+        datasetCaption: "Valts az aktiv valos adathalmazok kozott, vagy hozz letre ujat a regiszteren keresztul.",
+        datasetLabel: "Adathalmaz",
+        datasetPlayers: "jatekos",
+        datasetMatches: "meccs",
+        refreshDatasets: "Frissites",
+        createDataset: "Uj adathalmaz",
+        datasetId: "Adathalmaz azonosito",
+        datasetName: "Nev",
+        datasetDescription: "Leiras",
+        create: "Letrehozas",
+        runtimeKeysTitle: "API kulcsok",
+        runtimeKeysCaption: "A kulcsok a backend/.env fajlba kerulnek, es a szerver hasznalja oket a proxyzott hivashoz.",
+        saveKey: "Mentes",
+        clearKey: "Torles",
+        notSet: "Nincs beallitva",
+        setStatus: "Beallitva",
+        managedBy: "Tarolas",
+      }
+    : {
+        datasetTitle: "Active dataset",
+        datasetCaption: "Switch between real datasets or create a new one from the registry-backed backend state.",
+        datasetLabel: "Dataset",
+        datasetPlayers: "players",
+        datasetMatches: "matches",
+        refreshDatasets: "Refresh",
+        createDataset: "New dataset",
+        datasetId: "Dataset ID",
+        datasetName: "Name",
+        datasetDescription: "Description",
+        create: "Create",
+        runtimeKeysTitle: "API keys",
+        runtimeKeysCaption: "Keys are saved into backend/.env and used by the server for proxied requests.",
+        saveKey: "Save",
+        clearKey: "Clear",
+        notSet: "Not set",
+        setStatus: "Configured",
+        managedBy: "Storage",
+      };
 
   const navItems: NavItem[] = [
     {
@@ -265,6 +334,109 @@ export default function AppNavbar({
           <SidebarSection title={t.app.nav.actionsSection} collapsed={collapsed}>
             <div className="app-sidebar__actions">
               <ActionCard
+                title={navCopy.datasetTitle}
+                caption={navCopy.datasetCaption}
+                collapsed={collapsed}
+              >
+                {!collapsed ? (
+                  <>
+                    <label className="app-sidebar__field">
+                      <span className="app-sidebar__field-label">
+                        <span className="app-sidebar__action-icon"><FaDatabase /></span>
+                        <span>{navCopy.datasetLabel}</span>
+                      </span>
+                      <div className="app-sidebar__field-row">
+                        <select
+                          value={currentDatasetId || ""}
+                          onChange={async (event) => {
+                            const nextId = event.target.value;
+                            if (!nextId || nextId === currentDatasetId) {
+                              return;
+                            }
+                            setSwitchingDatasetId(nextId);
+                            try {
+                              await onSelectDataset(nextId);
+                            } finally {
+                              setSwitchingDatasetId(null);
+                            }
+                          }}
+                          disabled={datasetLoading || Boolean(switchingDatasetId)}
+                        >
+                          {datasets.map((dataset) => (
+                            <option key={dataset.id} value={dataset.id}>
+                              {dataset.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="app-sidebar__mini-button"
+                          onClick={() => void onRefreshDatasets()}
+                          disabled={datasetLoading}
+                        >
+                          {navCopy.refreshDatasets}
+                        </button>
+                      </div>
+                    </label>
+
+                    {datasets.find((dataset) => dataset.id === currentDatasetId) ? (
+                      <div className="app-sidebar__dataset-summary">
+                        <div>{datasets.find((dataset) => dataset.id === currentDatasetId)?.refinedPlayerCount} {navCopy.datasetPlayers}</div>
+                        <div>{datasets.find((dataset) => dataset.id === currentDatasetId)?.matchCount} {navCopy.datasetMatches}</div>
+                      </div>
+                    ) : null}
+
+                    <div className="app-sidebar__field-grid">
+                      <label className="app-sidebar__field">
+                        <span className="app-sidebar__field-label">{navCopy.datasetId}</span>
+                        <input
+                          value={datasetForm.id}
+                          onChange={(event) => setDatasetForm((current) => ({ ...current, id: event.target.value.toLowerCase() }))}
+                          placeholder="default-2"
+                        />
+                      </label>
+                      <label className="app-sidebar__field">
+                        <span className="app-sidebar__field-label">{navCopy.datasetName}</span>
+                        <input
+                          value={datasetForm.name}
+                          onChange={(event) => setDatasetForm((current) => ({ ...current, name: event.target.value }))}
+                          placeholder="Friends Group"
+                        />
+                      </label>
+                    </div>
+                    <label className="app-sidebar__field">
+                      <span className="app-sidebar__field-label">{navCopy.datasetDescription}</span>
+                      <textarea
+                        rows={2}
+                        value={datasetForm.description}
+                        onChange={(event) => setDatasetForm((current) => ({ ...current, description: event.target.value }))}
+                        placeholder="Optional dataset notes"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="app-sidebar__action-button app-sidebar__action-button--ghost"
+                      onClick={async () => {
+                        setCreateDatasetLoading(true);
+                        try {
+                          await onCreateDataset(datasetForm);
+                          setDatasetForm({ id: "", name: "", description: "" });
+                        } finally {
+                          setCreateDatasetLoading(false);
+                        }
+                      }}
+                      disabled={createDatasetLoading || !datasetForm.id.trim() || !datasetForm.name.trim()}
+                    >
+                      <span className="app-sidebar__action-icon"><FaPlus /></span>
+                      <span>{createDatasetLoading ? t.common.loading : navCopy.create}</span>
+                    </button>
+                  </>
+                ) : (
+                  <span className="app-sidebar__action-icon"><FaDatabase /></span>
+                )}
+              </ActionCard>
+
+              <ActionCard
                 title={t.app.nav.graphPipelineTitle}
                 caption={t.app.nav.graphPipelineCaption}
                 collapsed={collapsed}
@@ -308,6 +480,70 @@ export default function AppNavbar({
                   <span className="app-sidebar__action-icon">{normalizeLoading ? <span className="spinner" /> : <FaSyncAlt />}</span>
                   {!collapsed ? <span>{t.app.nav.normalizePlayers}</span> : null}
                 </button>
+              </ActionCard>
+
+              <ActionCard
+                title={navCopy.runtimeKeysTitle}
+                caption={navCopy.runtimeKeysCaption}
+                collapsed={collapsed}
+              >
+                {!collapsed ? runtimeKeys.map((runtimeKey) => (
+                  <div key={runtimeKey.keyName} className="app-sidebar__key-card">
+                    <div className="app-sidebar__key-header">
+                      <div className="app-sidebar__key-name">
+                        <span className="app-sidebar__action-icon"><FaKey /></span>
+                        <span>{runtimeKey.keyName}</span>
+                      </div>
+                      <span className={`app-sidebar__key-badge${runtimeKey.isSet ? " is-set" : ""}`}>
+                        {runtimeKey.isSet ? runtimeKey.maskedPreview || navCopy.setStatus : navCopy.notSet}
+                      </span>
+                    </div>
+                    <div className="app-sidebar__key-storage">{navCopy.managedBy}: {runtimeKey.storage}</div>
+                    <input
+                      type="password"
+                      value={runtimeKeyDrafts[runtimeKey.keyName] ?? ""}
+                      onChange={(event) => setRuntimeKeyDrafts((current) => ({
+                        ...current,
+                        [runtimeKey.keyName]: event.target.value,
+                      }))}
+                      placeholder={runtimeKey.isSet ? runtimeKey.maskedPreview || navCopy.setStatus : runtimeKey.keyName}
+                    />
+                    <div className="app-sidebar__field-row">
+                      <button
+                        type="button"
+                        className="app-sidebar__mini-button"
+                        onClick={async () => {
+                          setSavingRuntimeKey(runtimeKey.keyName);
+                          try {
+                            await onSaveRuntimeKey(runtimeKey.keyName, runtimeKeyDrafts[runtimeKey.keyName] ?? "");
+                            setRuntimeKeyDrafts((current) => ({ ...current, [runtimeKey.keyName]: "" }));
+                          } finally {
+                            setSavingRuntimeKey(null);
+                          }
+                        }}
+                        disabled={runtimeKeysLoading || savingRuntimeKey === runtimeKey.keyName}
+                      >
+                        {savingRuntimeKey === runtimeKey.keyName ? t.common.loading : navCopy.saveKey}
+                      </button>
+                      <button
+                        type="button"
+                        className="app-sidebar__mini-button app-sidebar__mini-button--ghost"
+                        onClick={async () => {
+                          setSavingRuntimeKey(runtimeKey.keyName);
+                          try {
+                            await onSaveRuntimeKey(runtimeKey.keyName, "");
+                            setRuntimeKeyDrafts((current) => ({ ...current, [runtimeKey.keyName]: "" }));
+                          } finally {
+                            setSavingRuntimeKey(null);
+                          }
+                        }}
+                        disabled={runtimeKeysLoading || savingRuntimeKey === runtimeKey.keyName || !runtimeKey.isSet}
+                      >
+                        {navCopy.clearKey}
+                      </button>
+                    </div>
+                  </div>
+                )) : <span className="app-sidebar__action-icon"><FaKey /></span>}
               </ActionCard>
 
               <ActionCard

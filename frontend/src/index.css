@@ -473,6 +473,114 @@ button:focus-visible {
   outline: none;
 }
 
+.app-sidebar__field,
+.app-sidebar__field-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.app-sidebar__field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-sidebar__field-label,
+.app-sidebar__key-header,
+.app-sidebar__key-name {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.app-sidebar__field-label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.app-sidebar__field input,
+.app-sidebar__field textarea,
+.app-sidebar__field select,
+.app-sidebar__key-card input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: rgba(12, 22, 33, 0.78);
+  color: var(--text-primary);
+  padding: 0.7rem 0.85rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.app-sidebar__field textarea {
+  min-height: 72px;
+  resize: vertical;
+  font: inherit;
+}
+
+.app-sidebar__field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.app-sidebar__dataset-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.app-sidebar__mini-button {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: rgba(88, 183, 255, 0.18);
+  color: var(--text-primary);
+  padding: 0.7rem 0.9rem;
+  white-space: nowrap;
+}
+
+.app-sidebar__mini-button--ghost {
+  background: rgba(12, 22, 33, 0.72);
+}
+
+.app-sidebar__key-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem;
+  border-radius: 16px;
+  border: 1px solid rgba(126, 155, 183, 0.14);
+  background: rgba(8, 16, 24, 0.52);
+}
+
+.app-sidebar__key-header {
+  justify-content: space-between;
+}
+
+.app-sidebar__key-name {
+  font-weight: 700;
+}
+
+.app-sidebar__key-badge {
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: rgba(126, 155, 183, 0.12);
+}
+
+.app-sidebar__key-badge.is-set {
+  color: #d9fff2;
+  background: rgba(30, 140, 100, 0.24);
+}
+
+.app-sidebar__key-storage {
+  color: var(--text-soft);
+  font-size: 0.75rem;
+}
+
 .app-main {
   position: relative;
   min-width: 0;

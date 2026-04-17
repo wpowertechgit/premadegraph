@@ -8,6 +8,20 @@ const DEFAULT_MAX_BUFFER = 64 * 1024 * 1024;
 let daemonState = null;
 let nextRequestId = 1;
 
+function buildEnv(envOverrides = {}) {
+  return {
+    ...process.env,
+    ...envOverrides,
+  };
+}
+
+function buildEnvKey(envOverrides = {}) {
+  const entries = Object.entries(envOverrides)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(entries);
+}
+
 function resolveMaxBuffer() {
   const parsed = Number(process.env.PATHFINDER_RUST_MAX_BUFFER || "");
   if (Number.isFinite(parsed) && parsed > 0) {
@@ -36,9 +50,29 @@ function resolveRustExecutable() {
   return null;
 }
 
-function ensureDaemon() {
+function shutdownDaemon() {
+  if (!daemonState?.child || daemonState.child.killed) {
+    daemonState = null;
+    return;
+  }
+
+  const activeState = daemonState;
+  daemonState = null;
+  const error = new Error("Rust daemon reset due to dataset/runtime change.");
+  for (const entry of activeState.pending.values()) {
+    entry.reject(error);
+  }
+  activeState.pending.clear();
+  activeState.child.kill();
+}
+
+function ensureDaemon(envOverrides = {}) {
+  const envKey = buildEnvKey(envOverrides);
   if (daemonState?.child && !daemonState.child.killed) {
-    return daemonState;
+    if (daemonState.envKey === envKey) {
+      return daemonState;
+    }
+    shutdownDaemon();
   }
 
   const executable = resolveRustExecutable();
@@ -50,6 +84,7 @@ function ensureDaemon() {
 
   const child = spawn(executable, ["serve"], {
     cwd: rustProjectDir,
+    env: buildEnv(envOverrides),
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -95,7 +130,7 @@ function ensureDaemon() {
     daemonState = null;
   });
 
-  daemonState = { child, pending };
+  daemonState = { child, pending, envKey };
   return daemonState;
 }
 
@@ -122,7 +157,7 @@ function handleDaemonLine(pending, line) {
   request.resolve(message.result);
 }
 
-function executeRustProcess(command, payload, { parseJson = true } = {}) {
+function executeRustProcess(command, payload, { parseJson = true, envOverrides = {} } = {}) {
   const executable = resolveRustExecutable();
 
   if (!executable) {
@@ -143,6 +178,7 @@ function executeRustProcess(command, payload, { parseJson = true } = {}) {
       [command],
       {
         cwd: rustProjectDir,
+        env: buildEnv(envOverrides),
         windowsHide: true,
         maxBuffer: resolveMaxBuffer(),
       },
@@ -184,14 +220,14 @@ function executeRustProcess(command, payload, { parseJson = true } = {}) {
   });
 }
 
-function executeRustCommand(command, payload) {
+function executeRustCommand(command, payload, envOverrides = {}) {
   if (command === "birdseye-3d-export") {
-    return executeRustProcess(command, payload, { parseJson: true });
+    return executeRustProcess(command, payload, { parseJson: true, envOverrides });
   }
 
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
-    const daemon = ensureDaemon();
+    const daemon = ensureDaemon(envOverrides);
     const id = nextRequestId++;
     daemon.pending.set(id, {
       resolve: (result) => {
@@ -214,11 +250,12 @@ function executeRustCommand(command, payload) {
   });
 }
 
-function executeRustCommandRaw(command, payload) {
-  return executeRustProcess(command, payload, { parseJson: false });
+function executeRustCommandRaw(command, payload, envOverrides = {}) {
+  return executeRustProcess(command, payload, { parseJson: false, envOverrides });
 }
 
 module.exports = {
   executeRustCommand,
   executeRustCommandRaw,
+  shutdownDaemon,
 };
