@@ -8,6 +8,7 @@ import GraphSpherePage from "./GraphSpherePage";
 import RouteTransitionOverlay from "./RouteTransitionOverlay";
 
 const MatchAnalysisPage = lazy(() => import("./MatchAnalysisForm"));
+const MatchCollectorPage = lazy(() => import("./MatchCollectorPage"));
 const GraphPage = lazy(() => import("./GraphPage"));
 const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 const AssortativityPage = lazy(() => import("./AssortativityPage"));
@@ -16,6 +17,10 @@ const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 const TRANSITION_TOTAL_MS = 320;
 const TRANSITION_SWAP_MS = 160;
 const INSTANT_ROUTE_PATHS = new Set(["/graph-sphere"]);
+const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
+const NAV_WIDTH_MIN = 280;
+const NAV_WIDTH_MAX = 520;
+const COLLAPSED_NAV_WIDTH = 104;
 
 type FeedbackState = {
   message: string;
@@ -99,6 +104,14 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
             )}
           />
           <Route
+            path="/match-collector"
+            element={(
+              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                <MatchCollectorPage />
+              </Suspense>
+            )}
+          />
+          <Route
             path="/graph"
             element={(
               <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
@@ -144,6 +157,16 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
 function App() {
   const { t } = useI18n();
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navWidth, setNavWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return 340;
+    }
+    const stored = Number(window.localStorage.getItem(NAV_WIDTH_STORAGE_KEY));
+    if (!Number.isFinite(stored)) {
+      return 340;
+    }
+    return Math.min(NAV_WIDTH_MAX, Math.max(NAV_WIDTH_MIN, stored));
+  });
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [isMobileLayout, setIsMobileLayout] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(max-width: 1200px)").matches : false,
@@ -154,6 +177,7 @@ function App() {
   const [datasetLoading, setDatasetLoading] = useState(false);
   const [runtimeKeys, setRuntimeKeys] = useState<RuntimeKeyRecord[]>([]);
   const [runtimeKeysLoading, setRuntimeKeysLoading] = useState(false);
+  const [navResizeActive, setNavResizeActive] = useState(false);
 
   React.useEffect(() => {
     document.title = t.app.title;
@@ -183,6 +207,41 @@ function App() {
 
     setMobileNavOpen(false);
   }, [isMobileLayout]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(NAV_WIDTH_STORAGE_KEY, String(navWidth));
+  }, [navWidth]);
+
+  useEffect(() => {
+    if (!navResizeActive) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const nextWidth = Math.min(NAV_WIDTH_MAX, Math.max(NAV_WIDTH_MIN, event.clientX));
+      setNavWidth(nextWidth);
+    };
+
+    const stopResize = () => {
+      setNavResizeActive(false);
+      document.body.classList.remove("app-nav-resizing");
+    };
+
+    document.body.classList.add("app-nav-resizing");
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+
+    return () => {
+      document.body.classList.remove("app-nav-resizing");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    };
+  }, [navResizeActive]);
 
   const showFeedback = (message: string, severity: FeedbackState["severity"]) => {
     setFeedback({ message, severity });
@@ -318,6 +377,9 @@ function App() {
     <BrowserRouter>
       <div
         className={`app-shell${navCollapsed ? " is-collapsed" : ""}${isMobileLayout ? " is-mobile-layout" : ""}${mobileNavOpen ? " is-mobile-nav-open" : ""}`}
+        style={{
+          ["--sidebar-width" as string]: `${navCollapsed ? COLLAPSED_NAV_WIDTH : navWidth}px`,
+        }}
       >
         <AppNavbar
           collapsed={isMobileLayout ? false : navCollapsed}
@@ -337,6 +399,13 @@ function App() {
           runtimeKeys={runtimeKeys}
           runtimeKeysLoading={runtimeKeysLoading}
           onSaveRuntimeKey={saveRuntimeKey}
+          desktopWidth={navWidth}
+          onStartResize={() => {
+            if (isMobileLayout || navCollapsed) {
+              return;
+            }
+            setNavResizeActive(true);
+          }}
         />
         <AppRoutes navCollapsed={isMobileLayout ? false : navCollapsed} />
         <Snackbar

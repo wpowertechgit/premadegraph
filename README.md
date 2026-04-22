@@ -172,10 +172,24 @@ Signed structural-balance analysis:
 echo '{"minEdgeSupport":2,"tiePolicy":"exclude","maxTopNodes":10,"includeClusterSummaries":true}' | cargo run -- signed-balance
 ```
 
+Signed-balance sensitivity sweep:
+
+```bash
+echo '{"minEdgeSupports":[1,2,3,4],"tiePolicies":["exclude","ally","enemy"],"includeClusterSummaries":false}' | cargo run -- balance-sweep
+```
+
+Assortativity significance against a permutation baseline:
+
+```bash
+echo '{"graphModes":["social-path","battle-path"],"metrics":["opscore","feedscore"],"permutationCount":100,"seed":42}' | cargo run -- assortativity-significance
+```
+
 Backend endpoint:
 
 ```text
 POST /api/pathfinder-rust/signed-balance
+POST /api/pathfinder-rust/balance-sweep
+POST /api/pathfinder-rust/assortativity-significance
 ```
 
 </details>
@@ -270,6 +284,7 @@ The documentation set is intentionally cross-linked so the project can later be 
 - use [Route Transition Overlay](docs/route-transition-overlay.md) for the motion-system subsection
 - use [Bird's-Eye 3D Sphere](docs/birdseye-3d-sphere.md) for the global 3D visualization subsection
 - use [Signed Balance Theory And Implementation](docs/signed-balance-theory.md) for the signed-network experiment subsection
+- use [Experiment Runners For Signed-Balance Sensitivity And Assortativity Significance](docs/experiment-runners.md) for the reproducible experiment layer
 - use [Mock Datasets And Chaos Design](docs/mock-datasets-and-chaos-design.md) for synthetic evaluation and demo methodology
 - use [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md) for storage/runtime architecture
 - use [Pathfinder Backend Prototype Notes](docs/pathfinder-backend-prototype.md) for backend migration history
@@ -278,6 +293,7 @@ The documentation set is intentionally cross-linked so the project can later be 
 - [Route Transition Overlay](docs/route-transition-overlay.md)
 - [Bird's-Eye 3D Sphere](docs/birdseye-3d-sphere.md)
 - [Signed Balance Theory And Implementation](docs/signed-balance-theory.md)
+- [Experiment Runners For Signed-Balance Sensitivity And Assortativity Significance](docs/experiment-runners.md)
 - [Mock Datasets And Chaos Design](docs/mock-datasets-and-chaos-design.md)
 - [Rust Backend Prototype Notes](docs/pathfinder-backend-prototype.md)
 - [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md)

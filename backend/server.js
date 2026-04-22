@@ -6,7 +6,7 @@ const bodyParser = require("body-parser");
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const PORT = 3001;
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const { normalizePlayersByPuuid } = require("./normalize_players_by_puuid");
 const {
   runSearch: runPrototypePathfinderSearch,
@@ -28,6 +28,8 @@ const LEGACY_CACHE_ROOT = path.resolve(__dirname, "pathfinder-rust", "cache");
 const ENV_FILE_PATH = path.join(__dirname, ".env");
 const DATASET_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const MANAGED_RUNTIME_KEYS = new Set(["RIOT_API_KEY", "OPENROUTER_API_KEY"]);
+const MATCH_COLLECTOR_EVENT_PREFIX = "@@MATCH_COLLECTOR@@";
+const MATCH_COLLECTOR_LOG_LIMIT = 80;
 
 const rustResponseCache = {
   options: null,
@@ -42,6 +44,7 @@ let birdseyeCachePromise = null;
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
 let activeDatasetRegistry = null;
 let activeDataset = null;
+let matchCollectorJob = null;
 
 function getBirdseyeArtifactPaths(cacheDir) {
   return {
@@ -200,6 +203,189 @@ function ensureRiotApiKey() {
     throw error;
   }
   return key;
+}
+
+function collectorDefaultConfig() {
+  return {
+    collectorMode: "standard",
+    mode: "random",
+    specificPuuid: "",
+    matchesPerPlayer: 10,
+    maxIterations: 1,
+    queueType: "",
+    requestsPerSecond: 15,
+    requestsPer2Min: 90,
+    probeMatchCount: 5,
+    minimumPremadeRepeats: 2,
+  };
+}
+
+function createCollectorSnapshot(overrides = {}) {
+  return {
+    status: "idle",
+    jobId: null,
+    datasetId: null,
+    config: null,
+    currentStage: "idle",
+    progress: {
+      playersProcessed: 0,
+      maxIterations: 0,
+      matchesSaved: 0,
+      apiCallsMade: 0,
+      currentPlayerName: null,
+      currentPlayerPuuid: null,
+      currentMatchId: null,
+      startedAt: null,
+      stopRequested: false,
+    },
+    summary: null,
+    logs: [],
+    selectionSummary: {
+      candidatesTried: 0,
+      candidatesSkippedNoPremade: 0,
+      candidatesPromoted: 0,
+      currentCandidatePuuid: null,
+      currentCandidateProbeSummary: null,
+    },
+    error: null,
+    pid: null,
+    ...overrides,
+  };
+}
+
+function getCollectorStatusSnapshot() {
+  if (!matchCollectorJob) {
+    return createCollectorSnapshot();
+  }
+  const { childProcess, stopSignalPath, configPath, ...snapshot } = matchCollectorJob;
+  return {
+    ...snapshot,
+    logs: Array.isArray(snapshot.logs) ? snapshot.logs : [],
+  };
+}
+
+function appendCollectorLog(message, level = "info", timestamp = new Date().toISOString()) {
+  if (!matchCollectorJob) {
+    return;
+  }
+  matchCollectorJob.logs = [
+    ...(Array.isArray(matchCollectorJob.logs) ? matchCollectorJob.logs : []),
+    { timestamp, level, message },
+  ].slice(-MATCH_COLLECTOR_LOG_LIMIT);
+}
+
+async function countPlayersInDatabase(databasePath) {
+  if (!fs.existsSync(databasePath)) {
+    return 0;
+  }
+  return await new Promise((resolve) => {
+    const database = new sqlite3.Database(databasePath, sqlite3.OPEN_READONLY, (openError) => {
+      if (openError) {
+        resolve(0);
+        return;
+      }
+      database.get("SELECT COUNT(*) AS count FROM players", [], (error, row) => {
+        database.close();
+        if (error) {
+          resolve(0);
+          return;
+        }
+        resolve(row?.count ?? 0);
+      });
+    });
+  });
+}
+
+async function buildCollectorDatasetSummary(dataset = getActiveDataset()) {
+  const details = await buildDatasetInfo(dataset);
+  const rawPlayerCount = await countPlayersInDatabase(dataset.rawDbAbsolutePath);
+  return {
+    id: dataset.id,
+    name: dataset.name,
+    description: dataset.description,
+    matchCount: details.matchCount,
+    refinedPlayerCount: details.refinedPlayerCount,
+    rawPlayerCount,
+    canUseStrengthenMode: rawPlayerCount > 0,
+  };
+}
+
+function normalizeCollectorStartPayload(payload = {}) {
+  const defaults = collectorDefaultConfig();
+  const collectorMode = payload.collectorMode === "strengthen-graph" ? "strengthen-graph" : "standard";
+  const mode = payload.mode === "specific-puuid" ? "specific-puuid" : "random";
+  const queueType = ["", "420", "430", "440"].includes(String(payload.queueType ?? "")) ? String(payload.queueType ?? "") : "";
+
+  return {
+    collectorMode,
+    mode: collectorMode === "strengthen-graph" ? "random" : mode,
+    specificPuuid: String(payload.specificPuuid || "").trim(),
+    matchesPerPlayer: Math.max(1, Math.min(20, Number(payload.matchesPerPlayer ?? defaults.matchesPerPlayer) || defaults.matchesPerPlayer)),
+    maxIterations: Math.max(1, Math.min(500, Number(payload.maxIterations ?? defaults.maxIterations) || defaults.maxIterations)),
+    queueType,
+    requestsPerSecond: Math.max(1, Math.min(19, Number(payload.requestsPerSecond ?? defaults.requestsPerSecond) || defaults.requestsPerSecond)),
+    requestsPer2Min: Math.max(1, Math.min(99, Number(payload.requestsPer2Min ?? defaults.requestsPer2Min) || defaults.requestsPer2Min)),
+    probeMatchCount: Math.max(1, Math.min(5, Number(payload.probeMatchCount ?? defaults.probeMatchCount) || defaults.probeMatchCount)),
+    minimumPremadeRepeats: Math.max(2, Math.min(5, Number(payload.minimumPremadeRepeats ?? defaults.minimumPremadeRepeats) || defaults.minimumPremadeRepeats)),
+  };
+}
+
+function applyCollectorEvent(event) {
+  if (!matchCollectorJob || !event || typeof event !== "object") {
+    return;
+  }
+
+  if (event.type === "log") {
+    appendCollectorLog(event.message || "", event.level || "info", event.timestamp || new Date().toISOString());
+    return;
+  }
+
+  if (event.type === "progress") {
+    matchCollectorJob.currentStage = event.currentStage || matchCollectorJob.currentStage;
+    matchCollectorJob.progress = {
+      ...matchCollectorJob.progress,
+      ...(event.progress || {}),
+    };
+    matchCollectorJob.selectionSummary = {
+      ...matchCollectorJob.selectionSummary,
+      ...(event.selectionSummary || {}),
+    };
+    if (event.summary) {
+      matchCollectorJob.summary = {
+        ...(matchCollectorJob.summary || {}),
+        ...event.summary,
+      };
+    }
+    return;
+  }
+
+  if (event.type === "status") {
+    matchCollectorJob.status = event.status || matchCollectorJob.status;
+    matchCollectorJob.currentStage = event.currentStage || matchCollectorJob.currentStage;
+    matchCollectorJob.summary = {
+      ...(matchCollectorJob.summary || {}),
+      ...(event.summary || {}),
+    };
+    matchCollectorJob.error = event.error || null;
+  }
+}
+
+function attachCollectorStream(stream, onLine) {
+  let buffer = "";
+  stream.on("data", (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      onLine(line);
+    }
+  });
+  stream.on("end", () => {
+    const finalLine = buffer.trim();
+    if (finalLine) {
+      onLine(finalLine);
+    }
+  });
 }
 
 async function relayRiotRequest(url) {
@@ -562,6 +748,28 @@ function normalizeAssortativityPayload(payload = {}) {
   };
 }
 
+function normalizeBalanceSweepPayload(payload = {}) {
+  return {
+    minEdgeSupports: Array.isArray(payload.minEdgeSupports) ? payload.minEdgeSupports : undefined,
+    tiePolicies: Array.isArray(payload.tiePolicies) ? payload.tiePolicies : undefined,
+    maxTopNodes: payload.maxTopNodes,
+    includeClusterSummaries: payload.includeClusterSummaries,
+  };
+}
+
+function normalizeAssortativitySignificancePayload(payload = {}) {
+  return {
+    graphModes: Array.isArray(payload.graphModes) ? payload.graphModes : undefined,
+    metrics: Array.isArray(payload.metrics) ? payload.metrics : undefined,
+    minEdgeSupport: payload.minEdgeSupport,
+    minPlayerMatchCount: payload.minPlayerMatchCount,
+    strongTieThreshold: payload.strongTieThreshold,
+    permutationCount: payload.permutationCount,
+    seed: payload.seed,
+    includeNullDistributionSamples: payload.includeNullDistributionSamples,
+  };
+}
+
 function runSignedBalanceQueued(payload = {}) {
   const normalized = normalizeSignedBalancePayload(payload);
   const requestKey = JSON.stringify(normalized);
@@ -657,6 +865,168 @@ async function streamBirdseyeArtifact(res, artifactKey, contentType) {
     console.log(`[birdseye] finished ${path.basename(artifactPath)} in ${Date.now() - startedAt}ms.`);
   });
   stream.pipe(res);
+}
+
+function finalizeCollectorJob({ status, error, exitCode }) {
+  if (!matchCollectorJob) {
+    return;
+  }
+
+  matchCollectorJob.status = status;
+  matchCollectorJob.currentStage = status;
+  matchCollectorJob.error = error || null;
+  matchCollectorJob.summary = {
+    ...(matchCollectorJob.summary || {}),
+    finishedAt: new Date().toISOString(),
+    exitCode: exitCode ?? null,
+  };
+  matchCollectorJob.progress = {
+    ...matchCollectorJob.progress,
+    stopRequested: status === "stopped" ? true : matchCollectorJob.progress?.stopRequested,
+  };
+  matchCollectorJob.childProcess = null;
+  matchCollectorJob.pid = null;
+}
+
+async function startMatchCollectorJob(payload) {
+  if (matchCollectorJob?.childProcess) {
+    const error = new Error("A collector run is already active.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  ensureRiotApiKey();
+
+  const normalized = normalizeCollectorStartPayload(payload);
+  const dataset = getActiveDataset();
+  const datasetSummary = await buildCollectorDatasetSummary(dataset);
+
+  if (normalized.collectorMode === "strengthen-graph" && !datasetSummary.canUseStrengthenMode) {
+    const error = new Error("Strengthen-graph mode requires an active dataset that already contains players.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (normalized.mode === "specific-puuid" && !normalized.specificPuuid) {
+    const error = new Error("specific-puuid mode requires a specificPuuid.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const jobId = `collector-${Date.now()}`;
+  const jobsDir = path.join(dataset.cacheAbsolutePath, "collector-jobs");
+  ensureDirectory(jobsDir);
+  const configPath = path.join(jobsDir, `${jobId}.config.json`);
+  const stopSignalPath = path.join(jobsDir, `${jobId}.stop`);
+  if (fs.existsSync(stopSignalPath)) {
+    fs.unlinkSync(stopSignalPath);
+  }
+
+  const pythonConfig = {
+    ...normalized,
+    datasetId: dataset.id,
+    rawDbPath: dataset.rawDbAbsolutePath,
+    matchesDir: dataset.matchesAbsolutePath,
+    apiKey: parseEnvValue("RIOT_API_KEY"),
+    stopSignalPath,
+    randomSeed: Date.now(),
+  };
+  writeJsonFile(configPath, pythonConfig);
+
+  const childProcess = spawn("python", ["match_collector.py", "--config-file", configPath], {
+    cwd: backendDir,
+    env: { ...process.env },
+  });
+
+  matchCollectorJob = createCollectorSnapshot({
+    status: "running",
+    jobId,
+    datasetId: dataset.id,
+    config: normalized,
+    currentStage: "starting",
+    summary: {
+      datasetId: dataset.id,
+      datasetName: dataset.name,
+      startedAt: new Date().toISOString(),
+    },
+    pid: childProcess.pid ?? null,
+    childProcess,
+    stopSignalPath,
+    configPath,
+  });
+
+  appendCollectorLog(`Collector job ${jobId} started for dataset ${dataset.id}.`);
+
+  attachCollectorStream(childProcess.stdout, (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (trimmed.startsWith(MATCH_COLLECTOR_EVENT_PREFIX)) {
+      try {
+        const event = JSON.parse(trimmed.slice(MATCH_COLLECTOR_EVENT_PREFIX.length));
+        applyCollectorEvent(event);
+      } catch (error) {
+        appendCollectorLog(`Failed to parse collector event: ${error.message}`, "error");
+      }
+      return;
+    }
+    appendCollectorLog(trimmed);
+  });
+
+  attachCollectorStream(childProcess.stderr, (line) => {
+    if (line.trim()) {
+      appendCollectorLog(line.trim(), "warning");
+    }
+  });
+
+  childProcess.on("error", (error) => {
+    appendCollectorLog(`Collector process error: ${error.message}`, "error");
+    finalizeCollectorJob({ status: "failed", error: error.message, exitCode: null });
+  });
+
+  childProcess.on("exit", (code, signal) => {
+    const requestedStop = Boolean(matchCollectorJob?.progress?.stopRequested) || Boolean(matchCollectorJob?.stopSignalPath && fs.existsSync(matchCollectorJob.stopSignalPath));
+    const currentStatus = matchCollectorJob?.status;
+
+    if (currentStatus === "completed" || currentStatus === "stopped" || currentStatus === "failed") {
+      finalizeCollectorJob({
+        status: currentStatus,
+        error: matchCollectorJob?.error || null,
+        exitCode: code,
+      });
+      appendCollectorLog(`Collector job ${jobId} exited with code ${code ?? "null"}${signal ? ` (${signal})` : ""}.`);
+      return;
+    }
+
+    const nextStatus = requestedStop ? "stopped" : code === 0 ? "completed" : "failed";
+    const nextError = nextStatus === "failed"
+      ? `Collector process exited with code ${code ?? "null"}${signal ? ` (${signal})` : ""}.`
+      : null;
+    finalizeCollectorJob({ status: nextStatus, error: nextError, exitCode: code });
+    appendCollectorLog(`Collector job ${jobId} exited with code ${code ?? "null"}${signal ? ` (${signal})` : ""}.`, nextStatus === "failed" ? "error" : "info");
+  });
+
+  return getCollectorStatusSnapshot();
+}
+
+function requestStopMatchCollectorJob() {
+  if (!matchCollectorJob?.childProcess) {
+    const error = new Error("No active collector run to stop.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (matchCollectorJob.stopSignalPath && !fs.existsSync(matchCollectorJob.stopSignalPath)) {
+    fs.writeFileSync(matchCollectorJob.stopSignalPath, "stop\n");
+  }
+  matchCollectorJob.progress = {
+    ...matchCollectorJob.progress,
+    stopRequested: true,
+  };
+  matchCollectorJob.currentStage = "stopping";
+  appendCollectorLog(`Stop requested for collector job ${matchCollectorJob.jobId}.`, "warning");
+  return getCollectorStatusSnapshot();
 }
 
 app.use(cors());
@@ -926,6 +1296,52 @@ app.put("/api/runtime-keys/:keyName", (req, res) => {
   }
 });
 
+app.get("/api/match-collector/config", async (req, res) => {
+  try {
+    const dataset = await buildCollectorDatasetSummary();
+    res.json({
+      defaults: collectorDefaultConfig(),
+      activeDataset: dataset,
+    });
+  } catch (error) {
+    console.error("Failed to load match collector config:", error.message);
+    res.status(500).json({ error: "Failed to load match collector config." });
+  }
+});
+
+app.get("/api/match-collector/status", async (req, res) => {
+  try {
+    const activeDataset = await buildCollectorDatasetSummary();
+    res.json({
+      ...getCollectorStatusSnapshot(),
+      activeDataset,
+    });
+  } catch (error) {
+    console.error("Failed to load match collector status:", error.message);
+    res.status(500).json({ error: "Failed to load match collector status." });
+  }
+});
+
+app.post("/api/match-collector/start", async (req, res) => {
+  try {
+    const snapshot = await startMatchCollectorJob(req.body || {});
+    res.status(202).json(snapshot);
+  } catch (error) {
+    console.error("Failed to start match collector:", error.message);
+    res.status(error.statusCode || 500).json({ error: error.message || "Failed to start match collector." });
+  }
+});
+
+app.post("/api/match-collector/stop", (req, res) => {
+  try {
+    const snapshot = requestStopMatchCollectorJob();
+    res.status(202).json(snapshot);
+  } catch (error) {
+    console.error("Failed to stop match collector:", error.message);
+    res.status(error.statusCode || 500).json({ error: error.message || "Failed to stop match collector." });
+  }
+});
+
 app.get("/api/riot/account/by-riot-id/:name/:tag", async (req, res) => {
   try {
     const response = await relayRiotRequest(
@@ -1111,12 +1527,11 @@ app.post('/api/save-player', (req, res) => {
         UPDATE players SET
           feedscore = ?,
           opscore = ?,
-          country = ?,
           match_count = ?
         WHERE names = ?
       `;
 
-      rawDb.run(sqlUpdate, [newFeedscore, newOpscore, player.country, newCount, player.name], function (err) {
+      rawDb.run(sqlUpdate, [newFeedscore, newOpscore, newCount, player.name], function (err) {
         if (err) {
           console.error('Update error:', err);
           return res.status(500).json({ error: 'Update failed', details: err.message });
@@ -1127,7 +1542,6 @@ app.post('/api/save-player', (req, res) => {
             name: player.name,
             feedscore: newFeedscore,
             opscore: newOpscore,
-            country: player.country,
             match_count: newCount
           }
         });
@@ -1135,11 +1549,11 @@ app.post('/api/save-player', (req, res) => {
     } else {
       // Insert new player
       const sqlInsert = `
-        INSERT OR REPLACE INTO players (names, feedscore, opscore, country, match_count)
-        VALUES (?, ?, ?, ?, 1)
+        INSERT OR REPLACE INTO players (names, feedscore, opscore, match_count)
+        VALUES (?, ?, ?, 1)
       `;
 
-      rawDb.run(sqlInsert, [player.name, parseFloat(player.feedscore), parseFloat(player.opscore), player.country], function (err) {
+      rawDb.run(sqlInsert, [player.name, parseFloat(player.feedscore), parseFloat(player.opscore)], function (err) {
         if (err) {
           console.error('Insert error:', err);
           return res.status(500).json({ error: 'Insert failed', details: err.message });
@@ -1150,7 +1564,6 @@ app.post('/api/save-player', (req, res) => {
             name: player.name,
             feedscore: parseFloat(player.feedscore),
             opscore: parseFloat(player.opscore),
-            country: player.country,
             match_count: 1
           }
         });
@@ -1341,6 +1754,32 @@ app.post("/api/pathfinder-rust/assortativity", async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Rust assortativity analysis failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/balance-sweep", async (req, res) => {
+  try {
+    const payload = normalizeBalanceSweepPayload(req.body || {});
+    const response = await executeRustCommand("balance-sweep", payload, getActiveRustEnv());
+    res.json(response);
+  } catch (error) {
+    console.error("Rust signed-balance sweep failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/assortativity-significance", async (req, res) => {
+  try {
+    const payload = normalizeAssortativitySignificancePayload(req.body || {});
+    const response = await executeRustCommand(
+      "assortativity-significance",
+      payload,
+      getActiveRustEnv(),
+    );
+    res.json(response);
+  } catch (error) {
+    console.error("Rust assortativity significance failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

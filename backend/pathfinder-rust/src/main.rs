@@ -2,11 +2,15 @@ mod engine;
 mod models;
 
 use engine::{
-    apply_runtime_breakdown, assortativity_analysis, build_graph_state, compare_algorithms,
-    engine_spec_response, export_birdseye_bundle, global_view_response, options_response,
-    player_focus_response, run_search, signed_balance_analysis,
+    apply_runtime_breakdown, assortativity_analysis, assortativity_significance_analysis,
+    build_graph_state, compare_algorithms, engine_spec_response, export_birdseye_bundle,
+    global_view_response, options_response, player_focus_response, run_search,
+    signed_balance_analysis, signed_balance_sensitivity_analysis,
 };
-use models::{AssortativityRequest, CompareRequest, PathfinderRequest, SignedBalanceRequest};
+use models::{
+    AssortativityRequest, AssortativitySignificanceRequest, CompareRequest, PathfinderRequest,
+    SignedBalanceRequest, SignedBalanceSweepRequest,
+};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::{self, BufRead, Read, Write};
@@ -136,6 +140,38 @@ fn execute_command(
             ))
             .map_err(|error| error.to_string())
         }
+        "balance-sweep" => {
+            let input = payload.unwrap_or_default();
+            let request: SignedBalanceSweepRequest = if input.trim().is_empty() {
+                serde_json::from_str("{}")
+                    .map_err(|error| format!("failed to build default balance sweep request: {error}"))?
+            } else {
+                serde_json::from_str(input)
+                    .map_err(|error| format!("invalid balance sweep payload: {error}"))?
+            };
+            serde_json::to_string(&signed_balance_sensitivity_analysis(
+                ensure_graph(graph, &mut graph_build_ms),
+                request,
+            ))
+            .map_err(|error| error.to_string())
+        }
+        "assortativity-significance" => {
+            let input = payload.unwrap_or_default();
+            let request: AssortativitySignificanceRequest = if input.trim().is_empty() {
+                serde_json::from_str("{}").map_err(|error| {
+                    format!("failed to build default assortativity significance request: {error}")
+                })?
+            } else {
+                serde_json::from_str(input).map_err(|error| {
+                    format!("invalid assortativity significance payload: {error}")
+                })?
+            };
+            serde_json::to_string(&assortativity_significance_analysis(
+                ensure_graph(graph, &mut graph_build_ms),
+                request,
+            ))
+            .map_err(|error| error.to_string())
+        }
         "birdseye-3d-export" => Ok(export_birdseye_bundle().display().to_string()),
         _ => serde_json::to_string(&engine_spec_response()).map_err(|error| error.to_string()),
     }
@@ -201,7 +237,13 @@ fn main() {
     let mut graph = None;
     eprintln!("[pathfinder_rust] command={} started", command);
     let input = match command {
-        "run" | "player-focus" | "compare" | "signed-balance" | "assortativity" => read_stdin(),
+        "run"
+        | "player-focus"
+        | "compare"
+        | "signed-balance"
+        | "assortativity"
+        | "balance-sweep"
+        | "assortativity-significance" => read_stdin(),
         _ => String::new(),
     };
     let output = execute_command(command, Some(&input), &mut graph).expect("command failed");

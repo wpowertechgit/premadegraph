@@ -30,9 +30,9 @@
   --danger: #f08a87;
   --shadow-card: 0 24px 56px rgba(0, 0, 0, 0.24);
   --shadow-glow: 0 0 0 1px rgba(102, 184, 255, 0.12), 0 18px 36px rgba(29, 96, 148, 0.18);
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-xl: 22px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-xl: 14px;
   --motion-fast: 180ms ease;
   --motion-medium: 320ms cubic-bezier(0.22, 1, 0.36, 1);
   --route-transition-total: 320ms;
@@ -131,6 +131,7 @@ button:focus-visible {
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
 }
 
 .app-sidebar__backdrop {
@@ -162,7 +163,7 @@ button:focus-visible {
 .app-sidebar__badge {
   width: 3rem;
   height: 3rem;
-  border-radius: 20px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   color: #06131b;
@@ -223,14 +224,30 @@ button:focus-visible {
 .app-sidebar__scroll {
   min-height: 0;
   overflow-y: auto;
-  padding-right: 0.15rem;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+  padding-right: 0.4rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126, 155, 183, 0.55) rgba(12, 22, 33, 0.2);
 }
 
 .app-sidebar__scroll::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: 10px;
+  height: 10px;
+}
+
+.app-sidebar__scroll::-webkit-scrollbar-track {
+  background: rgba(12, 22, 33, 0.2);
+  border-radius: 999px;
+}
+
+.app-sidebar__scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(126, 155, 183, 0.72) 0%, rgba(94, 121, 148, 0.72) 100%);
+  border-radius: 999px;
+  border: 2px solid rgba(7, 16, 25, 0.6);
+}
+
+.app-sidebar__scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(154, 184, 214, 0.82) 0%, rgba(113, 146, 179, 0.82) 100%);
 }
 
 .app-hidden-scrollbar {
@@ -263,7 +280,7 @@ button:focus-visible {
   gap: 0.8rem;
   align-items: center;
   padding: 0.85rem 0.9rem;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid transparent;
   background: rgba(12, 22, 33, 0.42);
   color: var(--text-secondary);
@@ -323,7 +340,7 @@ button:focus-visible {
 
 .app-sidebar__action-card {
   padding: 0.95rem;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: linear-gradient(180deg, rgba(12, 22, 33, 0.82) 0%, rgba(8, 16, 24, 0.92) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
@@ -341,7 +358,6 @@ button:focus-visible {
   left: 1rem;
   right: 1rem;
   bottom: 1rem;
-  pointer-events: none;
   display: grid;
   justify-items: center;
   gap: 0.2rem;
@@ -355,9 +371,7 @@ button:focus-visible {
   box-shadow: inset 0 -18px 30px rgba(0, 0, 0, 0.22);
 }
 
-.app-sidebar__scroll-arrow {
-  position: absolute;
-  bottom: 0.5rem;
+.app-sidebar__scroll-button {
   width: 2rem;
   height: 2rem;
   border-radius: 999px;
@@ -368,6 +382,19 @@ button:focus-visible {
   color: var(--text-muted);
   font-size: 0.95rem;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+}
+
+.app-sidebar__scroll-button--up {
+  position: absolute;
+  top: 5.8rem;
+  right: 1.2rem;
+  z-index: 2;
+}
+
+.app-sidebar__scroll-button--down {
+  position: absolute;
+  bottom: 0.5rem;
   animation: scroll-cue-bob 1.8s ease-in-out infinite;
 }
 
@@ -420,7 +447,7 @@ button:focus-visible {
 .app-sidebar__language select {
   width: 100%;
   min-height: 46px;
-  border-radius: 16px;
+  border-radius: 10px;
   border: 1px solid var(--border-strong);
   padding: 0.75rem 0.9rem;
 }
@@ -502,7 +529,7 @@ button:focus-visible {
 .app-sidebar__key-card input {
   width: 100%;
   min-height: 44px;
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--border-strong);
   background: rgba(12, 22, 33, 0.78);
   color: var(--text-primary);
@@ -534,7 +561,7 @@ button:focus-visible {
 
 .app-sidebar__mini-button {
   min-height: 44px;
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--border-strong);
   background: rgba(88, 183, 255, 0.18);
   color: var(--text-primary);
@@ -550,7 +577,7 @@ button:focus-visible {
   display: grid;
   gap: 0.55rem;
   padding: 0.7rem;
-  border-radius: 16px;
+  border-radius: 10px;
   border: 1px solid rgba(126, 155, 183, 0.14);
   background: rgba(8, 16, 24, 0.52);
 }
@@ -574,11 +601,6 @@ button:focus-visible {
 .app-sidebar__key-badge.is-set {
   color: #d9fff2;
   background: rgba(30, 140, 100, 0.24);
-}
-
-.app-sidebar__key-storage {
-  color: var(--text-soft);
-  font-size: 0.75rem;
 }
 
 .app-main {
@@ -636,6 +658,43 @@ body.pathfinder-overlay-open .pathfinder-lab__scroll-viewport {
   overflow: hidden;
 }
 
+.app-sidebar__resize-handle {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  width: 12px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.app-sidebar__resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  bottom: 1rem;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(126, 155, 183, 0) 0%, rgba(126, 155, 183, 0.45) 18%, rgba(126, 155, 183, 0.45) 82%, rgba(126, 155, 183, 0) 100%);
+  opacity: 0;
+  transition: opacity var(--motion-fast), background var(--motion-fast);
+}
+
+.app-sidebar:hover .app-sidebar__resize-handle::before,
+.app-nav-resizing .app-sidebar__resize-handle::before {
+  opacity: 1;
+}
+
+.app-nav-resizing,
+.app-nav-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .graph-sphere-panel {
   position: relative;
   overflow: hidden;
@@ -655,7 +714,7 @@ body.pathfinder-overlay-open .pathfinder-lab__scroll-viewport {
 .app-route-stage {
   position: relative;
   min-height: calc(100vh - 2rem);
-  border-radius: 28px;
+  border-radius: 18px;
   overflow: hidden;
   background:
     radial-gradient(circle at top, rgba(34, 60, 89, 0.42) 0%, rgba(9, 16, 24, 0.94) 44%, rgba(4, 8, 13, 1) 100%);
@@ -1163,7 +1222,7 @@ body.pathfinder-overlay-open .pathfinder-lab__scroll-viewport {
   .app-mobile-bar__menu {
     width: 44px;
     height: 44px;
-    border-radius: 14px;
+    border-radius: 10px;
     border: 1px solid var(--border-strong);
     background: rgba(12, 22, 33, 0.78);
     color: var(--text-primary);
@@ -1182,7 +1241,7 @@ body.pathfinder-overlay-open .pathfinder-lab__scroll-viewport {
   .app-mobile-bar__brand-image {
     width: 2.75rem;
     height: 2.75rem;
-    border-radius: 16px;
+    border-radius: 10px;
     padding: 0.3rem;
     background: linear-gradient(135deg, rgba(102, 184, 255, 1) 0%, rgba(141, 220, 255, 0.92) 100%);
     box-shadow: 0 16px 30px rgba(43, 110, 163, 0.26);

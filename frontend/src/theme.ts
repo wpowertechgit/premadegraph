@@ -38,7 +38,7 @@ export const appTheme = createTheme({
     divider: "rgba(126, 155, 183, 0.18)",
   },
   shape: {
-    borderRadius: 18,
+    borderRadius: 12,
   },
   typography: {
     fontFamily: 'var(--font-body)',
@@ -87,7 +87,7 @@ export const appTheme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 14,
+          borderRadius: 10,
           paddingInline: "1rem",
           minHeight: "46px",
         },
@@ -106,7 +106,7 @@ export const appTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundColor: "rgba(11, 22, 34, 0.82)",
-          borderRadius: 14,
+          borderRadius: 10,
           border: "1px solid rgba(126, 155, 183, 0.16)",
           overflow: "hidden",
           "&:before, &:after": {

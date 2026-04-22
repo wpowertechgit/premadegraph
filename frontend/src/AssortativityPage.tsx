@@ -311,8 +311,8 @@ function EvidenceGraph({
         setRenderMode("mock");
         setFallbackMessage(
           isHu
-            ? "Ebben a kornyezetben a teljes kiserleti graf nem erheto el, ezert a panel a demo grafot mutatja."
-            : "The full experimental graph is not available in this environment, so this panel is showing the demo graph instead.",
+            ? "A teljes gráf itt nem érhető el, ezért ez a panel a minta gráfot mutatja."
+            : "The full graph is not available here, so this panel is showing the sample graph instead.",
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -365,12 +365,12 @@ function EvidenceGraph({
         <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "end" }}>
           <div style={{ display: "grid", gap: "0.35rem", maxWidth: "58rem" }}>
             <h2 style={{ margin: 0, fontSize: "clamp(1.5rem, 2.4vw, 2.2rem)" }}>
-              {isHu ? "Az a halozat, amelyre a kovetkeztetes epul" : "The network this conclusion is actually standing on"}
+              {isHu ? "A hálózat, amelyre az eredmény épül" : "The network behind the result"}
             </h2>
             <div style={{ color: COLORS.muted, lineHeight: 1.65 }}>
               {isHu
-                ? "Ebben a dev kornyezetben alapbol a demo grafot mutatjuk, hogy a tortenet teljes maradjon a privat API-k es a produktiv adatbazis nelkul is."
-                : "In this dev environment we default to the demo graph so the story still works without private APIs or the production database."}
+                ? "Válts a demo és a teljes gráf között, majd futtasd ugyanabban a módban az elemzést."
+                : "Switch between the sample and full graph, then run the analysis in the same mode."}
             </div>
           </div>
           <div style={{ borderRadius: "999px", padding: "0.32rem 0.78rem", background: renderMode === "mock" ? "rgba(120, 198, 183, 0.16)" : "rgba(240, 187, 116, 0.14)", color: renderMode === "mock" ? COLORS.mintSoft : COLORS.accentSoft, fontWeight: 700, fontSize: "0.82rem" }}>
@@ -581,7 +581,7 @@ export default function AssortativityPage() {
           <div style={{ display: "grid", gap: "0.35rem" }}>
             <div style={infoLabelStyle()}>{isHu ? "Asszortativitasi tortenet" : "Assortativity story"}</div>
             <h1 style={{ margin: 0, fontSize: "clamp(2.2rem, 4vw, 4rem)", lineHeight: 0.98, maxWidth: "18ch" }}>
-              {isHu ? "Mutassuk meg a halozatot, mielott barkitol bizalmat kernenk a kovetkezteteshez" : "Show the network before asking people to trust the conclusion"}
+              {isHu ? "Előbb a hálózat, utána a statisztika" : "See the network, then the statistic"}
             </h1>
             <div style={{ color: COLORS.muted, lineHeight: 1.7, maxWidth: "68rem" }}>
               {isHu
@@ -591,11 +591,11 @@ export default function AssortativityPage() {
           </div>
 
           <div style={{ ...softCardStyle(), padding: "1rem 1.1rem", display: "grid", gap: "0.45rem" }}>
-            <div style={{ fontWeight: 800 }}>{isHu ? "Miert fontos ez" : "Why this matters"}</div>
+            <div style={{ fontWeight: 800 }}>{isHu ? "Miért fontos ez" : "Why this matters"}</div>
             <div style={{ color: COLORS.accentSoft, lineHeight: 1.6 }}>
               {isHu
-                ? "A graf itt nem diszites. Ez maga a bizonyitek felulete. Ha a halozat mas, a kovetkeztetes is mas lehet."
-                : "A graph is not decoration here. It is the evidence surface. If the network changes, the conclusion can change with it."}
+                ? "Ha a hálózat más, az eredmény értelmezése is más lehet."
+                : "If the network changes, the interpretation can change too."}
             </div>
           </div>
 

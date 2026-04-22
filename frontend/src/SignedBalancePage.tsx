@@ -1139,7 +1139,7 @@ export default function SignedBalancePage() {
             {exampleTriads.length > 0 ? (
               <SectionCard
                 title="Observed Triads From This Run"
-                subtitle="These are real balanced and unbalanced triples sampled from the current dataset mode and parameter settings, so the symbols map back to actual player relationships."
+                subtitle="Sampled balanced and unbalanced triples from the current run."
               >
                 <div
                   style={{
@@ -1158,10 +1158,10 @@ export default function SignedBalancePage() {
             {exampleTriads.length === 0 && datasetMode === "full" ? (
               <SectionCard
                 title="Observed Triads From This Run"
-                subtitle="No sampled real-data triads were returned by the backend for this run. The aggregate analysis is valid, but the live Rust backend needs to be rebuilt and restarted to expose real balanced and unbalanced example triples to the UI."
+                subtitle="No observed triad samples were returned for this run."
               >
                 <div style={{ color: AMETHYST.muted, lineHeight: 1.7 }}>
-                  Mock mode can already render observed examples locally. Full dataset mode needs the newer Rust signed-balance response shape with `exampleTriads` enabled.
+                  The aggregate result is still available.
                 </div>
               </SectionCard>
             ) : null}

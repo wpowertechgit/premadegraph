@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -20,9 +20,6 @@ import {
   MenuItem,
   Stack,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
   InputAdornment,
 } from "@mui/material";
 import { translateBackendText, useI18n } from "./i18n";
@@ -58,7 +55,6 @@ type PlayerInfo = {
   gold: number;
   feedscore: number;
   opscore: number;
-  country: string;
 };
 
 const renderSummonerSpellIcons = (spellIds: [number, number]) => (
@@ -105,8 +101,15 @@ type MatchData = {
   blueTeam: PlayerInfo[];
   redTeam: PlayerInfo[];
   topFeederPuuid: string; // top feeder azonosítója (puuid) megjelöléshez
-  topFeederCountry?: string;
 };
+
+type RuntimeKeyStatus = {
+  keyName: "RIOT_API_KEY" | "OPENROUTER_API_KEY";
+  isSet: boolean;
+  maskedPreview: string | null;
+  storage: string;
+};
+
 async function fetchBackendJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   const payload = await response.json();
@@ -116,7 +119,6 @@ async function fetchBackendJson<T>(url: string): Promise<T> {
   return payload as T;
 }
 
-const feedermap: Record<string, number> = {};
 const MatchAnalysisForm = () => {
   const { language, t } = useI18n();
   const [name, setName] = useState("");
@@ -127,6 +129,32 @@ const MatchAnalysisForm = () => {
   const [error, setError] = useState<string | null>(null);
   const [queueType, setQueueType] = useState("all");
   const [start, setStart] = useState(0);
+  const [riotApiReady, setRiotApiReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRuntimeKeyStatus = async () => {
+      try {
+        const payload = await fetchBackendJson<{ keys: RuntimeKeyStatus[] }>("http://localhost:3001/api/runtime-keys");
+        const riotKey = payload.keys.find((entry) => entry.keyName === "RIOT_API_KEY");
+        if (!cancelled) {
+          setRiotApiReady(riotKey?.isSet ?? false);
+        }
+      } catch (runtimeKeyError) {
+        console.error("Failed to load runtime key status:", runtimeKeyError);
+        if (!cancelled) {
+          setRiotApiReady(null);
+        }
+      }
+    };
+
+    void loadRuntimeKeyStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async () => {
     if (!name || !tag || !count) return;
@@ -134,9 +162,6 @@ const MatchAnalysisForm = () => {
     setLoading(true);
     setOutput([]);
     setError(null);
-    Object.keys(feedermap).forEach((key) => {
-      delete feedermap[key];
-    });
 
     try {
       // Lekérjük a puuid-t a Riot ID alapján
@@ -167,18 +192,10 @@ const MatchAnalysisForm = () => {
         matchDetails.push(matchData);
 
         const participants = matchData.info.participants;
-        const players = participants.map((p: any, i: number) => ({
-          id: `player${i + 1}`,
-          name: `${p.riotIdGameName || "?"}#${p.riotIdTagline || "?"}`,
-        }));
-        // const countries = await fetchCountriesByPlayers(players);
-        const countries: Record<string, string> = {};
-        const allPlayers: PlayerInfo[] = participants.map((p: any, i: number) => {
-          const playerId = `player${i + 1}`;
+        const allPlayers: PlayerInfo[] = participants.map((p: any) => {
           const name = `${p.riotIdGameName || "?"}#${p.riotIdTagline || "?"}`;
           const feedscore = p.deaths - (p.kills + p.assists) * 0.5;
           const opscore = p.kills + p.assists * 0.965 + p.goldEarned / 500;
-          const country = countries[playerId] || t.matchAnalysis.unknownCountry;
           return {
             name,
             champion: p.championName,
@@ -190,7 +207,6 @@ const MatchAnalysisForm = () => {
             assists: p.assists,
             feedscore,
             opscore,
-            country,
           };
         });
 
@@ -199,7 +215,6 @@ const MatchAnalysisForm = () => {
           kda: string;
           feedscore: number;
           opscore: number;
-          country: string;
         }
 
         interface SavePlayerResponse {
@@ -211,26 +226,25 @@ const MatchAnalysisForm = () => {
           try {
             const savePromises = allPlayers.map((player: PlayerInfo) => {
               const minimalPlayer: MinimalPlayer = {
-          name: player.name,
-          kda: player.kda,
-          feedscore: player.feedscore,
-          opscore: player.opscore,
-          country: player.country,
+                name: player.name,
+                kda: player.kda,
+                feedscore: player.feedscore,
+                opscore: player.opscore,
               };
 
               return fetch("http://localhost:3001/api/save-player", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(minimalPlayer),
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(minimalPlayer),
               })
-          .then((response: Response) => {
-            if (!response.ok) {
-              throw new Error(`Failed to save player ${player.name}: ${response.statusText}`);
-            }
-            return response.json() as Promise<SavePlayerResponse>;
-          });
+                .then((response: Response) => {
+                  if (!response.ok) {
+                    throw new Error(`Failed to save player ${player.name}: ${response.statusText}`);
+                  }
+                  return response.json() as Promise<SavePlayerResponse>;
+                });
             });
 
             const results = await Promise.all(savePromises);
@@ -251,8 +265,6 @@ const MatchAnalysisForm = () => {
         const topFeeder = allPlayers.reduce((maxP, curr) =>
           curr.feedscore > maxP.feedscore ? curr : maxP
         );
-        const topFeederCountry = topFeeder.country;
-        feedermap[topFeederCountry] = (feedermap[topFeederCountry] || 0) + 1;
         const blueTeam = allPlayers.filter((p, i) => participants[i].teamId === 100);
         const redTeam = allPlayers.filter((p, i) => participants[i].teamId === 200);
 
@@ -261,7 +273,6 @@ const MatchAnalysisForm = () => {
           blueTeam,
           redTeam,
           topFeederPuuid: topFeeder.name,
-          topFeederCountry, // megjelölésre használjuk a nevet
         });
       }
 
@@ -340,7 +351,11 @@ const MatchAnalysisForm = () => {
 
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
             <Chip label={`${t.matchAnalysis.queueAll} / solo / flex / normal`} variant="outlined" />
-            <Chip label={`API ${apiKey ? "ready" : "missing"}`} color={apiKey ? "success" : "error"} variant="outlined" />
+            <Chip
+              label={`API ${riotApiReady === null ? "unknown" : riotApiReady ? "ready" : "missing"}`}
+              color={riotApiReady === null ? "default" : riotApiReady ? "success" : "error"}
+              variant="outlined"
+            />
             <Chip label={`${output.length} matches loaded`} variant="outlined" />
           </Stack>
 
@@ -366,7 +381,7 @@ const MatchAnalysisForm = () => {
                   <Typography variant="h6">
                     {t.matchAnalysis.matchId}: {match.matchId}
                   </Typography>
-                  <Chip label={`Top feeder: ${match.topFeederCountry || t.matchAnalysis.unknownCountry}`} variant="outlined" />
+                  <Chip label={`Top feeder: ${match.topFeederPuuid}`} variant="outlined" />
                 </Box>
                 <TableContainer component={Paper} sx={{ background: "rgba(8, 15, 23, 0.82)" }}>
                   <Table sx={{ minWidth: 760 }} aria-label="match table">
@@ -415,30 +430,6 @@ const MatchAnalysisForm = () => {
           </Paper>
         ) : null}
 
-        <Paper sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography sx={{ color: "text.secondary", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700, mb: 1 }}>
-            Country Signal
-          </Typography>
-          <Typography variant="h5" sx={{ mb: 2 }}>{t.matchAnalysis.countrySummary}</Typography>
-          {Object.keys(feedermap).length === 0 ? (
-            <Alert severity="info">Run an analysis to populate the country summary.</Alert>
-          ) : (
-            <List sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 1 }}>
-              {Object.entries(feedermap).map(([country, count]) => (
-                <Paper key={country} sx={{ px: 2, py: 1.5, background: "rgba(8, 15, 23, 0.78)" }}>
-                  <ListItem disableGutters sx={{ py: 0 }}>
-                    <ListItemText
-                      primary={country}
-                      secondary={`${count} flagged matches`}
-                      primaryTypographyProps={{ sx: { color: "text.primary", fontWeight: 700 } }}
-                      secondaryTypographyProps={{ sx: { color: "text.secondary" } }}
-                    />
-                  </ListItem>
-                </Paper>
-              ))}
-            </List>
-          )}
-        </Paper>
       </Box>
     </Container>
 

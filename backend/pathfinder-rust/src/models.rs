@@ -78,6 +78,34 @@ fn default_assortativity_strong_tie_threshold() -> u32 {
     3
 }
 
+fn default_balance_sweep_edge_supports() -> Vec<u32> {
+    vec![1, 2, 3, 4]
+}
+
+fn default_balance_sweep_tie_policies() -> Vec<SignedTiePolicy> {
+    vec![
+        SignedTiePolicy::Exclude,
+        SignedTiePolicy::Ally,
+        SignedTiePolicy::Enemy,
+    ]
+}
+
+fn default_assortativity_significance_graph_modes() -> Vec<String> {
+    vec!["social-path".to_string(), "battle-path".to_string()]
+}
+
+fn default_assortativity_significance_metrics() -> Vec<String> {
+    vec!["opscore".to_string(), "feedscore".to_string()]
+}
+
+fn default_assortativity_permutation_count() -> usize {
+    100
+}
+
+fn default_assortativity_seed() -> u64 {
+    42
+}
+
 fn default_true() -> bool {
     true
 }
@@ -120,6 +148,40 @@ pub struct AssortativityRequest {
     pub strong_tie_threshold: u32,
     #[serde(default = "default_true")]
     pub include_cluster_breakdown: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceSweepRequest {
+    #[serde(default = "default_balance_sweep_edge_supports")]
+    pub min_edge_supports: Vec<u32>,
+    #[serde(default = "default_balance_sweep_tie_policies")]
+    pub tie_policies: Vec<SignedTiePolicy>,
+    #[serde(default = "default_signed_balance_top_nodes")]
+    pub max_top_nodes: usize,
+    #[serde(default)]
+    pub include_cluster_summaries: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativitySignificanceRequest {
+    #[serde(default = "default_assortativity_significance_graph_modes")]
+    pub graph_modes: Vec<String>,
+    #[serde(default = "default_assortativity_significance_metrics")]
+    pub metrics: Vec<String>,
+    #[serde(default = "default_assortativity_min_edge_support")]
+    pub min_edge_support: u32,
+    #[serde(default = "default_assortativity_min_player_match_count")]
+    pub min_player_match_count: u32,
+    #[serde(default = "default_assortativity_strong_tie_threshold")]
+    pub strong_tie_threshold: u32,
+    #[serde(default = "default_assortativity_permutation_count")]
+    pub permutation_count: usize,
+    #[serde(default = "default_assortativity_seed")]
+    pub seed: u64,
+    #[serde(default)]
+    pub include_null_distribution_samples: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -426,5 +488,127 @@ pub struct AssortativityResponse {
     pub status: String,
     pub decisions: AssortativityDecisions,
     pub results: Vec<AssortativityMetricResult>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExperimentDatasetSummary {
+    pub filtered_nodes: usize,
+    pub runtime_nodes: usize,
+    pub pair_relations: usize,
+    pub dataset_edges: usize,
+    pub runtime_clusters: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExperimentMetadata {
+    pub analysis_type: String,
+    pub schema_version: String,
+    pub generated_at_unix_ms: u64,
+    pub dataset_scope: String,
+    pub graph_scope: String,
+    pub seed: Option<u64>,
+    pub run_count: usize,
+    pub dataset_summary: ExperimentDatasetSummary,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceSweepParameters {
+    pub min_edge_support: u32,
+    pub tie_policy: SignedTiePolicy,
+    pub include_cluster_summaries: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceSweepRun {
+    pub run_index: usize,
+    pub parameters: SignedBalanceSweepParameters,
+    pub graph_summary: SignedBalanceGraphSummary,
+    pub triads: SignedBalanceTriadSummary,
+    pub triad_type_distribution: Vec<SignedTriadTypeCount>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceSweepSummary {
+    pub min_balanced_ratio: f64,
+    pub max_balanced_ratio: f64,
+    pub mean_balanced_ratio: f64,
+    pub runs_with_triads: usize,
+    pub no_triad_runs: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignedBalanceSweepResponse {
+    pub status: String,
+    pub metadata: ExperimentMetadata,
+    pub parameter_grid: serde_json::Value,
+    pub summary: SignedBalanceSweepSummary,
+    pub runs: Vec<SignedBalanceSweepRun>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativitySignificanceObserved {
+    pub coefficient: Option<f64>,
+    pub sample_size: usize,
+    pub eligible_nodes: usize,
+    pub candidate_edges: usize,
+    pub analyzed_edges: usize,
+    pub skipped_low_edge_support_edges: usize,
+    pub skipped_missing_metric_edges: usize,
+    pub skipped_low_match_count_edges: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativityNullDistributionSummary {
+    pub mean: Option<f64>,
+    pub stddev: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub valid_permutations: usize,
+    pub undefined_permutations: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub samples: Option<Vec<Option<f64>>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativitySignificanceStats {
+    pub empirical_percentile: Option<f64>,
+    pub empirical_upper_tail_p_value: Option<f64>,
+    pub empirical_two_sided_p_value: Option<f64>,
+    pub z_score: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativitySignificanceRun {
+    pub run_index: usize,
+    pub graph_mode: String,
+    pub metric: String,
+    pub observed: AssortativitySignificanceObserved,
+    pub permutation_count: usize,
+    pub null_distribution: AssortativityNullDistributionSummary,
+    pub significance: AssortativitySignificanceStats,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssortativitySignificanceResponse {
+    pub status: String,
+    pub metadata: ExperimentMetadata,
+    pub parameter_grid: serde_json::Value,
+    pub null_model: serde_json::Value,
+    pub runs: Vec<AssortativitySignificanceRun>,
     pub warnings: Vec<String>,
 }

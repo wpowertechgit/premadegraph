@@ -5,6 +5,8 @@ import {
   FaChartLine,
   FaChevronLeft,
   FaChevronRight,
+  FaChevronUp,
+  FaChevronDown,
   FaDatabase,
   FaFireAlt,
   FaGlobe,
@@ -12,6 +14,7 @@ import {
   FaPlus,
   FaProjectDiagram,
   FaRoute,
+  FaSatelliteDish,
   FaSearch,
   FaSyncAlt,
   FaTimes,
@@ -23,6 +26,7 @@ type AppNavbarProps = {
   collapsed: boolean;
   isMobileLayout: boolean;
   mobileOpen: boolean;
+  desktopWidth: number;
   onToggleCollapsed: () => void;
   onGenerateGraph: () => Promise<void>;
   onOpenMobileNav: () => void;
@@ -37,6 +41,7 @@ type AppNavbarProps = {
   runtimeKeys: RuntimeKeyRecord[];
   runtimeKeysLoading: boolean;
   onSaveRuntimeKey: (keyName: RuntimeKeyRecord["keyName"], value: string) => Promise<void>;
+  onStartResize: () => void;
 };
 
 type NavItem = {
@@ -104,7 +109,7 @@ function ActionCard({
   collapsed,
 }: ActionCardProps) {
   return (
-    <div className={`app-sidebar__action-card${collapsed ? " is-collapsed" : ""}`} title={collapsed ? `${title}: ${caption}` : undefined}>
+    <div className={`app-sidebar__action-card${collapsed ? " is-collapsed" : ""}`} title={collapsed ? (caption ? `${title}: ${caption}` : title) : undefined}>
       {!collapsed ? (
         <>
           <div className="app-sidebar__action-title">{title}</div>
@@ -120,6 +125,7 @@ export default function AppNavbar({
   collapsed,
   isMobileLayout,
   mobileOpen,
+  desktopWidth,
   onToggleCollapsed,
   onGenerateGraph,
   onOpenMobileNav,
@@ -134,10 +140,12 @@ export default function AppNavbar({
   runtimeKeys,
   runtimeKeysLoading,
   onSaveRuntimeKey,
+  onStartResize,
 }: AppNavbarProps) {
   const { language, setLanguage, t } = useI18n();
   const [generateLoading, setGenerateLoading] = useState(false);
   const [normalizeLoading, setNormalizeLoading] = useState(false);
+  const [showScrollUp, setShowScrollUp] = useState(false);
   const [showScrollCue, setShowScrollCue] = useState(false);
   const [datasetForm, setDatasetForm] = useState({ id: "", name: "", description: "" });
   const [createDatasetLoading, setCreateDatasetLoading] = useState(false);
@@ -149,27 +157,26 @@ export default function AppNavbar({
   const navCopy = language === "hu"
     ? {
         datasetTitle: "Aktiv adathalmaz",
-        datasetCaption: "Valts az aktiv valos adathalmazok kozott, vagy hozz letre ujat a regiszteren keresztul.",
+        datasetCaption: "Válts az aktív adathalmazok között, vagy hozz létre újat.",
         datasetLabel: "Adathalmaz",
-        datasetPlayers: "jatekos",
+        datasetPlayers: "játékos",
         datasetMatches: "meccs",
-        refreshDatasets: "Frissites",
-        createDataset: "Uj adathalmaz",
-        datasetId: "Adathalmaz azonosito",
-        datasetName: "Nev",
-        datasetDescription: "Leiras",
-        create: "Letrehozas",
+        refreshDatasets: "Frissítés",
+        createDataset: "Új adathalmaz",
+        datasetId: "Adathalmaz azonosító",
+        datasetName: "Név",
+        datasetDescription: "Leírás",
+        create: "Létrehozás",
         runtimeKeysTitle: "API kulcsok",
-        runtimeKeysCaption: "A kulcsok a backend/.env fajlba kerulnek, es a szerver hasznalja oket a proxyzott hivashoz.",
-        saveKey: "Mentes",
-        clearKey: "Torles",
-        notSet: "Nincs beallitva",
-        setStatus: "Beallitva",
-        managedBy: "Tarolas",
+        runtimeKeysCaption: "Riot és OpenRouter kulcsok kezelése.",
+        saveKey: "Mentés",
+        clearKey: "Törlés",
+        notSet: "Nincs beállítva",
+        setStatus: "Beállítva",
       }
     : {
         datasetTitle: "Active dataset",
-        datasetCaption: "Switch between real datasets or create a new one from the registry-backed backend state.",
+        datasetCaption: "Switch between datasets or create a new one.",
         datasetLabel: "Dataset",
         datasetPlayers: "players",
         datasetMatches: "matches",
@@ -180,12 +187,11 @@ export default function AppNavbar({
         datasetDescription: "Description",
         create: "Create",
         runtimeKeysTitle: "API keys",
-        runtimeKeysCaption: "Keys are saved into backend/.env and used by the server for proxied requests.",
+        runtimeKeysCaption: "Manage Riot and OpenRouter keys.",
         saveKey: "Save",
         clearKey: "Clear",
         notSet: "Not set",
         setStatus: "Configured",
-        managedBy: "Storage",
       };
 
   const navItems: NavItem[] = [
@@ -194,6 +200,14 @@ export default function AppNavbar({
       label: t.app.nav.matchAnalysis,
       description: t.app.nav.matchAnalysisDescription,
       icon: <FaSearch />,
+    },
+    {
+      to: "/match-collector",
+      label: language === "hu" ? "Match Collector" : "Match Collector",
+      description: language === "hu"
+        ? "Collector oldal standard és strengthen-graph futásokhoz"
+        : "Collector page for standard and strengthen-graph runs",
+      icon: <FaSatelliteDish />,
     },
     {
       to: "/graph",
@@ -234,6 +248,7 @@ export default function AppNavbar({
     }
 
     const updateCue = () => {
+      setShowScrollUp(viewport.scrollTop > 24);
       const remaining = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
       setShowScrollCue(remaining > 24);
     };
@@ -279,7 +294,10 @@ export default function AppNavbar({
         />
       ) : null}
 
-      <aside className={`app-sidebar${collapsed ? " is-collapsed" : ""}${mobileOpen ? " is-mobile-open" : ""}`}>
+      <aside
+        className={`app-sidebar${collapsed ? " is-collapsed" : ""}${mobileOpen ? " is-mobile-open" : ""}`}
+        aria-label={`Sidebar navigation width ${desktopWidth}px`}
+      >
         <div className="app-sidebar__top">
           <div className="app-sidebar__brand">
             <div className="app-sidebar__badge">
@@ -488,7 +506,7 @@ export default function AppNavbar({
                 collapsed={collapsed}
               >
                 {!collapsed ? runtimeKeys.map((runtimeKey) => (
-                  <div key={runtimeKey.keyName} className="app-sidebar__key-card">
+                    <div key={runtimeKey.keyName} className="app-sidebar__key-card">
                     <div className="app-sidebar__key-header">
                       <div className="app-sidebar__key-name">
                         <span className="app-sidebar__action-icon"><FaKey /></span>
@@ -498,7 +516,6 @@ export default function AppNavbar({
                         {runtimeKey.isSet ? runtimeKey.maskedPreview || navCopy.setStatus : navCopy.notSet}
                       </span>
                     </div>
-                    <div className="app-sidebar__key-storage">{navCopy.managedBy}: {runtimeKey.storage}</div>
                     <input
                       type="password"
                       value={runtimeKeyDrafts[runtimeKey.keyName] ?? ""}
@@ -568,11 +585,42 @@ export default function AppNavbar({
           </SidebarSection>
         </div>
 
+        {!collapsed && showScrollUp ? (
+          <button
+            type="button"
+            className="app-sidebar__scroll-button app-sidebar__scroll-button--up"
+            aria-label="Scroll navigation up"
+            onClick={() => scrollViewportRef.current?.scrollBy({ top: -320, behavior: "smooth" })}
+          >
+            <FaChevronUp />
+          </button>
+        ) : null}
+
         {!collapsed && showScrollCue ? (
-          <div className="app-sidebar__scroll-cue" aria-hidden="true">
+          <div className="app-sidebar__scroll-cue">
             <div className="app-sidebar__scroll-fade" />
-            <div className="app-sidebar__scroll-arrow">↓</div>
+            <button
+              type="button"
+              className="app-sidebar__scroll-button app-sidebar__scroll-button--down"
+              aria-label="Scroll navigation down"
+              onClick={() => scrollViewportRef.current?.scrollBy({ top: 320, behavior: "smooth" })}
+            >
+              <FaChevronDown />
+            </button>
           </div>
+        ) : null}
+
+        {!collapsed && !isMobileLayout ? (
+          <button
+            type="button"
+            className="app-sidebar__resize-handle"
+            aria-label="Resize navigation"
+            title="Resize navigation"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              onStartResize();
+            }}
+          />
         ) : null}
       </aside>
     </>

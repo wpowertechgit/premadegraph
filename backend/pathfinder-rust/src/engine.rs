@@ -1,11 +1,13 @@
 mod assortativity;
 mod birdseye;
+mod experiments;
 mod graph;
 mod search;
 mod signed_balance;
 
 use self::assortativity::assortativity_response;
 use self::birdseye::export_birdseye_3d_artifacts;
+use self::experiments::{assortativity_significance_response, signed_balance_sweep_response};
 use self::graph::{
     global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
 };
@@ -390,6 +392,20 @@ pub fn assortativity_analysis(
 
 pub fn export_birdseye_bundle() -> std::path::PathBuf {
     export_birdseye_3d_artifacts()
+}
+
+pub fn signed_balance_sensitivity_analysis(
+    graph: &GraphState,
+    request: SignedBalanceSweepRequest,
+) -> SignedBalanceSweepResponse {
+    signed_balance_sweep_response(graph, request)
+}
+
+pub fn assortativity_significance_analysis(
+    graph: &GraphState,
+    request: AssortativitySignificanceRequest,
+) -> AssortativitySignificanceResponse {
+    assortativity_significance_response(graph, request)
 }
 
 pub fn engine_spec_response() -> EngineSpecResponse {
