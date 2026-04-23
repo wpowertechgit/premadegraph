@@ -1,335 +1,540 @@
-# Dynamic Opscore & Feedscore Implementation Prompt
+# Match-Based Performance Scoring Implementation Guide
 
-## Overview
+## Architectural Overview
 
-Implement a role-aware and streak-aware scoring system to replace the current time-invariant opscore/feedscore calculations. This system will enhance player performance metrics while maintaining thesis validity (assortativity >0.5, balance ~65%).
+**Goal:** Replace the simplistic 4-stat baseline with a comprehensive 8-artifact system that respects role-specific responsibilities.
+
+**Key Changes:**
+- Remove: Temp heuristic role detection, streak bonuses, stability calculations
+- Add: 8 performance artifacts, explicit role from JSON, role-specific multipliers
+- Keep: Dataset averaging, 0-10 normalization, feedscore calculation
+
+**Result:** More nuanced, fairer, position-aware scoring without unnecessary temporal logic.
 
 ---
 
-## Phase 1: Backend Foundations (Weeks 1-2)
+## Implementation Phases
 
-### 1.1 Database Schema Extension
+### Phase 1: Core Backend (Days 1-2)
+- Implement 8 artifact extraction in `scoring_utils.js`
+- Add role multiplier table in `scoring_config.js`
+- Pipeline: baseline → role-adjust → average → normalize
 
-**File:** `backend/` (schema migration or SQL update script)
+### Phase 2: Testing & Validation (Days 3-4)
+- Hand-verify on example_match_data.json
+- Run full dataset normalization
+- Verify assortativity & balance metrics hold
+- Spot-check player scores for reasonableness
 
-Create a new table `player_scores_dynamic` to store computed metrics alongside existing data:
+### Phase 3: Optional Frontend (Day 5+)
+- Display role in player cards
+- (Skip: No toggle needed; scoring is unified now)
 
-```sql
-CREATE TABLE player_scores_dynamic (
-  player_id TEXT PRIMARY KEY,
-  
-  -- Dynamic scores (0-10 for opscore)
-  opscore_decay REAL,           
-  feedscore_decay REAL,         
-  
-  -- 7-day rolling window
-  opscore_recent REAL,          
-  feedscore_recent REAL,
-  
-  -- Stability & consistency (0-1)
-  opscore_stability REAL,       
-  
-  -- Role detection
-  detected_role TEXT DEFAULT 'unknown',
-  role_confidence REAL,         
-  
-  -- Streak info (-1 to +1)
-  current_streak REAL,          
-  
-  -- Metadata
-  matches_processed INTEGER,
-  last_computed TIMESTAMP,
-  
-  FOREIGN KEY (player_id) REFERENCES players(player_id)
-);
+---
 
--- Index for quick lookups
-CREATE INDEX idx_player_scores_dynamic_player_id 
-  ON player_scores_dynamic(player_id);
+## Section 1: Artifact Definitions
+
+### Artifact 1: Kill/Death/Assist Baseline
+
+**JSON Sources:**
+- `participant.kills`
+- `participant.assists`
+- `participant.deaths`
+
+**Formula:**
+```javascript
+kda_baseline = kills + (assists * 0.965) - (deaths * 0.25)
 ```
 
-**Alternative:** If modifying existing `players` table is preferred, use ALTER TABLE:
+**Rationale:**
+- Kills and assists represent impact
+- 0.965 multiplier reflects assists being slightly less valuable than kills
+- Death penalty (−0.25 per) captures the cost of dying
+
+### Artifact 2: Economic Performance
+
+**JSON Sources:**
+- `participant.goldEarned`
+- `participant.goldSpent`
+- `match.info.gameDuration` (in milliseconds → convert to minutes)
+
+**Formula:**
+```javascript
+gpm = goldEarned / (gameDurationMinutes || 1)
+efficiency = (goldSpent / ((goldEarned || 1))) 
+
+economy_score = (gpm / 10) + Math.clamp(efficiency, 0.5, 1.0) * 0.5
+```
+
+**Rationale:**
+- Gold per minute is a key efficiency metric
+- Spending ratio shows resource management (high spend = active, low = hoarding)
+- Normalized to 0-2 range for artifact inclusion
+
+### Artifact 3: Map Awareness (Vision & Warding)
+
+**JSON Sources:**
+- `participant.visionScore`
+- `participant.wardsPlaced`
+- `participant.detectorWardsPlaced`
+- `participant.warsKilled`
+- `participant.controlWardsPlaced`
+
+**Formula:**
+```javascript
+map_awareness_score =
+  (visionScore * 0.15) +
+  (wardsPlaced * 0.05) +
+  (detectorWardsPlaced * 0.04) +
+  (wardsKilled * 0.08) +
+  (controlWardsPlaced * 0.06)
+```
+
+**Rationale:**
+- Vision score scales with game length and warding effectiveness
+- Ward placement shows proactive map control
+- Detector wards show enemy sweeping defense
+- Ward kills show counter-warding
+- Control wards show objective area control
+
+### Artifact 4: Utility & Support (Team-Enabling)
+
+**JSON Sources:**
+- `participant.challenges.enemyChampionImmobilizations`
+- `participant.totalDamageShieldedOnTeammates`
+- `participant.totalHeal`
+- `participant.challenges.damageSelfMitigated`
+- `participant.challenges.timeCCingOthers`
+
+**Formula:**
+```javascript
+utility_score =
+  (enemyChampionImmobilizations * 0.08) +
+  (totalDamageShieldedOnTeammates * 0.001) +
+  (totalHeal * 0.001) +
+  (damageSelfMitigated * 0.002) +
+  (timeCCingOthers * 0.01)
+```
+
+**Rationale:**
+- Immobilizations (stun, root, etc.) are high-impact plays
+- Shields & heals enable team survival
+- Self-mitigated damage shows defensive play
+- CC duration shows team fight control
+- Scales to 0-50 range after role multipliers
+
+### Artifact 5: Damage Output (Offense)
+
+**JSON Sources:**
+- `participant.physicalDamageDealtToChampions`
+- `participant.magicDamageDealtToChampions`
+- `participant.trueDamageDealtToChampions`
+
+**Formula:**
+```javascript
+total_champ_damage = 
+  physicalDamageDealtToChampions +
+  magicDamageDealtToChampions +
+  trueDamageDealtToChampions
+
+damage_output_score = (total_champ_damage / 1000) * 0.2
+```
+
+**Rationale:**
+- Represents offensive contribution
+- Normalized /1000 to scale with typical ranges (500-2000 damage per match)
+- All damage types count equally
+
+### Artifact 6: Damage Tanking (Defense)
+
+**JSON Sources:**
+- `participant.totalDamageTaken`
+- `match.info.gameDuration`
+
+**Formula:**
+```javascript
+tanking_score = (totalDamageTaken / (gameDurationMinutes || 1)) * 0.05
+```
+
+**Rationale:**
+- Higher tanking normalized by game length
+- Scaling factor (0.05) ensures parity with other artifacts
+- Recognizes defensive/frontline play
+
+### Artifact 7: Objective Control
+
+**JSON Sources:**
+- `participant.damageDealtToBuildings`
+- `participant.turretTakedowns`
+- `participant.inhibitorTakedowns`
+- `participant.challenges.turretPlatesTaken`
+- `participant.damageDealtToTurrets`
+
+**Formula:**
+```javascript
+objective_control_score =
+  (damageDealtToBuildings * 0.002) +
+  (turretTakedowns * 0.25) +
+  (inhibitorTakedowns * 0.5) +
+  (turretPlatesTaken * 0.03) +
+  (damageDealtToTurrets * 0.001)
+```
+
+**Rationale:**
+- Building damage contributes to win condition
+- Turret takedowns are high-value objectives
+- Inhibitor takedowns are game-changing
+- Turret plates are early-game objective wins
+- Scaling ensures balanced contribution (0–100 range)
+
+### Artifact 8: Early Game Dominance
+
+**JSON Sources:**
+- `participant.firstBloodKill`
+- `participant.firstBloodAssist`
+- `participant.firstTowerKill`
+- `participant.firstTowerAssist`
+- `participant.challenges.laneMinionsFirst10Minutes`
+
+**Formula:**
+```javascript
+early_game_score =
+  (firstBloodKill * 0.5) +
+  (firstBloodAssist * 0.2) +
+  (firstTowerKill * 0.3) +
+  (firstTowerAssist * 0.1) +
+  (laneMinionsFirst10Minutes / 50)
+```
+
+**Rationale:**
+- First blood indicates early aggression
+- First tower sets momentum
+- CS@10 shows early efficiency
+- Early advantages often translate to win probability
+
+---
+
+## Section 2: Database Schema
+
+Minimal, non-destructive schema update:
 
 ```sql
 ALTER TABLE players ADD COLUMN (
-  opscore_decay REAL DEFAULT NULL,
-  feedscore_decay REAL DEFAULT NULL,
-  opscore_recent REAL DEFAULT NULL,
-  feedscore_recent REAL DEFAULT NULL,
-  opscore_stability REAL DEFAULT NULL,
-  detected_role TEXT DEFAULT 'unknown',
-  role_confidence REAL DEFAULT 0.0,
-  current_streak REAL DEFAULT 0.0,
-  dynamic_score_updated TIMESTAMP DEFAULT NULL
+  opscore REAL DEFAULT 0,           -- New 0-10 normalized score
+  feedscore REAL DEFAULT 0,         -- New 0-10 normalized feedscore
+  matches_processed INT DEFAULT 0,  -- Count of matches
+  score_computed_at TIMESTAMP       -- Last computation time
 );
 ```
 
-**Decision:** Choose one approach (separate table preferred for clean separation and easier rollback).
+That's it. No temporary tables, no role columns. Role comes from match JSON directly each time.
 
 ---
 
-### 1.2 Create Scoring Configuration File
+## Section 3: Scoring Pipeline
 
-**File:** `backend/scoring_config.js`
+### Step 1: Extract Baselines (Per Match)
+
+In `scoring_utils.js`, add function:
 
 ```javascript
-/**
- * Dynamic Scoring Configuration
- * 
- * This file centralizes all tunable parameters for the new scoring system.
- * Modify these values to adjust scoring behavior globally.
- */
+function extractBaselineArtifacts(participant, gameLengthMinutes) {
+  return {
+    kda: participant.kills + (participant.assists * 0.965) - (participant.deaths * 0.25),
+    economy: (participant.goldEarned / gameLengthMinutes) / 10,
+    map_awareness: (participant.visionScore * 0.15) + (participant.wardsPlaced * 0.05) + ...,
+    utility: (participant.challenges?.enemyChampionImmobilizations * 0.08) + ...,
+    damage: (participant.physicalDamageDealtToChampions + ...) / 1000 * 0.2,
+    tanking: (participant.totalDamageTaken / gameLengthMinutes) * 0.05,
+    objectives: (participant.damageDealtToBuildings * 0.002) + ...,
+    early_game: (participant.firstBloodKill * 0.5) + ...
+  };
+}
+```
 
-const SCORING_CONFIG = {
-  // ============ Role Multipliers ============
-  // Each role has custom stat weights
-  // Format: { kills: multiplier, assists: multiplier, gold: multiplier, vision: multiplier }
-  roleMultipliers: {
-    carry: {
-      kills: 1.15,
-      assists: 0.90,
-      gold: 1.10,
-      vision: 0.90
-    },
-    mid: {
-      kills: 1.05,
-      assists: 1.00,
-      gold: 1.00,
-      vision: 1.05
-    },
-    jungler: {
-      kills: 1.10,
-      assists: 1.20,
-      gold: 0.75,
-      vision: 1.00
-    },
-    top: {
-      kills: 1.00,
-      assists: 0.90,
-      gold: 1.05,
-      vision: 0.90
-    },
-    support: {
-      kills: 0.60,
-      assists: 1.30,
-      gold: 0.40,
-      vision: 1.50
-    },
-    unknown: {
-      kills: 1.00,
-      assists: 1.00,
-      gold: 1.00,
-      vision: 1.00
-    }
-  },
-  
-  // ============ Streak & Stability Influence ============
-  streakInfluence: 0.15,        // Hot streak can boost score up to 15%
-  stabilityInfluence: 0.10,     // Consistent players get up to 10% bonus
-  streakWindow: 5,              // Last N matches for streak calculation
-  
-  // ============ Data Quality Thresholds ============
-  minMatchesForMeaningfulScore: 5,  // Require at least N matches
-  minMatchesForStability: 10,       // Require N matches for stability metric
-  
-  // ============ Role Detection Thresholds ============
-  roleThresholds: {
-    supportVisionScore: 80,
-    supportWardsPlaced: 8,
-    supportGoldPerMin: 300,
-    carryGoldPerMin: 450,
-    topGoldPerMin: 380,
-    junglerAssists: 12
+### Step 2: Get Role (From JSON)
+
+```javascript
+function getRoleFromMatch(participant) {
+  return participant.teamPosition || "UNKNOWN";  // "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"
+}
+```
+
+### Step 3: Apply Role Multipliers
+
+```javascript
+function applyRoleMultipliers(baseline, role) {
+  const multipliers = ROLE_MULTIPLIERS[role] || ROLE_MULTIPLIERS.UNKNOWN;
+  return {
+    kda: baseline.kda * multipliers.kda,
+    economy: baseline.economy * multipliers.economy,
+    map_awareness: baseline.map_awareness * multipliers.map_awareness,
+    utility: baseline.utility * multipliers.utility,
+    damage: baseline.damage * multipliers.damage,
+    tanking: baseline.tanking * multipliers.tanking,
+    objectives: baseline.objectives * multipliers.objectives,
+    early_game: baseline.early_game * multipliers.early_game
+  };
+}
+```
+
+### Step 4: Sum to Per-Match Score
+
+```javascript
+function computeMatchScore(roleAdjusted) {
+  return Object.values(roleAdjusted).reduce((sum, val) => sum + val, 0);
+}
+```
+
+### Step 5: Average Across Dataset
+
+```javascript
+function computePlayerBaselineScore(allMatches) {
+  const matchScores = allMatches.map(match => computeMatchScore(match.roleAdjusted));
+  return matchScores.reduce((sum, score) => sum + score, 0) / matchScores.length;
+}
+```
+
+### Step 6: Normalize to 0-10
+
+```javascript
+function normalizeToScale(rawScore, globalMin, globalMedian, globalMax) {
+  if (rawScore <= globalMedian) {
+    return ((rawScore - globalMin) / (globalMedian - globalMin)) * 4;
+  } else {
+    return 4 + ((rawScore - globalMedian) / (globalMax - globalMedian)) * 6;
   }
-};
-
-module.exports = SCORING_CONFIG;
+}
 ```
 
 ---
 
-### 1.3 Create Core Scoring Utilities Library
+## Section 4: Feedscore Calculation
 
-**File:** `backend/lib/scoring_utils.js`
+Feedscore penalizes deaths; lower is better.
 
-Implement all mathematical functions for the new scoring system:
+**Per-Match Baseline:**
+```javascript
+function feedscoreBaseline(participant) {
+  return participant.deaths - (participant.kills + participant.assists) * 0.35;
+}
+```
+
+**Role-Adjusted Death Tolerance:**
+```javascript
+const DEATH_TOLERANCE = {
+  TOP:     1.0,
+  JUNGLE:  1.05,
+  MIDDLE:  1.0,
+  BOTTOM:  1.15,    // ADC deaths are more costly
+  UTILITY: 0.80     // Support expected to die more
+};
+```
+
+**Applied:**
+```javascript
+function feedscoreAdjusted(baseline, role) {
+  return baseline * DEATH_TOLERANCE[role];
+}
+```
+
+**Final:** Average across all matches, normalize to 0-10 using same percentile mapping as opscore.
+
+---
+
+## Section 5: Role Multipliers (Configuration)
+
+---
+
+---
+
+## Section 5: Role Multipliers Configuration
+
+In `backend/scoring_config.js`:
 
 ```javascript
-const SCORING_CONFIG = require('../scoring_config');
-
 /**
- * ============ HELPER FUNCTIONS ============
+ * Performance Scoring Configuration
+ * 8-artifact system with role-specific multipliers
  */
 
-/**
- * Calculate coefficient of variation (normalized standard deviation).
- * Used to measure consistency/volatility of player performance.
- * 
- * @param {number[]} values - Array of numerical values
- * @returns {number} CV value (higher = more volatile)
- */
-function coefficientOfVariation(values) {
-  if (!values || values.length === 0) return 0;
+const ROLE_MULTIPLIERS = {
+  TOP:    { kda: 1.1,  economy: 1.05, map_awareness: 0.9,  utility: 0.6,  damage: 1.15, tanking: 1.0,  objectives: 1.2,  early_game: 1.05 },
+  JUNGLE: { kda: 1.2,  economy: 0.7,  map_awareness: 1.4,  utility: 0.8,  damage: 1.0,  tanking: 0.8,  objectives: 1.4,  early_game: 1.3  },
+  MIDDLE: { kda: 1.0,  economy: 1.1,  map_awareness: 1.2,  utility: 1.0,  damage: 1.05, tanking: 0.8,  objectives: 1.0,  early_game: 1.1  },
+  BOTTOM: { kda: 1.2,  economy: 1.3,  map_awareness: 1.1,  utility: 0.7,  damage: 1.4,  tanking: 0.6,  objectives: 0.9,  early_game: 1.0  },
+  UTILITY: { kda: 0.7, economy: 0.4, map_awareness: 1.8, utility: 1.8, damage: 0.5, tanking: 1.1, objectives: 0.7, early_game: 0.8 }
+};
+
+const DEATH_TOLERANCE = {
+  TOP:     1.0,
+  JUNGLE:  1.05,
+  MIDDLE:  1.0,
+  BOTTOM:  1.15,
+  UTILITY: 0.80
+};
+
+module.exports = { ROLE_MULTIPLIERS, DEATH_TOLERANCE };
+```
+
+---
+
+## Section 6: Implementation Functions
+
+In `backend/lib/scoring_utils.js`:
+
+### Extract Baseline Artifacts
+
+```javascript
+function extractArtifacts(participant, gameLengthMinutes) {
+  const challenges = participant.challenges || {};
   
-  const n = values.length;
-  const mean = values.reduce((sum, v) => sum + v, 0) / n;
-  const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
-  const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / n;
-  const stdDev = Math.sqrt(variance);
+  return {
+    kda:             participant.kills + (participant.assists * 0.965) - (participant.deaths * 0.25),
+    economy:         (participant.goldEarned / Math.max(1, gameLengthMinutes)) / 10 + 
+                     Math.min(1, participant.goldSpent / Math.max(1, participant.goldEarned)) * 0.5,
+    map_awareness:   (participant.visionScore * 0.15) + 
+                     (participant.wardsPlaced * 0.05) +
+                     ((participant.detectorWardsPlaced || 0) * 0.04) +
+                     (participant.wardsKilled * 0.08) +
+                     ((participant.controlWardsPlaced || 0) * 0.06),
+    utility:         (challenges.enemyChampionImmobilizations * 0.08) +
+                     ((participant.totalDamageShieldedOnTeammates || 0) * 0.001) +
+                     ((participant.totalHeal || 0) * 0.001) +
+                     ((challenges.damageSelfMitigated || 0) * 0.002) +
+                     ((challenges.timeCCingOthers || 0) * 0.01),
+    damage:          ((participant.physicalDamageDealtToChampions || 0) +
+                     (participant.magicDamageDealtToChampions || 0) +
+                     (participant.trueDamageDealtToChampions || 0)) / 1000 * 0.2,
+    tanking:         (participant.totalDamageTaken / Math.max(1, gameLengthMinutes)) * 0.05,
+    objectives:      ((participant.damageDealtToBuildings || 0) * 0.002) +
+                     (participant.turretTakedowns * 0.25) +
+                     (participant.inhibitorTakedowns * 0.5) +
+                     ((challenges.turretPlatesTaken || 0) * 0.03) +
+                     ((participant.damageDealtToTurrets || 0) * 0.001),
+    early_game:      (participant.firstBloodKill * 0.5) +
+                     (participant.firstBloodAssist * 0.2) +
+                     (participant.firstTowerKill * 0.3) +
+                     (participant.firstTowerAssist * 0.1) +
+                     ((challenges.laneMinionsFirst10Minutes || 0) / 50)
+  };
+}
+```
+
+### Apply Role Multipliers
+
+```javascript
+function applyRoleMultipliers(artifacts, role, roleMultipliers) {
+  const multiplier = roleMultipliers[role] || roleMultipliers.UNKNOWN;
   
-  return Math.abs(stdDev) / (Math.abs(mean) + 1e-6);
+  return {
+    kda: artifacts.kda * multiplier.kda,
+    economy: artifacts.economy * multiplier.economy,
+    map_awareness: artifacts.map_awareness * multiplier.map_awareness,
+    utility: artifacts.utility * multiplier.utility,
+    damage: artifacts.damage * multiplier.damage,
+    tanking: artifacts.tanking * multiplier.tanking,
+    objectives: artifacts.objectives * multiplier.objectives,
+    early_game: artifacts.early_game * multiplier.early_game
+  };
+}
+```
+
+### Sum & Average
+
+```javascript
+function scoreMatch(adjusted) {
+  return Object.values(adjusted).reduce((sum, val) => sum + val, 0);
 }
 
-/**
- * Convert coefficient of variation to stability score (0-1 scale).
- * Higher values = more stable/consistent player.
- * 
- * @param {number} cv - Coefficient of variation
- * @param {number} maxCV - Maximum expected CV for normalization (default: 0.4)
- * @returns {number} Stability score (0-1)
- */
-function cvToStabilityScore(cv, maxCV = 0.4) {
-  return Math.max(0, Math.min(1, 1 - (cv / maxCV)));
+function playerBaselineScore(matches) {
+  if (matches.length === 0) return 0;
+  const scores = matches.map(m => scoreMatch(m.adjusted));
+  return scores.reduce((a, b) => a + b, 0) / scores.length;
 }
+```
 
-/**
- * Detect player's primary role based on match statistics.
- * Uses simple heuristic decision tree.
- * 
- * @param {object} matchStats - Match statistics { kills, deaths, assists, goldEarned, wardsPlaced, visionScore, gameDurationMinutes }
- * @returns {string} Role: 'support'|'carry'|'mid'|'jungler'|'top'|'unknown'
- */
-function detectPlayerRoleFromMatch(matchStats) {
-  const {
-    kills = 0,
-    deaths = 1,
-    assists = 0,
-    goldEarned = 0,
-    wardsPlaced = 0,
-    visionScore = 0,
-    gameDurationMinutes = 30
-  } = matchStats;
-  
-  const kda = (kills + assists) / Math.max(1, deaths);
-  const goldPerMin = goldEarned / Math.max(1, gameDurationMinutes);
-  const { roleThresholds } = SCORING_CONFIG;
-  
-  // Support: high vision, high wards, low gold
-  if (visionScore > roleThresholds.supportVisionScore || 
-      wardsPlaced > roleThresholds.supportWardsPlaced) {
-    if (goldPerMin < roleThresholds.supportGoldPerMin) {
-      return 'support';
-    }
+### Normalize
+
+```javascript
+function normalizeScore(rawScore, globalMin, globalMedian, globalMax) {
+  if (rawScore <= globalMedian) {
+    return ((rawScore - globalMin) / (globalMedian - globalMin)) * 4;
+  } else {
+    return 4 + ((rawScore - globalMedian) / (globalMax - globalMedian)) * 6;
   }
-  
-  // Carry: very high gold
-  if (goldPerMin > roleThresholds.carryGoldPerMin) {
-    return 'carry';
-  }
-  
-  // Mid: medium-high gold, balanced stats
-  if (goldPerMin > roleThresholds.topGoldPerMin) {
-    if (wardsPlaced < 3) {
-      return 'top';
-    } else {
-      return 'mid';
-    }
-  }
-  
-  // Jungler: lower gold, high assists relative to kills
-  if (assists > kills && assists > roleThresholds.junglerAssists) {
-    return 'jungler';
-  }
-  
-  return 'unknown';
 }
+```
 
-/**
- * Detect primary role for a player across their match history.
- * Returns the most common role in recent matches.
- * 
- * @param {object[]} recentMatches - Last N matches with stats
- * @param {number} windowSize - How many recent matches to consider
- * @returns {object} { role: string, confidence: number (0-1) }
- */
-function detectPlayerRoleFromHistory(recentMatches, windowSize = 10) {
-  const roles = recentMatches
-    .slice(-windowSize)
-    .map(m => detectPlayerRoleFromMatch(m));
-  
-  const roleCounts = {};
-  roles.forEach(role => {
-    roleCounts[role] = (roleCounts[role] || 0) + 1;
-  });
-  
-  const sortedRoles = Object.entries(roleCounts)
-    .sort(([, countA], [, countB]) => countB - countA);
-  
-  if (sortedRoles.length === 0) {
-    return { role: 'unknown', confidence: 0 };
-  }
-  
-  const [primaryRole, count] = sortedRoles[0];
-  const confidence = count / windowSize;
-  
-  return { role: primaryRole, confidence };
-}
+---
 
-/**
- * ============ OPSCORE CALCULATIONS ============
- */
+## Section 7: Testing on Example Data
 
-/**
- * Calculate per-match opscore WITHOUT role adjustment.
- * This is the baseline formula (current implementation).
- * 
- * @param {object} matchStats - { kills, assists, goldEarned, visionScore, gameDurationMinutes }
- * @returns {number} Raw opscore for the match
- */
-function opscorePerMatch(matchStats) {
-  const {
-    kills = 0,
-    assists = 0,
-    goldEarned = 0,
-    visionScore = 0,
-    gameDurationMinutes = 30
-  } = matchStats;
-  
-  return (
-    kills +
-    assists * 0.965 +
-    (goldEarned / Math.max(1, gameDurationMinutes)) +
-    visionScore * 0.15
-  );
-}
+Given `backend/example/example_match_data.json`:
 
-/**
- * Calculate per-match opscore WITH role adjustment.
- * Multiplies each stat component by role-specific weight.
- * 
- * @param {object} matchStats - Match stats
- * @param {string} role - Player role ('carry'|'mid'|'jungler'|'top'|'support'|'unknown')
- * @returns {number} Role-adjusted opscore
- */
-function opscoreForRole(matchStats, role = 'unknown') {
-  const {
-    kills = 0,
-    assists = 0,
-    goldEarned = 0,
-    visionScore = 0,
-    gameDurationMinutes = 30
-  } = matchStats;
-  
-  const adj = SCORING_CONFIG.roleMultipliers[role] || 
-              SCORING_CONFIG.roleMultipliers.unknown;
-  
-  return (
-    kills * adj.kills +
-    assists * 0.965 * adj.assists +
-    (goldEarned / Math.max(1, gameDurationMinutes)) * adj.gold +
-    visionScore * 0.15 * adj.vision
-  );
-}
+1. Pick the first participant (Gyökeres, TOP lane, K'Sante)
+2. Extract artifacts manually:
+
+```javascript
+const participant = match.info.participants[0];
+const gameMins = match.info.gameDuration / 60000; // Convert ms to minutes
+
+const artifacts = extractArtifacts(participant, gameMins);
+// kda ≈ 2 + (19 * 0.965) - (12 * 0.25) = 18.635
+// economy ≈ (13813 / 41) / 10 + 0.953 ≈ 34.7 + 0.953 = 35.7
+// ...etc
+```
+
+3. Apply TOP multipliers:
+```javascript
+const adjusted = applyRoleMultipliers(artifacts, "TOP", ROLE_MULTIPLIERS);
+```
+
+4. Calculate match score and verify it's reasonable (should be 50-150 range for most matches)
+
+---
+
+## Section 8: Deployment Steps
+
+1. **Update scoring_config.js:**  
+   - Replace old heuristic role detection thresholds with ROLE_MULTIPLIERS table
+   - Remove streakInfluence, stabilityInfluence, minMatchesForStability
+
+2. **Update scoring_utils.js:**
+   - Remove detectPlayerRoleFromMatch, cvToStabilityScore, calculateStabilityBonus, calculateStreakMultiplier
+   - Add extractArtifacts, applyRoleMultipliers
+   - Keep normalizeToScale as-is
+
+3. **Update normalize_players_by_puuid.js:**
+   - For each player: loop through matches
+   - Extract artifacts → apply role (from teamPosition) → apply mult → score → average
+   - Normalize using global min/median/max
+
+4. **Test:**
+   - Hand-verify on example data
+   - Run full recompute
+   - Check assortativity >0.5, balance ~65%
+
+5. **Monitor:**
+   - Watch for unexpected score changes
+   - Validate that player rankings make intuitive sense
+   - Adjust role multipliers if needed
+
+---
+
+## Section 9: Summary of Changes
+
+| Item | Before | After |
+|------|--------|-------|
+| **Time Complexity** | 4 stats + streak calc + stability calc | 8 artifacts (no temporal) |
+| **Role Input** | Heuristic with thresholds | Direct from `teamPosition` |
+| **Multiplier Tuning** | 2 per-role params (kills, assists, gold, vision) | 8 per-role params (all artifacts) |
+| **Temporal** | Streaks, stability, age decay | None |
+| **Dataset Average** | Simple | Simple |
+| **Normalization** | Percentile | Percentile |
+| **Result** | Simpler, more position-aware, no false temporal logic |
+
+Done.
 
 /**
  * Calculate average opscore across matches.
