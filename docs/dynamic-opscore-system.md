@@ -4,9 +4,9 @@ This document describes how `opscore` works after the dynamic scoring upgrade.
 
 The current implementation lives in:
 
-- [backend/scoring_config.js](/C:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/scoring_config.js)
-- [backend/lib/scoring_utils.js](/C:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/lib/scoring_utils.js)
-- [backend/normalize_players_by_puuid.js](/C:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/normalize_players_by_puuid.js)
+- [backend/scoring_config.js](/C:/Users/admin/Downloads/premgraph/premadegraph/backend/scoring_config.js)
+- [backend/lib/scoring_utils.js](/C:/Users/admin/Downloads/premgraph/premadegraph/backend/lib/scoring_utils.js)
+- [backend/normalize_players_by_puuid.js](/C:/Users/admin/Downloads/premgraph/premadegraph/backend/normalize_players_by_puuid.js)
 
 ## Overview
 
@@ -17,7 +17,7 @@ It is now the normalized dynamic opscore:
 1. compute a per-match baseline opscore
 2. detect a likely role for each match
 3. apply role-specific stat weights
-4. apply time decay so recent matches matter more
+4. average the role-adjusted match scores across the stored dataset
 5. add a small stability bonus for consistent players
 6. add a streak adjustment for recent hot or cold form
 7. normalize the final raw dynamic score to the `0-10` scale
@@ -119,30 +119,16 @@ Interpretation:
 - supports are rewarded more for assists and vision
 - junglers are rewarded more for assists and less for raw gold
 
-## Step 4: Time Decay
+## Step 4: Dataset-Average Base Score
 
-Each match receives an exponential decay weight based on its age:
-
-```text
-weight = exp((-ln(2) * ageInDays) / halflife)
-```
-
-Current configuration:
-
-- `halflife = 30` days
-
-This means:
-
-- a new match has weight near `1.0`
-- a match 30 days old has weight near `0.5`
-- older matches still matter, but much less
-
-The time-weighted dynamic base score is:
+The dynamic base score is now the plain average of the role-adjusted per-match opscores across the stored dataset:
 
 ```text
-time_weighted_opscore =
-  sum(role_adjusted_opscore_i * weight_i) / sum(weight_i)
+average_role_adjusted_opscore =
+  sum(role_adjusted_opscore_i) / match_count
 ```
+
+This intentionally removes age-based weighting. Older stored matches are no longer discounted just because they are older.
 
 ## Step 5: Stability Bonus
 
@@ -205,7 +191,7 @@ The final raw dynamic opscore is:
 
 ```text
 dynamic_opscore_raw =
-  time_weighted_opscore
+  average_role_adjusted_opscore
   * (1 + stability_bonus + streak_multiplier)
 ```
 
@@ -277,7 +263,7 @@ Role-aware feedscore changes death tolerance by role:
 - top: `1.00`
 - unknown: `1.00`
 
-It also uses time decay and a small hot-streak reduction.
+It also uses a dataset-wide average and a small hot-streak reduction.
 
 ## Practical Meaning Of The Main Fields
 
@@ -292,7 +278,7 @@ It also uses time decay and a small hot-streak reduction.
 
 - The batch recomputation happens in `normalizePlayersByPuuid()`.
 - Match JSON files are processed in sorted filename order for deterministic recomputation.
-- Match age is derived from `gameEndTimestamp`, then `gameCreation`, then file modification time as fallback.
+- Match age is derived from `gameEndTimestamp`, then `gameCreation`, then file modification time as fallback, but it is now only used for the recent-form fields such as `opscore_recent`.
 - Role is detected per match, but the stored player role is the most common role across the player's history.
 - The current implementation does not zero out low-match players; single-match players still receive a dynamic score, but typically with:
   - low role confidence
@@ -319,8 +305,8 @@ In short, the new opscore is:
 - still interpretable
 - still rooted in match statistics
 - no longer role-agnostic
-- no longer time-invariant
+- no longer based on a simple lifetime average
 - slightly sensitive to consistency and recent momentum
 - still exposed on the familiar `0-10` scale
 
-That makes it better aligned with "current player form" while preserving compatibility with the rest of the graph analytics pipeline.
+That keeps the score aligned with the dataset you actually have while preserving compatibility with the rest of the graph analytics pipeline.

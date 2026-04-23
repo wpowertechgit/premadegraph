@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implement a role-aware, time-decay, and streak-aware scoring system to replace the current time-invariant opscore/feedscore calculations. This system will enhance player performance metrics while maintaining thesis validity (assortativity >0.5, balance ~65%).
+Implement a role-aware and streak-aware scoring system to replace the current time-invariant opscore/feedscore calculations. This system will enhance player performance metrics while maintaining thesis validity (assortativity >0.5, balance ~65%).
 
 ---
 
@@ -18,7 +18,7 @@ Create a new table `player_scores_dynamic` to store computed metrics alongside e
 CREATE TABLE player_scores_dynamic (
   player_id TEXT PRIMARY KEY,
   
-  -- Time-decay weighted scores (0-10 for opscore)
+  -- Dynamic scores (0-10 for opscore)
   opscore_decay REAL,           
   feedscore_decay REAL,         
   
@@ -81,9 +81,6 @@ ALTER TABLE players ADD COLUMN (
  */
 
 const SCORING_CONFIG = {
-  // ============ Time Decay Settings ============
-  decayHalflife: 30,  // days - match from 30 days ago contributes ~50% weight
-  
   // ============ Role Multipliers ============
   // Each role has custom stat weights
   // Format: { kills: multiplier, assists: multiplier, gold: multiplier, vision: multiplier }
@@ -163,22 +160,6 @@ const SCORING_CONFIG = require('../scoring_config');
 /**
  * ============ HELPER FUNCTIONS ============
  */
-
-/**
- * Calculate exponential time-decay weight for a single match.
- * 
- * @param {number} matchAgeInDays - Age of match in days
- * @param {number} halflife - Decay halflife in days (default: 30)
- * @returns {number} Weight factor (0-1, where 1 = full weight)
- * 
- * Example:
- *   timeDecayWeight(0) = 1.0    // Today's match
- *   timeDecayWeight(30) = 0.5   // 30 days ago = 50% weight
- *   timeDecayWeight(90) = 0.125 // 90 days ago = 12.5% weight
- */
-function timeDecayWeight(matchAgeInDays, halflife = SCORING_CONFIG.decayHalflife) {
-  return Math.exp(-matchAgeInDays / halflife);
-}
 
 /**
  * Calculate coefficient of variation (normalized standard deviation).
@@ -351,31 +332,24 @@ function opscoreForRole(matchStats, role = 'unknown') {
 }
 
 /**
- * Calculate time-weighted average opscore across matches.
- * Recent matches contribute more weight than old ones.
+ * Calculate average opscore across matches.
  * 
  * @param {object[]} matches - Array of { matchStats, ageInDays, role }
  * @param {boolean} useRole - Apply role multipliers (default: true)
- * @returns {number} Weighted average opscore
+ * @returns {number} Average opscore
  */
 function timeWeightedOpscore(matches, useRole = true) {
   if (!matches || matches.length === 0) return 0;
   
-  let totalScore = 0;
-  let totalWeight = 0;
-  
-  matches.forEach(match => {
+  const totalScore = matches.reduce((sum, match) => {
     const rawScore = useRole
       ? opscoreForRole(match.matchStats, match.role)
       : opscorePerMatch(match.matchStats);
     
-    const weight = timeDecayWeight(match.ageInDays);
-    
-    totalScore += rawScore * weight;
-    totalWeight += weight;
-  });
+    return sum + rawScore;
+  }, 0);
   
-  return totalWeight > 0 ? totalScore / totalWeight : 0;
+  return totalScore / matches.length;
 }
 
 /**
@@ -431,13 +405,12 @@ function calculateStreakMultiplier(matches, window = SCORING_CONFIG.streakWindow
  * Combines time-weighting, role-adjustment, stability bonus, and streak.
  * 
  * @param {object[]} matches - Full match history [ { matchStats, ageInDays, role }, ... ]
- * @param {object} options - { useRoleAdjustment: bool, decayHalflife: number }
+ * @param {object} options - { useRoleAdjustment: bool }
  * @returns {number} Raw dynamic opscore (not yet normalized to 0-10)
  */
 function calculateDynamicOpscore(matches, options = {}) {
   const {
-    useRoleAdjustment = true,
-    decayHalflife = SCORING_CONFIG.decayHalflife
+    useRoleAdjustment = true
   } = options;
   
   if (!matches || matches.length === 0) return 0;
@@ -445,7 +418,7 @@ function calculateDynamicOpscore(matches, options = {}) {
     return 0; // Not enough data
   }
   
-  // Base: time-weighted and role-adjusted
+  // Base: dataset-average and role-adjusted
   const baseScore = timeWeightedOpscore(matches, useRoleAdjustment);
   
   // Adjustments
@@ -510,30 +483,24 @@ function feedscoreForRole(matchStats, role = 'unknown') {
 }
 
 /**
- * Calculate time-weighted average feedscore across matches.
+ * Calculate average feedscore across matches.
  * 
  * @param {object[]} matches - Array of match objects
  * @param {boolean} useRole - Apply role multipliers
- * @returns {number} Weighted average feedscore (lower is better)
+ * @returns {number} Average feedscore (lower is better)
  */
 function timeWeightedFeedscore(matches, useRole = true) {
   if (!matches || matches.length === 0) return 0;
   
-  let totalScore = 0;
-  let totalWeight = 0;
-  
-  matches.forEach(match => {
+  const totalScore = matches.reduce((sum, match) => {
     const rawScore = useRole
       ? feedscoreForRole(match.matchStats, match.role)
       : feedscorePerMatch(match.matchStats);
     
-    const weight = timeDecayWeight(match.ageInDays);
-    
-    totalScore += rawScore * weight;
-    totalWeight += weight;
-  });
+    return sum + rawScore;
+  }, 0);
   
-  return totalWeight > 0 ? totalScore / totalWeight : 0;
+  return totalScore / matches.length;
 }
 
 /**
@@ -585,7 +552,7 @@ function calculateDynamicFeedscore(matches, options = {}) {
     return 0;
   }
   
-  // Base: time-weighted and role-adjusted
+  // Base: dataset-average and role-adjusted
   const baseScore = timeWeightedFeedscore(matches, useRoleAdjustment);
   
   // Hot streak reduction (negative = better, since lower feedscore is better)
@@ -668,7 +635,6 @@ function normalizeOpscoreTo0To10(rawScore, percentiles) {
 
 module.exports = {
   // Time & utility
-  timeDecayWeight,
   coefficientOfVariation,
   cvToStabilityScore,
   
@@ -1290,7 +1256,7 @@ export default function ScoreDisplay({ playerId, mode = 'dynamic' }) {
           <div className="legend">
             <p><strong>Dynamic Scoring Factors:</strong></p>
             <ul>
-              <li><strong>Time Decay:</strong> Recent matches weighted more (30-day halflife)</li>
+              <li><strong>Dataset Average:</strong> All stored matches contribute equally to the main dynamic score</li>
               <li><strong>Role Adjustment:</strong> {scores.dynamic.detectedRole} multipliers applied</li>
               <li><strong>Stability Bonus:</strong> Consistent players get ~{(scores.dynamic.opscoreStability * 10).toFixed(1)}% boost</li>
               <li><strong>Streak Multiplier:</strong> {scores.dynamic.currentStreak > 0.1 ? 'Hot streak' : scores.dynamic.currentStreak < -0.1 ? 'Slump' : 'Normal form'}</li>
@@ -1575,24 +1541,6 @@ const scoringUtils = require('../scoring_utils');
 
 describe('Scoring Utils', () => {
   
-  // ============ Time Decay Tests ============
-  describe('timeDecayWeight', () => {
-    it('should return 1.0 for current match (age 0)', () => {
-      const weight = scoringUtils.timeDecayWeight(0);
-      assert(Math.abs(weight - 1.0) < 0.01);
-    });
-    
-    it('should return ~0.5 for 30-day old match', () => {
-      const weight = scoringUtils.timeDecayWeight(30);
-      assert(Math.abs(weight - 0.5) < 0.01);
-    });
-    
-    it('should return ~0.125 for 90-day old match', () => {
-      const weight = scoringUtils.timeDecayWeight(90);
-      assert(Math.abs(weight - 0.125) < 0.01);
-    });
-  });
-  
   // ============ Role Detection Tests ============
   describe('detectPlayerRoleFromMatch', () => {
     it('should detect support role', () => {
@@ -1711,7 +1659,7 @@ Create `VALIDATION_CHECKLIST.md` to track validation steps:
 
 ## Phase 1: Mathematical Correctness
 - [ ] Hand-verify opscore calculation for 3-5 test players
-- [ ] Verify time-decay weights sum correctly
+- [ ] Verify dataset-average score calculation against hand-computed examples
 - [ ] Verify role-adjusted scores differ from baseline
 - [ ] Confirm stability metric ranges 0-1
 - [ ] Confirm streak metric ranges -1 to +1

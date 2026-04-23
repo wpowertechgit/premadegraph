@@ -121,25 +121,20 @@ Capture **player form** (recent performance), **stability** (variance), and **st
 
 ### Core Metrics
 
-#### 2.1 Time Decay (Recent Performance Weighting)
+#### 2.1 Dataset-Wide Match Averaging
 
-Apply exponential decay to match history:
+Average over the stored match history without age-based decay:
 
 ```javascript
-function timeDecayWeight(matchAgeInDays, decayHalflife = 30) {
-  return Math.exp(-matchAgeInDays / decayHalflife);
-}
-
-// Weighted average across matches
-const decayedOpscore = 
-  sumOf(match => opscoreForMatch(match) * timeDecayWeight(match.ageInDays)) 
-  / sumOf(match => timeDecayWeight(match.ageInDays));
+const averagedOpscore =
+  sumOf(match => opscoreForMatch(match))
+  / matchCount;
 ```
 
 **Interpretation:**
-- Halflife = 30 days means a match from 30 days ago contributes ~50% weight
-- Recent matches (0-7 days) carry ~100% weight
-- Old matches (90+ days) carry <5% weight
+- Every stored match contributes equally to the main dynamic score
+- This avoids pretending the dataset is fresher than it really is
+- Recent-form analysis can still live in separate indicators
 
 #### 2.2 Stability/Volatility Metric
 
@@ -193,25 +188,20 @@ function detectStreak(matches, window = 5) {
 ```javascript
 function dynamicOpscore(player, allMatches, weights = {}) {
   const {
-    decayHalflife = 30,
     useRoleAdjustment = true,
     streakInfluence = 0.15,
     stabilityInfluence = 0.10
   } = weights;
   
-  // Base: Role-adjusted, time-weighted average
+  // Base: Role-adjusted dataset average
   const baseScores = allMatches.map(match => {
     const role = detectPlayerRole(player, match);
-    const rawScore = useRoleAdjustment 
+    return useRoleAdjustment 
       ? opscoreForRole(match, role)
       : opscorePerMatch(match);
-    const weight = timeDecayWeight(match.ageInDays, decayHalflife);
-    return { score: rawScore, weight };
   });
   
-  const timeWeightedOpscore = 
-    sumOf(baseScores, s => s.score * s.weight) /
-    sumOf(baseScores, s => s.weight);
+  const averagedOpscore = average(baseScores);
   
   // Stability boost: consistent players score slightly higher
   const stability = calculateStability(allMatches);
@@ -223,7 +213,7 @@ function dynamicOpscore(player, allMatches, weights = {}) {
   
   // Combine adjustments
   const adjusted = 
-    timeWeightedOpscore * (1 + stabilityBoost + streakAdjustment);
+    averagedOpscore * (1 + stabilityBoost + streakAdjustment);
   
   // Normalize to 0-10 scale (same percentile interpolation as before)
   return normalizeToScale(adjusted);
@@ -235,31 +225,26 @@ function dynamicOpscore(player, allMatches, weights = {}) {
 ```javascript
 function dynamicFeedscore(player, allMatches, weights = {}) {
   const {
-    decayHalflife = 30,
     useRoleAdjustment = true,
     streakInfluence = 0.15
   } = weights;
   
-  // Base: Role-adjusted, time-weighted average (lower is better)
+  // Base: Role-adjusted dataset average (lower is better)
   const baseScores = allMatches.map(match => {
     const role = detectPlayerRole(player, match);
-    const rawScore = useRoleAdjustment
+    return useRoleAdjustment
       ? feedscoreForRole(match, role)
       : feedscorePerMatch(match);
-    const weight = timeDecayWeight(match.ageInDays, decayHalflife);
-    return { score: rawScore, weight };
   });
   
-  const timeWeightedFeedscore =
-    sumOf(baseScores, s => s.score * s.weight) /
-    sumOf(baseScores, s => s.weight);
+  const averagedFeedscore = average(baseScores);
   
   // Streak adjustment: hot streaks reduce feedscore penalty
   const streak = detectStreak(allMatches, 5);
   const streakPenalty = streak < 0 ? Math.abs(streak * streakInfluence) : 0;
   
   // Apply streak reduction (lower feedscore is better)
-  const adjusted = timeWeightedFeedscore * (1 - streakPenalty);
+  const adjusted = averagedFeedscore * (1 - streakPenalty);
   
   return adjusted; // Keep raw values for now (no separate 0-10 scale)
 }
@@ -281,9 +266,9 @@ CREATE TABLE players (
 ### Proposed Extended Schema
 ```sql
 ALTER TABLE players ADD COLUMN (
-  -- Temporal metrics
-  opscore_decay REAL,           -- time-decay weighted opscore (0-10)
-  feedscore_decay REAL,         -- time-decay weighted feedscore
+	  -- Dynamic metrics
+	  opscore_decay REAL,           -- dynamic opscore (0-10)
+	  feedscore_decay REAL,         -- dynamic feedscore
   opscore_recent REAL,          -- last 7 days average
   opscore_stability REAL,       -- 0-1 consistency metric
   
@@ -352,7 +337,7 @@ CREATE TABLE player_roles (
 ### Phase 1: MVP (Week 1-2)
 - [ ] Extract role history from existing match data
 - [ ] Implement role-adjustment multipliers (simple table-driven)
-- [ ] Add time-decay weighting (exponential halflife)
+- [ ] Use dataset-average scoring with no age-based weighting
 - [ ] Compute stability metric as post-processing
 - [ ] Update backend scoring calc functions
 - [ ] Extend DB schema (non-destructive ALTER)
@@ -388,7 +373,7 @@ CREATE TABLE player_roles (
 1. Pick 3-5 players with complete match history
 2. Manually calculate role-adjusted opscore by hand
 3. Compare with implementation
-4. Verify time-decay weights sum correctly
+4. Verify dataset-average calculations by hand
 
 **Regression checks:**
 ```python
@@ -408,7 +393,7 @@ correlation(oldFeedscores, newFeedscores) > 0.80
 
 **For each player in top 10 opscores:**
 1. Show old vs new score
-2. Show breakdown: role adjustment + decay weight + streak contribution
+2. Show breakdown: role adjustment + streak contribution
 3. Check if ranking changes make sense
 
 ### 7.4 UI/UX Validation
@@ -425,10 +410,7 @@ correlation(oldFeedscores, newFeedscores) > 0.80
 
 ```javascript
 const SCORING_CONFIG = {
-  // Time decay
-  decayHalflife: 30,           // days
-  
-  // Role adjustments (per role)
+	  // Role adjustments (per role)
   roleMultipliers: {
     carry:    { kills: 1.15, assists: 0.90, gold: 1.10, vision: 0.90 },
     mid:      { kills: 1.05, assists: 1.00, gold: 1.00, vision: 1.05 },
@@ -504,10 +486,10 @@ const SCORING_CONFIG = {
 
 | Aspect | Current | Proposed |
 |--------|---------|----------|
-| **Opscore** | Time-invariant average | Time-decay weighted + role-adjusted + streak influenced |
-| **Feedscore** | Time-invariant average | Time-decay weighted + role-adjusted + streak penalty |
+| **Opscore** | Time-invariant average | Dataset-average + role-adjusted + streak influenced |
+| **Feedscore** | Time-invariant average | Dataset-average + role-adjusted + streak penalty |
 | **Role** | Not integrated | Explicit role detection + multiplier table |
-| **Time** | Only duration normalization | Exponential decay halflife (30 days) |
+| **Time** | Only duration normalization | No age-based weighting across stored matches |
 | **Stability** | N/A | 0-1 metric (consistency score) |
 | **Streak** | N/A | -1 to +1 (hot/slump indicator) |
 | **DB** | 2 score columns | +6 new columns (non-destructive) |

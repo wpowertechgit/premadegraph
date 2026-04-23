@@ -1,9 +1,9 @@
 const SCORING_CONFIG = {
-  decayHalflife: 30,
   streakInfluence: 0.15,
   stabilityInfluence: 0.10,
   streakWindow: 5,
   recentWindowDays: 7,
+  minMatchesForMeaningfulScore: 5,
   minMatchesForStability: 10,
   minMatchesForRoleConfidence: 5,
   roleMultipliers: {
