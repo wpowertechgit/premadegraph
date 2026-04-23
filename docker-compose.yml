@@ -7,10 +7,10 @@ services:
       - ./backend:/app
       - /app/node_modules
       - /app/pathfinder-rust/target
-      - ./playersrefined.db:/workspace/playersrefined.db:ro
+      - ./playersrefined.db:/app/data/databases/default/playersrefined.db
     environment:
       - NODE_ENV=development
-      - GRAPH_DB_PATH=/workspace/playersrefined.db
+      - GRAPH_DB_PATH=/app/data/databases/default/playersrefined.db
       - PATHFINDER_RUST_BIN=/app/pathfinder-rust/target/debug/pathfinder_rust
 
   frontend:

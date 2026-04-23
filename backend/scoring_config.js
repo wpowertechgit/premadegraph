@@ -1,35 +1,89 @@
-const SCORING_CONFIG = {
-  streakInfluence: 0.15,
-  stabilityInfluence: 0.10,
-  streakWindow: 5,
-  recentWindowDays: 7,
-  minMatchesForMeaningfulScore: 5,
-  minMatchesForStability: 10,
-  minMatchesForRoleConfidence: 5,
-  roleMultipliers: {
-    carry: { kills: 1.15, assists: 0.9, gold: 1.1, vision: 0.9 },
-    mid: { kills: 1.05, assists: 1.0, gold: 1.0, vision: 1.05 },
-    jungler: { kills: 1.1, assists: 1.2, gold: 0.75, vision: 1.0 },
-    top: { kills: 1.0, assists: 0.9, gold: 1.05, vision: 0.9 },
-    support: { kills: 0.6, assists: 1.3, gold: 0.4, vision: 1.5 },
-    unknown: { kills: 1.0, assists: 1.0, gold: 1.0, vision: 1.0 },
+const ROLE_MULTIPLIERS = {
+  TOP: {
+    kda: 1.1,
+    economy: 1.05,
+    map_awareness: 0.9,
+    utility: 0.6,
+    damage: 1.15,
+    tanking: 1.0,
+    objectives: 1.2,
+    early_game: 1.05,
   },
-  roleThresholds: {
-    supportVisionScore: 80,
-    supportWardsPlaced: 8,
-    supportGoldPerMin: 300,
-    carryGoldPerMin: 450,
-    topGoldPerMin: 380,
-    junglerAssists: 12,
+  JUNGLE: {
+    kda: 1.2,
+    economy: 0.7,
+    map_awareness: 1.4,
+    utility: 0.8,
+    damage: 1.0,
+    tanking: 0.8,
+    objectives: 1.4,
+    early_game: 1.3,
   },
-  feedscoreRoleTolerance: {
-    support: 0.8,
-    carry: 1.2,
-    mid: 1.0,
-    jungler: 1.05,
-    top: 1.0,
-    unknown: 1.0,
+  MIDDLE: {
+    kda: 1.0,
+    economy: 1.1,
+    map_awareness: 1.2,
+    utility: 1.0,
+    damage: 1.05,
+    tanking: 0.8,
+    objectives: 1.0,
+    early_game: 1.1,
+  },
+  BOTTOM: {
+    kda: 1.2,
+    economy: 1.3,
+    map_awareness: 1.1,
+    utility: 0.7,
+    damage: 1.4,
+    tanking: 0.6,
+    objectives: 0.9,
+    early_game: 1.0,
+  },
+  UTILITY: {
+    kda: 0.7,
+    economy: 0.4,
+    map_awareness: 1.8,
+    utility: 1.8,
+    damage: 0.5,
+    tanking: 1.1,
+    objectives: 0.7,
+    early_game: 0.8,
+  },
+  UNKNOWN: {
+    kda: 1.0,
+    economy: 1.0,
+    map_awareness: 1.0,
+    utility: 1.0,
+    damage: 1.0,
+    tanking: 1.0,
+    objectives: 1.0,
+    early_game: 1.0,
   },
 };
 
-module.exports = SCORING_CONFIG;
+const DEATH_TOLERANCE = {
+  TOP: 1.0,
+  JUNGLE: 1.05,
+  MIDDLE: 1.0,
+  BOTTOM: 1.15,
+  UTILITY: 0.8,
+  UNKNOWN: 1.0,
+};
+
+const SCORING_CONFIG = {
+  minMatchesForMeaningfulScore: 1,
+  roleMultipliers: ROLE_MULTIPLIERS,
+  deathTolerance: DEATH_TOLERANCE,
+  normalization: {
+    floorPercentile: 0.05,
+    centerPercentile: 0.5,
+    ceilingPercentile: 0.95,
+    centerScore: 6.6,
+  },
+};
+
+module.exports = {
+  ...SCORING_CONFIG,
+  ROLE_MULTIPLIERS,
+  DEATH_TOLERANCE,
+};

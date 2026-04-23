@@ -216,6 +216,14 @@ export default function AppNavbar({
       icon: <FaProjectDiagram />,
     },
     {
+      to: "/player-detail",
+      label: language === "hu" ? "Játékos Részletei" : "Player Detail",
+      description: language === "hu"
+        ? "Játékos teljesítményelemzés"
+        : "Player performance analysis",
+      icon: <FaChartLine />,
+    },
+    {
       to: "/graph-sphere",
       label: t.app.nav.graphSphere,
       description: t.app.nav.graphSphereDescription,

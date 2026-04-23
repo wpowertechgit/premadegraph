@@ -506,9 +506,21 @@ function initializeRawDatabase(dbPath) {
     sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX,
   );
   database.serialize(() => {
-    database.run(`PRAGMA foreign_keys = ON`);
-    database.run(`PRAGMA journal_mode = WAL`);
-    database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+    database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`, (error) => {
+      if (error) {
+        console.warn(`Raw database initialization busy_timeout failed for ${dbPath}:`, error.message);
+      }
+    });
+    database.run(`PRAGMA foreign_keys = ON`, (error) => {
+      if (error) {
+        console.warn(`Raw database initialization foreign_keys failed for ${dbPath}:`, error.message);
+      }
+    });
+    database.run(`PRAGMA journal_mode = WAL`, (error) => {
+      if (error) {
+        console.warn(`Raw database initialization journal_mode failed for ${dbPath}:`, error.message);
+      }
+    });
     database.run(`
       CREATE TABLE IF NOT EXISTS players (
         puuid TEXT PRIMARY KEY,
@@ -518,7 +530,11 @@ function initializeRawDatabase(dbPath) {
         country TEXT,
         match_count INTEGER DEFAULT 1
       )
-    `);
+    `, (error) => {
+      if (error) {
+        console.warn(`Raw database initialization schema setup failed for ${dbPath}:`, error.message);
+      }
+    });
   });
   database.close();
 }
@@ -1050,6 +1066,13 @@ function openConfiguredDatabase(databasePath, label) {
   );
 }
 
+function logDatabaseSetupError(label, step, error) {
+  if (!error) {
+    return;
+  }
+  console.warn(`${label} ${step} failed:`, error.message);
+}
+
 const replayDb = new sqlite3.Database(
   replayDbPath,
   sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX,
@@ -1065,9 +1088,15 @@ const replayDb = new sqlite3.Database(
 function configureDatabase(database) {
   database.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
   database.serialize(() => {
-    database.run(`PRAGMA foreign_keys = ON`);
-    database.run(`PRAGMA journal_mode = WAL`);
-    database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+    database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`, (error) => {
+      logDatabaseSetupError("Database", "busy_timeout pragma", error);
+    });
+    database.run(`PRAGMA foreign_keys = ON`, (error) => {
+      logDatabaseSetupError("Database", "foreign_keys pragma", error);
+    });
+    database.run(`PRAGMA journal_mode = WAL`, (error) => {
+      logDatabaseSetupError("Database", "journal_mode pragma", error);
+    });
   });
 }
 
@@ -1084,7 +1113,9 @@ function ensureRawDatabaseSchema() {
       country TEXT,
       match_count INTEGER DEFAULT 1
     )
-  `);
+  `, (error) => {
+    logDatabaseSetupError("Raw player database", "schema setup", error);
+  });
 }
 
 function openActiveRawDatabase() {
@@ -1098,9 +1129,15 @@ function openActiveRawDatabase() {
 
 replayDb.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
 replayDb.serialize(() => {
-  replayDb.run(`PRAGMA foreign_keys = ON`);
-  replayDb.run(`PRAGMA journal_mode = WAL`);
-  replayDb.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+  replayDb.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`, (error) => {
+    logDatabaseSetupError("Replay database", "busy_timeout pragma", error);
+  });
+  replayDb.run(`PRAGMA foreign_keys = ON`, (error) => {
+    logDatabaseSetupError("Replay database", "foreign_keys pragma", error);
+  });
+  replayDb.run(`PRAGMA journal_mode = WAL`, (error) => {
+    logDatabaseSetupError("Replay database", "journal_mode pragma", error);
+  });
 });
 
 function sqliteRun(database, sql, params = []) {
@@ -1149,6 +1186,24 @@ function dbGet(sql, params = []) {
 
 function dbAll(sql, params = []) {
   return sqliteAll(rawDb, sql, params);
+}
+
+async function withRefinedDb(action) {
+  const refinedDb = openConfiguredDatabase(getActiveRefinedDbPath(), "Refined player database");
+  configureDatabase(refinedDb);
+  try {
+    return await action(refinedDb);
+  } finally {
+    await new Promise((resolve) => refinedDb.close(() => resolve()));
+  }
+}
+
+function refinedDbGet(sql, params = []) {
+  return withRefinedDb((database) => sqliteGet(database, sql, params));
+}
+
+function refinedDbAll(sql, params = []) {
+  return withRefinedDb((database) => sqliteAll(database, sql, params));
 }
 
 function replayDbRun(sql, params = []) {
@@ -1501,6 +1556,407 @@ async function loadReplayById(replayId) {
   const hydrated = await hydrateReplayRows(rows);
   return hydrated[0] ?? null;
 }
+
+function parsePlayerNames(rawNames) {
+  if (!rawNames) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawNames);
+    return Array.isArray(parsed) ? parsed : [String(rawNames)];
+  } catch {
+    return [String(rawNames)];
+  }
+}
+
+const PLAYER_DETAIL_ARTIFACT_LABELS = {
+  kda: "KDA",
+  economy: "Economy",
+  map_awareness: "Map awareness",
+  utility: "Utility",
+  damage: "Damage",
+  tanking: "Tanking",
+  objectives: "Objectives",
+  early_game: "Early game",
+};
+
+const PLAYER_DETAIL_GROUPS = {
+  combat: ["kda", "damage", "tanking"],
+  map_control: ["map_awareness", "objectives", "early_game"],
+  resource_utility: ["economy", "utility"],
+};
+
+function safeNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function averageNumbers(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return 0;
+  }
+  return values.reduce((sum, value) => sum + safeNumber(value), 0) / values.length;
+}
+
+function roundNumber(value, digits = 2) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function percentileRank(values, targetValue, { descending = false } = {}) {
+  const sorted = [...values].filter(Number.isFinite).sort((left, right) => left - right);
+  if (!sorted.length) {
+    return 0;
+  }
+
+  const target = safeNumber(targetValue);
+  let lessCount = 0;
+  let equalCount = 0;
+
+  for (const value of sorted) {
+    if (value < target) {
+      lessCount += 1;
+      continue;
+    }
+    if (value === target) {
+      equalCount += 1;
+      continue;
+    }
+    break;
+  }
+
+  const ascendingPercentile = ((lessCount + equalCount * 0.5) / sorted.length) * 100;
+  return roundNumber(descending ? 100 - ascendingPercentile : ascendingPercentile, 1);
+}
+
+function computeAverageKda(kills, assists, deaths) {
+  return (safeNumber(kills) + safeNumber(assists)) / Math.max(1, safeNumber(deaths));
+}
+
+async function buildPlayerKdaBenchmark(puuid) {
+  const matchDir = getActiveMatchesPath();
+  if (!fs.existsSync(matchDir)) {
+    return {
+      playerAverage: 0,
+      datasetAverage: 0,
+      matchesSampled: 0,
+      datasetSamples: 0,
+    };
+  }
+
+  const files = fs.readdirSync(matchDir).filter((file) => file.endsWith(".json")).sort();
+  let playerTotal = 0;
+  let playerMatches = 0;
+  let datasetTotal = 0;
+  let datasetSamples = 0;
+
+  for (const file of files) {
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(matchDir, file), "utf-8"));
+      const participants = Array.isArray(data?.info?.participants) ? data.info.participants : [];
+
+      for (const participant of participants) {
+        const kda = computeAverageKda(participant?.kills, participant?.assists, participant?.deaths);
+        datasetTotal += kda;
+        datasetSamples += 1;
+
+        if (participant?.puuid === puuid) {
+          playerTotal += kda;
+          playerMatches += 1;
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to parse match file for KDA benchmark (${file}):`, error.message);
+    }
+  }
+
+  return {
+    playerAverage: roundNumber(playerMatches ? playerTotal / playerMatches : 0),
+    datasetAverage: roundNumber(datasetSamples ? datasetTotal / datasetSamples : 0),
+    matchesSampled: playerMatches,
+    datasetSamples,
+  };
+}
+
+function buildPlayerScoreBenchmarks(playerRow, benchmarkRows) {
+  const artifactRows = benchmarkRows.map((entry) => ({
+    opscore: safeNumber(entry.opscore),
+    feedscore: safeNumber(entry.feedscore),
+    kda: safeNumber(entry.artifact_kda),
+    economy: safeNumber(entry.artifact_economy),
+    map_awareness: safeNumber(entry.artifact_map_awareness),
+    utility: safeNumber(entry.artifact_utility),
+    damage: safeNumber(entry.artifact_damage),
+    tanking: safeNumber(entry.artifact_tanking),
+    objectives: safeNumber(entry.artifact_objectives),
+    early_game: safeNumber(entry.artifact_early_game),
+  }));
+
+  const sampleSize = artifactRows.length;
+  const distributions = {
+    opscore: artifactRows.map((entry) => entry.opscore),
+    feedscore: artifactRows.map((entry) => entry.feedscore),
+    kda: artifactRows.map((entry) => entry.kda),
+    economy: artifactRows.map((entry) => entry.economy),
+    map_awareness: artifactRows.map((entry) => entry.map_awareness),
+    utility: artifactRows.map((entry) => entry.utility),
+    damage: artifactRows.map((entry) => entry.damage),
+    tanking: artifactRows.map((entry) => entry.tanking),
+    objectives: artifactRows.map((entry) => entry.objectives),
+    early_game: artifactRows.map((entry) => entry.early_game),
+  };
+
+  const groups = Object.fromEntries(
+    Object.entries(PLAYER_DETAIL_GROUPS).map(([groupKey, keys]) => {
+      const components = keys.map((key) => {
+        const playerValue = safeNumber(playerRow[`artifact_${key}`]);
+        const averageValue = averageNumbers(distributions[key]);
+        const percentile = percentileRank(distributions[key], playerValue);
+
+        return {
+          key,
+          label: PLAYER_DETAIL_ARTIFACT_LABELS[key] || key,
+          playerValue: roundNumber(playerValue),
+          averageValue: roundNumber(averageValue),
+          percentile,
+        };
+      });
+
+      return [
+        groupKey,
+        {
+          percentile: roundNumber(averageNumbers(components.map((entry) => entry.percentile)), 1),
+          components,
+        },
+      ];
+    }),
+  );
+
+  return {
+    sampleSize,
+    opscore: {
+      average: roundNumber(averageNumbers(distributions.opscore)),
+      percentile: percentileRank(distributions.opscore, safeNumber(playerRow.opscore)),
+    },
+    feedscore: {
+      average: roundNumber(averageNumbers(distributions.feedscore)),
+      percentile: percentileRank(distributions.feedscore, safeNumber(playerRow.feedscore), { descending: true }),
+    },
+    groups,
+  };
+}
+
+app.get("/api/players/options", async (req, res) => {
+  try {
+    const rows = await refinedDbAll(
+      `SELECT puuid, names
+       FROM players
+       WHERE puuid IS NOT NULL
+         AND TRIM(puuid) != ""`,
+    );
+
+    const players = rows
+      .map((row) => {
+        const allNames = parsePlayerNames(row.names);
+        return {
+          id: row.puuid,
+          label: allNames[0] || row.puuid,
+        };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" }));
+
+    res.json({ players });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/players/:puuid/scores", async (req, res) => {
+  try {
+    const { puuid } = req.params;
+    const [row, benchmarkRows, kdaBenchmark] = await Promise.all([
+      refinedDbGet(
+        `SELECT
+        puuid,
+        names,
+        opscore,
+        feedscore,
+        detected_role,
+        role_confidence,
+        matches_processed,
+        score_computed_at,
+        country,
+        artifact_kda,
+        artifact_economy,
+        artifact_map_awareness,
+        artifact_utility,
+        artifact_damage,
+        artifact_tanking,
+        artifact_objectives,
+        artifact_early_game
+       FROM players
+       WHERE puuid = ?`,
+        [puuid],
+      ),
+      refinedDbAll(
+        `SELECT
+          opscore,
+          feedscore,
+          artifact_kda,
+          artifact_economy,
+          artifact_map_awareness,
+          artifact_utility,
+          artifact_damage,
+          artifact_tanking,
+          artifact_objectives,
+          artifact_early_game
+         FROM players
+         WHERE matches_processed > 0`,
+      ),
+      buildPlayerKdaBenchmark(puuid),
+    ]);
+
+    if (!row) {
+      return res.status(404).json({ error: "Player not found" });
+    }
+
+    const benchmarks = buildPlayerScoreBenchmarks(row, benchmarkRows);
+
+    res.json({
+      puuid: row.puuid,
+      names: parsePlayerNames(row.names),
+      scores: {
+        opscore: Number(row.opscore) || 0,
+        feedscore: Number(row.feedscore) || 0,
+        detectedRole: row.detected_role || "UNKNOWN",
+        roleConfidence: Number(row.role_confidence) || 0,
+        matchesProcessed: row.matches_processed || 0,
+        computedAt: row.score_computed_at,
+        artifacts: {
+          kda: Number(row.artifact_kda) || 0,
+          economy: Number(row.artifact_economy) || 0,
+          map_awareness: Number(row.artifact_map_awareness) || 0,
+          utility: Number(row.artifact_utility) || 0,
+          damage: Number(row.artifact_damage) || 0,
+          tanking: Number(row.artifact_tanking) || 0,
+          objectives: Number(row.artifact_objectives) || 0,
+          early_game: Number(row.artifact_early_game) || 0,
+        },
+      },
+      benchmarks: {
+        ...benchmarks,
+        kda: kdaBenchmark,
+      },
+      country: row.country || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/scores/leaderboard", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const role = req.query.role ? String(req.query.role).toUpperCase() : null;
+
+    let query = `
+      SELECT
+        puuid,
+        names,
+        opscore,
+        feedscore,
+        detected_role,
+        role_confidence,
+        matches_processed,
+        country
+      FROM players
+      WHERE opscore > 0
+    `;
+    const params = [];
+
+    if (role) {
+      query += ` AND detected_role = ?`;
+      params.push(role);
+    }
+
+    query += ` ORDER BY opscore DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    const rows = await refinedDbAll(query, params);
+
+    let countQuery = `SELECT COUNT(*) AS total FROM players WHERE opscore > 0`;
+    const countParams = [];
+
+    if (role) {
+      countQuery += ` AND detected_role = ?`;
+      countParams.push(role);
+    }
+
+    const countRow = await refinedDbGet(countQuery, countParams);
+    const leaderboard = rows.map((row, index) => {
+      const allNames = parsePlayerNames(row.names);
+      return {
+        rank: offset + index + 1,
+        puuid: row.puuid,
+        playerName: allNames[0] || "Unknown",
+        allNames,
+        opscore: Number(row.opscore) || 0,
+        feedscore: Number(row.feedscore) || 0,
+        detectedRole: row.detected_role || "UNKNOWN",
+        roleConfidence: Number(row.role_confidence) || 0,
+        matchesProcessed: row.matches_processed || 0,
+        country: row.country || null,
+      };
+    });
+
+    res.json({
+      leaderboard,
+      pagination: {
+        total: countRow?.total || 0,
+        limit,
+        offset,
+        hasMore: offset + limit < (countRow?.total || 0),
+      },
+      filter: { role: role || "ALL" },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/scores/leaderboard/by-role/:role", (req, res) => {
+  const { role } = req.params;
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  res.redirect(
+    `/api/scores/leaderboard?role=${encodeURIComponent(role.toUpperCase())}&limit=${limit}&offset=${offset}`,
+  );
+});
+
+app.get("/api/scores/config", (req, res) => {
+  const scoringConfig = require("./scoring_config");
+
+  res.json({
+    roleMultipliers: scoringConfig.roleMultipliers || {},
+    deathTolerance: scoringConfig.deathTolerance || {},
+    normalization: scoringConfig.normalization || {},
+    artifacts: {
+      kda: "Kills plus weighted assists, reduced by death penalty.",
+      economy: "Gold earned per minute plus gold spending efficiency.",
+      map_awareness: "Vision score, warding, sweeper usage, and ward clears.",
+      utility: "Crowd control, shielding, healing, and mitigation output.",
+      damage: "Combined physical, magic, and true damage to champions.",
+      tanking: "Damage absorbed per minute.",
+      objectives: "Turret, inhibitor, plate, and structure pressure.",
+      early_game: "First blood, first tower, and lane CS pressure in the first 10 minutes.",
+    },
+  });
+});
 
 app.post('/api/save-player', (req, res) => {
   const player = req.body;

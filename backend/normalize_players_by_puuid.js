@@ -3,20 +3,38 @@ const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const scoringUtils = require("./lib/scoring_utils");
 
-const DYNAMIC_PLAYER_COLUMNS = [
-  { name: "opscore_legacy", definition: "REAL" },
-  { name: "feedscore_legacy", definition: "REAL" },
-  { name: "opscore_decay", definition: "REAL" },
-  { name: "feedscore_decay", definition: "REAL" },
-  { name: "opscore_recent", definition: "REAL" },
-  { name: "feedscore_recent", definition: "REAL" },
-  { name: "opscore_stability", definition: "REAL" },
-  { name: "detected_role", definition: "TEXT DEFAULT 'unknown'" },
+const PLAYER_TABLE_COLUMNS = [
+  { name: "puuid", definition: "TEXT PRIMARY KEY" },
+  { name: "names", definition: "TEXT" },
+  { name: "feedscore", definition: "REAL" },
+  { name: "opscore", definition: "REAL" },
+  { name: "country", definition: "TEXT" },
+  { name: "match_count", definition: "INTEGER DEFAULT 0" },
+  { name: "detected_role", definition: "TEXT DEFAULT 'UNKNOWN'" },
   { name: "role_confidence", definition: "REAL DEFAULT 0.0" },
-  { name: "current_streak", definition: "REAL DEFAULT 0.0" },
   { name: "matches_processed", definition: "INTEGER DEFAULT 0" },
-  { name: "dynamic_score_updated", definition: "TEXT" },
+  { name: "artifact_kda", definition: "REAL DEFAULT 0" },
+  { name: "artifact_economy", definition: "REAL DEFAULT 0" },
+  { name: "artifact_map_awareness", definition: "REAL DEFAULT 0" },
+  { name: "artifact_utility", definition: "REAL DEFAULT 0" },
+  { name: "artifact_damage", definition: "REAL DEFAULT 0" },
+  { name: "artifact_tanking", definition: "REAL DEFAULT 0" },
+  { name: "artifact_objectives", definition: "REAL DEFAULT 0" },
+  { name: "artifact_early_game", definition: "REAL DEFAULT 0" },
+  { name: "score_computed_at", definition: "TEXT" },
 ];
+
+const LEGACY_SCORE_COLUMNS = new Set([
+  "opscore_legacy",
+  "feedscore_legacy",
+  "opscore_decay",
+  "feedscore_decay",
+  "opscore_recent",
+  "feedscore_recent",
+  "opscore_stability",
+  "current_streak",
+  "dynamic_score_updated",
+]);
 
 function resolvePathFromEnv(...keys) {
   for (const key of keys) {
@@ -94,27 +112,127 @@ function dbAll(db, sql, params = []) {
   });
 }
 
+function buildCreatePlayersTableSql(tableName = "players") {
+  const columnSql = PLAYER_TABLE_COLUMNS.map((column) => `${column.name} ${column.definition}`).join(",\n      ");
+  return `CREATE TABLE IF NOT EXISTS ${tableName} (
+      ${columnSql}
+    )`;
+}
+
+async function configureNormalizationDatabase(db) {
+  await dbRun(db, "PRAGMA journal_mode = WAL");
+  await dbRun(db, "PRAGMA synchronous = NORMAL");
+  await dbRun(db, "PRAGMA temp_store = MEMORY");
+  await dbRun(db, "PRAGMA foreign_keys = ON");
+}
+
+async function getPlayersTableInfo(db) {
+  return dbAll(db, "PRAGMA table_info(players)");
+}
+
+function buildSelectExpression(existingColumns, columnName, fallbackSql) {
+  return existingColumns.has(columnName) ? columnName : fallbackSql;
+}
+
 async function ensurePlayersTableSchema(db) {
-  await dbRun(
-    db,
-    `CREATE TABLE IF NOT EXISTS players (
-      puuid TEXT PRIMARY KEY,
-      names TEXT,
-      feedscore REAL,
-      opscore REAL,
-      country TEXT,
-      match_count INTEGER
-    )`,
-  );
+  const columns = await getPlayersTableInfo(db);
 
-  const columns = await dbAll(db, "PRAGMA table_info(players)");
-  const existingColumns = new Set(columns.map((column) => column.name));
-
-  for (const column of DYNAMIC_PLAYER_COLUMNS) {
-    if (!existingColumns.has(column.name)) {
-      await dbRun(db, `ALTER TABLE players ADD COLUMN ${column.name} ${column.definition}`);
-    }
+  if (columns.length === 0) {
+    await dbRun(db, buildCreatePlayersTableSql());
+    return;
   }
+
+  const existingColumns = new Set(columns.map((column) => column.name));
+  const missingCanonical = PLAYER_TABLE_COLUMNS.some((column) => !existingColumns.has(column.name));
+  const hasLegacyColumns = columns.some((column) => LEGACY_SCORE_COLUMNS.has(column.name));
+
+  if (!missingCanonical && !hasLegacyColumns) {
+    return;
+  }
+
+  const tempTable = "players_rebuilt";
+  await dbRun(db, "BEGIN TRANSACTION");
+
+  try {
+    await dbRun(db, `DROP TABLE IF EXISTS ${tempTable}`);
+    await dbRun(db, buildCreatePlayersTableSql(tempTable));
+
+    const selectList = [
+      buildSelectExpression(existingColumns, "puuid", "NULL"),
+      buildSelectExpression(existingColumns, "names", "NULL"),
+      buildSelectExpression(existingColumns, "feedscore", "0"),
+      buildSelectExpression(existingColumns, "opscore", "0"),
+      buildSelectExpression(existingColumns, "country", "NULL"),
+      buildSelectExpression(existingColumns, "match_count", "0"),
+      buildSelectExpression(existingColumns, "detected_role", "'UNKNOWN'"),
+      buildSelectExpression(existingColumns, "role_confidence", "0.0"),
+      buildSelectExpression(existingColumns, "matches_processed", "0"),
+      buildSelectExpression(existingColumns, "artifact_kda", "0"),
+      buildSelectExpression(existingColumns, "artifact_economy", "0"),
+      buildSelectExpression(existingColumns, "artifact_map_awareness", "0"),
+      buildSelectExpression(existingColumns, "artifact_utility", "0"),
+      buildSelectExpression(existingColumns, "artifact_damage", "0"),
+      buildSelectExpression(existingColumns, "artifact_tanking", "0"),
+      buildSelectExpression(existingColumns, "artifact_objectives", "0"),
+      buildSelectExpression(existingColumns, "artifact_early_game", "0"),
+      existingColumns.has("score_computed_at")
+        ? "score_computed_at"
+        : buildSelectExpression(existingColumns, "dynamic_score_updated", "NULL"),
+    ].join(", ");
+
+    await dbRun(
+      db,
+      `INSERT INTO ${tempTable} (
+        puuid,
+        names,
+        feedscore,
+        opscore,
+        country,
+        match_count,
+        detected_role,
+        role_confidence,
+        matches_processed,
+        artifact_kda,
+        artifact_economy,
+        artifact_map_awareness,
+        artifact_utility,
+        artifact_damage,
+        artifact_tanking,
+        artifact_objectives,
+        artifact_early_game,
+        score_computed_at
+      )
+      SELECT ${selectList}
+      FROM players`,
+    );
+
+    await dbRun(db, "DROP TABLE players");
+    await dbRun(db, `ALTER TABLE ${tempTable} RENAME TO players`);
+    await dbRun(db, "COMMIT");
+  } catch (error) {
+    try {
+      await dbRun(db, "ROLLBACK");
+    } catch {
+      // Ignore rollback errors if transaction state is already closed.
+    }
+    throw error;
+  }
+}
+
+async function readExistingCountries(db) {
+  const columns = await getPlayersTableInfo(db);
+  if (columns.length === 0) {
+    return new Map();
+  }
+
+  const hasCountry = columns.some((column) => column.name === "country");
+  const hasPuuid = columns.some((column) => column.name === "puuid");
+  if (!hasCountry || !hasPuuid) {
+    return new Map();
+  }
+
+  const rows = await dbAll(db, "SELECT puuid, country FROM players WHERE puuid IS NOT NULL");
+  return new Map(rows.map((row) => [row.puuid, row.country ?? null]));
 }
 
 async function normalizePlayersByPuuid(options = {}) {
@@ -123,103 +241,64 @@ async function normalizePlayersByPuuid(options = {}) {
     const matchDir = resolveMatchDir(options.matchDir);
     const db = new sqlite3.Database(dbFile);
 
-    const playersMap = new Map();
-    let totalMatches = 0;
-    let totalPlayers = 0;
-
     (async () => {
       try {
-        await ensurePlayersTableSchema(db);
-        await dbRun(
-          db,
-          `UPDATE players
-           SET opscore = 0,
-               feedscore = 0,
-               match_count = 0,
-               opscore_legacy = NULL,
-               feedscore_legacy = NULL,
-               opscore_decay = NULL,
-               feedscore_decay = NULL,
-               opscore_recent = NULL,
-               feedscore_recent = NULL,
-               opscore_stability = NULL,
-               detected_role = 'unknown',
-               role_confidence = 0.0,
-               current_streak = 0.0,
-               matches_processed = 0,
-               dynamic_score_updated = NULL`,
-        );
+        await configureNormalizationDatabase(db);
 
-        const files = fs.readdirSync(matchDir).filter(f => f.endsWith(".json")).sort();
+        const existingCountries = await readExistingCountries(db);
+        await ensurePlayersTableSchema(db);
+
+        const playersMap = new Map();
+        const files = fs.readdirSync(matchDir).filter((file) => file.endsWith(".json")).sort();
+
         console.log(`Processing ${files.length} match files...`);
 
         for (const file of files) {
           try {
-            const data = JSON.parse(fs.readFileSync(path.join(matchDir, file), "utf-8"));
-            
-            // Validate that the JSON has the expected structure
-            if (!data.info || !data.info.participants) {
+            const fullPath = path.join(matchDir, file);
+            const data = JSON.parse(fs.readFileSync(fullPath, "utf-8"));
+
+            if (!data.info || !Array.isArray(data.info.participants)) {
               console.warn(`Skipping ${file}: Invalid structure`);
               continue;
             }
 
-            totalMatches++;
-            const gameDurationSeconds = data.info.gameDuration;
-            const gameDurationMinutes = gameDurationSeconds / 60;
-            const matchEndTimestamp = Number(data.info.gameEndTimestamp)
-              || Number(data.info.gameCreation)
-              || fs.statSync(path.join(matchDir, file)).mtimeMs;
-            const ageInDays = Math.max(
-              0,
-              (Date.now() - matchEndTimestamp) / (1000 * 60 * 60 * 24),
-            );
-            
-            for (const p of data.info.participants) {
-              // Validate required fields
-              if (!p.puuid) {
-                console.warn(`Skipping participant in ${file}: Missing puuid`);
+            const gameDuration = data.info.gameDuration;
+
+            for (const participant of data.info.participants) {
+              if (!participant.puuid) {
                 continue;
               }
 
-              const puuid = p.puuid;
-              const name = `${scoringUtils.normalizeName(p.riotIdGameName)}#${scoringUtils.normalizeName(p.riotIdTagline)}`;
-              const matchStats = scoringUtils.buildMatchStats(p, gameDurationMinutes);
-              const role = scoringUtils.detectPlayerRoleFromMatch(matchStats);
+              const puuid = participant.puuid;
+              const displayName = `${scoringUtils.normalizeName(participant.riotIdGameName)}#${scoringUtils.normalizeName(participant.riotIdTagline)}`;
+              const role = scoringUtils.detectPlayerRoleFromMatch(participant);
+              const matchStats = scoringUtils.buildMatchStats(participant, gameDuration);
 
-              if (!playersMap.has(puuid)) {
-                playersMap.set(puuid, {
-                  names: new Set([name]),
-                  match_count: 1,
-                  country: null,
-                  matches: [{
-                    ageInDays,
-                    matchStats,
-                    role,
-                    timestampMs: matchEndTimestamp,
-                  }],
-                });
-                totalPlayers++;
-              } else {
-                const player = playersMap.get(puuid);
-                player.names.add(name);
-                player.match_count += 1;
-                player.matches.push({
-                  ageInDays,
-                  matchStats,
-                  role,
-                  timestampMs: matchEndTimestamp,
-                });
+              let player = playersMap.get(puuid);
+              if (!player) {
+                player = {
+                  names: new Set(),
+                  country: existingCountries.get(puuid) ?? null,
+                  matches: [],
+                };
+                playersMap.set(puuid, player);
               }
+
+              player.names.add(displayName);
+              player.matches.push({ matchStats, role });
             }
           } catch (fileErr) {
             console.error(`Error processing file ${file}:`, fileErr.message);
-            continue;
           }
         }
 
+        const totalPlayers = playersMap.size;
+        const totalMatches = files.length;
         console.log(`Processed ${totalMatches} matches and found ${totalPlayers} unique players`);
-        if (playersMap.size === 0) {
-          console.log("No players found in match directory; normalization completed with no updates.");
+
+        if (totalPlayers === 0) {
+          await dbRun(db, "DELETE FROM players");
           db.close((closeErr) => {
             if (closeErr) {
               reject(closeErr);
@@ -229,80 +308,103 @@ async function normalizePlayersByPuuid(options = {}) {
           });
           return;
         }
-        
-        // Log some statistics
-        const matchCounts = Array.from(playersMap.values()).map(p => p.match_count);
-        const avgMatches = matchCounts.reduce((a, b) => a + b, 0) / matchCounts.length;
-        const maxMatches = Math.max(...matchCounts);
+
+        const computedProfiles = [];
+        const matchCounts = [];
+
+        for (const [puuid, data] of playersMap.entries()) {
+          matchCounts.push(data.matches.length);
+          computedProfiles.push({
+            puuid,
+            names: [...data.names].sort(),
+            country: data.country,
+            match_count: data.matches.length,
+            profile: scoringUtils.computePlayerDynamicProfile(data.matches),
+          });
+        }
+
+        const avgMatches = scoringUtils.average(matchCounts);
         const minMatches = Math.min(...matchCounts);
-        
+        const maxMatches = Math.max(...matchCounts);
         console.log(`Match count stats - Avg: ${avgMatches.toFixed(2)}, Min: ${minMatches}, Max: ${maxMatches}`);
 
-        const computedProfiles = [...playersMap.entries()].map(([puuid, data]) => ({
-          puuid,
-          names: [...data.names].sort(),
-          country: data.country,
-          match_count: data.match_count,
-          profile: scoringUtils.computePlayerDynamicProfile(data.matches),
-        }));
+        const rawOpscores = computedProfiles.map((entry) => entry.profile.dynamicOpscoreRaw);
+        const rawFeedscores = computedProfiles.map((entry) => entry.profile.dynamicFeedscoreRaw);
+        const opscorePercentiles = scoringUtils.deriveNormalizationAnchors(rawOpscores);
+        const feedscorePercentiles = scoringUtils.deriveNormalizationAnchors(rawFeedscores);
 
-        const rawDynamicOpscores = computedProfiles.map((entry) => entry.profile.dynamicOpscoreRaw);
-        const percentiles = scoringUtils.derivePercentiles(rawDynamicOpscores);
-        const rawLegacyOpscores = computedProfiles.map((entry) => entry.profile.baselineOpscore);
         const normalizedOpscores = [];
+        const normalizedFeedscores = [];
+        const roleBalance = {};
+        const computedAt = new Date().toISOString();
+
         const logFilePath = path.join(path.dirname(dbFile), "raw_scores_log.txt");
         const logStream = fs.createWriteStream(logFilePath, { flags: "w" });
         logStream.write(
-          "puuid;legacy_opscore_raw;dynamic_opscore_raw;dynamic_opscore_normalized;role;role_confidence;streak;stability\n",
+          "puuid;raw_opscore;normalized_opscore;raw_feedscore;normalized_feedscore;primary_role;role_share\n",
         );
 
         await dbRun(db, "BEGIN TRANSACTION");
+        await dbRun(db, "DELETE FROM players");
+
         const stmt = db.prepare(`
-          INSERT OR REPLACE INTO players (
+          INSERT INTO players (
             puuid,
             names,
             feedscore,
             opscore,
             country,
             match_count,
-            opscore_legacy,
-            feedscore_legacy,
-            opscore_decay,
-            feedscore_decay,
-            opscore_recent,
-            feedscore_recent,
-            opscore_stability,
             detected_role,
             role_confidence,
-            current_streak,
             matches_processed,
-            dynamic_score_updated
+            artifact_kda,
+            artifact_economy,
+            artifact_map_awareness,
+            artifact_utility,
+            artifact_damage,
+            artifact_tanking,
+            artifact_objectives,
+            artifact_early_game,
+            score_computed_at
           )
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
-        let insertedCount = 0;
         for (const entry of computedProfiles) {
-          const normalizedDynamicOpscore = scoringUtils.roundTo(
-            scoringUtils.normalizeOpscoreTo0To10(entry.profile.dynamicOpscoreRaw, percentiles),
+          const normalizedOpscore = scoringUtils.roundTo(
+            scoringUtils.normalizeOpscoreTo0To10(entry.profile.dynamicOpscoreRaw, opscorePercentiles),
             2,
           );
-          const normalizedRecentOpscore = scoringUtils.roundTo(
-            scoringUtils.normalizeOpscoreTo0To10(entry.profile.recentOpscoreRaw, percentiles),
+          const normalizedFeedscore = scoringUtils.roundTo(
+            scoringUtils.normalizeFeedscoreTo0To10(entry.profile.dynamicFeedscoreRaw, feedscorePercentiles),
             2,
           );
-          normalizedOpscores.push(normalizedDynamicOpscore);
+
+          normalizedOpscores.push(normalizedOpscore);
+          normalizedFeedscores.push(normalizedFeedscore);
+
+          const role = entry.profile.detectedRole || "UNKNOWN";
+          if (!roleBalance[role]) {
+            roleBalance[role] = {
+              count: 0,
+              rawOpscore: [],
+              normalizedOpscore: [],
+            };
+          }
+          roleBalance[role].count += 1;
+          roleBalance[role].rawOpscore.push(entry.profile.dynamicOpscoreRaw);
+          roleBalance[role].normalizedOpscore.push(normalizedOpscore);
 
           logStream.write(
             [
               entry.puuid,
-              entry.profile.baselineOpscore.toFixed(4),
               entry.profile.dynamicOpscoreRaw.toFixed(4),
-              normalizedDynamicOpscore.toFixed(2),
-              entry.profile.detectedRole,
+              normalizedOpscore.toFixed(2),
+              entry.profile.dynamicFeedscoreRaw.toFixed(4),
+              normalizedFeedscore.toFixed(2),
+              role,
               entry.profile.roleConfidence.toFixed(4),
-              entry.profile.currentStreak.toFixed(4),
-              entry.profile.opscoreStability.toFixed(4),
             ].join(";") + "\n",
           );
 
@@ -310,22 +412,22 @@ async function normalizePlayersByPuuid(options = {}) {
             stmt.run(
               entry.puuid,
               JSON.stringify(entry.names),
-              entry.profile.dynamicFeedscore,
-              normalizedDynamicOpscore,
+              normalizedFeedscore,
+              normalizedOpscore,
               entry.country,
               entry.match_count,
-              entry.profile.baselineOpscore,
-              entry.profile.baselineFeedscore,
-              normalizedDynamicOpscore,
-              entry.profile.dynamicFeedscore,
-              normalizedRecentOpscore,
-              entry.profile.recentFeedscore,
-              entry.profile.opscoreStability,
-              entry.profile.detectedRole,
+              role,
               entry.profile.roleConfidence,
-              entry.profile.currentStreak,
               entry.profile.matchesProcessed,
-              new Date().toISOString(),
+              entry.profile.artifacts.kda,
+              entry.profile.artifacts.economy,
+              entry.profile.artifacts.map_awareness,
+              entry.profile.artifacts.utility,
+              entry.profile.artifacts.damage,
+              entry.profile.artifacts.tanking,
+              entry.profile.artifacts.objectives,
+              entry.profile.artifacts.early_game,
+              computedAt,
               (err) => {
                 if (err) {
                   rejectStmt(err);
@@ -335,11 +437,9 @@ async function normalizePlayersByPuuid(options = {}) {
               },
             );
           });
-          insertedCount++;
         }
 
         logStream.end();
-        console.log(`Raw scores logged to: ${logFilePath}`);
 
         await new Promise((resolveStmt, rejectStmt) => {
           stmt.finalize((err) => {
@@ -350,52 +450,34 @@ async function normalizePlayersByPuuid(options = {}) {
             resolveStmt();
           });
         });
+
         await dbRun(db, "COMMIT");
 
-        console.log(`Inserted ${insertedCount} players with dynamic opscores`);
-
-        const avgLegacyRaw = scoringUtils.average(rawLegacyOpscores);
-        const minLegacyRaw = Math.min(...rawLegacyOpscores);
-        const maxLegacyRaw = Math.max(...rawLegacyOpscores);
-        const avgDynamicRaw = scoringUtils.average(rawDynamicOpscores);
-        const minDynamicRaw = Math.min(...rawDynamicOpscores);
-        const maxDynamicRaw = Math.max(...rawDynamicOpscores);
-        const avgNormalized = scoringUtils.average(normalizedOpscores);
-        const minNormalized = Math.min(...normalizedOpscores);
-        const maxNormalized = Math.max(...normalizedOpscores);
-
+        console.log(`Raw scores logged to: ${logFilePath}`);
         console.log(
-          `Legacy raw opscore stats - Avg: ${avgLegacyRaw.toFixed(2)}, Min: ${minLegacyRaw.toFixed(2)}, Max: ${maxLegacyRaw.toFixed(2)}`,
+          `Raw opscore stats - Avg: ${scoringUtils.average(rawOpscores).toFixed(2)}, Min: ${Math.min(...rawOpscores).toFixed(2)}, Max: ${Math.max(...rawOpscores).toFixed(2)}`,
         );
         console.log(
-          `Dynamic raw opscore stats - Avg: ${avgDynamicRaw.toFixed(2)}, Min: ${minDynamicRaw.toFixed(2)}, Max: ${maxDynamicRaw.toFixed(2)}`,
+          `Normalized opscore stats - Avg: ${scoringUtils.average(normalizedOpscores).toFixed(2)}, Min: ${Math.min(...normalizedOpscores).toFixed(2)}, Max: ${Math.max(...normalizedOpscores).toFixed(2)}`,
         );
         console.log(
-          `Dynamic normalized opscore stats - Avg: ${avgNormalized.toFixed(2)}, Min: ${minNormalized.toFixed(2)}, Max: ${maxNormalized.toFixed(2)}`,
+          `Opscore anchors - Floor(p5): ${opscorePercentiles.floor.toFixed(2)}, Center(p50->${opscorePercentiles.centerScore.toFixed(1)}): ${opscorePercentiles.center.toFixed(2)}, Ceiling(p95): ${opscorePercentiles.ceiling.toFixed(2)}`,
         );
         console.log(
-          `Dynamic normalization anchors - Min: ${percentiles.min.toFixed(2)}, Median: ${percentiles.median.toFixed(2)}, Max: ${percentiles.max.toFixed(2)}`,
+          `Raw feedscore stats - Avg: ${scoringUtils.average(rawFeedscores).toFixed(2)}, Min: ${Math.min(...rawFeedscores).toFixed(2)}, Max: ${Math.max(...rawFeedscores).toFixed(2)}`,
         );
-
-        const bins = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        const distribution = new Array(bins.length - 1).fill(0);
-
-        for (const score of normalizedOpscores) {
-          for (let i = 0; i < bins.length - 1; i++) {
-            if (score >= bins[i] && score < bins[i + 1]) {
-              distribution[i]++;
-              break;
-            } else if (score === 10 && i === bins.length - 2) {
-              distribution[i]++;
-              break;
-            }
-          }
-        }
-
-        console.log("Normalized score distribution:");
-        for (let i = 0; i < distribution.length; i++) {
-          const range = `${bins[i]}-${bins[i + 1]}`;
-          console.log(`  ${range}: ${distribution[i]} players`);
+        console.log(
+          `Normalized feedscore stats - Avg: ${scoringUtils.average(normalizedFeedscores).toFixed(2)}, Min: ${Math.min(...normalizedFeedscores).toFixed(2)}, Max: ${Math.max(...normalizedFeedscores).toFixed(2)}`,
+        );
+        console.log(
+          `Feedscore anchors - Floor(p5): ${feedscorePercentiles.floor.toFixed(2)}, Center(p50->${feedscorePercentiles.centerScore.toFixed(1)}): ${feedscorePercentiles.center.toFixed(2)}, Ceiling(p95): ${feedscorePercentiles.ceiling.toFixed(2)}`,
+        );
+        console.log("Primary-role opscore balance snapshot:");
+        for (const role of Object.keys(roleBalance).sort()) {
+          const snapshot = roleBalance[role];
+          console.log(
+            `  ${role}: players=${snapshot.count}, raw_avg=${scoringUtils.average(snapshot.rawOpscore).toFixed(2)}, normalized_avg=${scoringUtils.average(snapshot.normalizedOpscore).toFixed(2)}`,
+          );
         }
 
         db.close((closeErr) => {
@@ -420,9 +502,8 @@ async function normalizePlayersByPuuid(options = {}) {
 
 module.exports = { normalizePlayersByPuuid };
 
-// Only run if this file is executed directly
 if (require.main === module) {
   normalizePlayersByPuuid()
     .then(() => console.log("Player normalization completed successfully!"))
-    .catch(err => console.error("Error during normalization:", err));
+    .catch((err) => console.error("Error during normalization:", err));
 }

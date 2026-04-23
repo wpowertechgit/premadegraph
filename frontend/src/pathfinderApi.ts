@@ -13,6 +13,7 @@ import type { AssortativityRequest, AssortativityResponse } from "./assortativit
 
 const API_BASE = "http://localhost:3001/api/pathfinder";
 const RUST_API_BASE = "http://localhost:3001/api/pathfinder-rust";
+const BACKEND_API_BASE = "http://localhost:3001/api";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") || "";
@@ -45,6 +46,21 @@ export async function fetchPathfinderOptions(): Promise<PathfinderOptionsRespons
 export async function fetchRustPathfinderOptions(): Promise<PathfinderOptionsResponse> {
   const response = await fetch(`${RUST_API_BASE}/options`);
   return parseJsonResponse<PathfinderOptionsResponse>(response);
+}
+
+export async function fetchPlayerOptions(): Promise<{ players: PathfinderOptionsResponse["players"] }> {
+  const response = await fetch(`${BACKEND_API_BASE}/players/options`);
+  return parseJsonResponse<{ players: PathfinderOptionsResponse["players"] }>(response);
+}
+
+export async function fetchPlayerScores(playerId: string) {
+  const response = await fetch(`${BACKEND_API_BASE}/players/${encodeURIComponent(playerId)}/scores`);
+  return parseJsonResponse(response);
+}
+
+export async function fetchScoresConfig() {
+  const response = await fetch(`${BACKEND_API_BASE}/scores/config`);
+  return parseJsonResponse(response);
 }
 
 export async function fetchPathfinderEngineSpec(): Promise<PathfinderEngineSpecResponse> {

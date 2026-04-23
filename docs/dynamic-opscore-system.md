@@ -1,340 +1,332 @@
 # Match-Based Performance Scoring System
 
-This document describes the player performance scoring methodology based on match-level analysis.
+This document describes the scoring system currently implemented in the backend.
 
 The implementation lives in:
 
-- [backend/scoring_config.js](/C:/Users/admin/Downloads/premgraph/premadegraph/backend/scoring_config.js)
-- [backend/lib/scoring_utils.js](/C:/Users/admin/Downloads/premgraph/premadegraph/backend/lib/scoring_utils.js)
-- [backend/normalize_players_by_puuid.js](/C:/Users/admin/Downloads/premgraph/premadegraph/backend/normalize_players_by_puuid.js)
+- [backend/scoring_config.js](/c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/scoring_config.js)
+- [backend/lib/scoring_utils.js](/c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/lib/scoring_utils.js)
+- [backend/normalize_players_by_puuid.js](/c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/backend/normalize_players_by_puuid.js)
 
 ## Core Principle
 
-**Based on the current dataset → This player demonstrates X, Y performance across multiple roles.**
+The score is dataset-based, not temporal.
 
-This is NOT a dynamic/temporal scoring system. We do not track improvements or streaks because:
-- Match data is collected as fragments, not linearly over time
-- Players can play multiple roles across different matches
-- The role is **already explicitly defined in the JSON** via `teamPosition` attribute
-- We measure capability snapshot, not trajectory
+It answers:
 
-The score answers: **Given these N matches, what is this player's overall performance profile?**
+**Given the matches stored in this dataset, what does this player's performance profile look like across the roles they actually played?**
 
----
+This implementation does **not** use:
 
-## Stored Columns
+- streak detection
+- stability bonuses
+- time decay
+- heuristic role inference
 
-The player scoring table contains these fields:
-
-- `opscore`: normalized performance score on `0-10` scale (based on dataset)
-- `feedscore`: death-to-participation penalty (lower is better)
-- `matches_processed`: number of matches analyzed for this player's scores
-- `score_computed_at`: timestamp of last recomputation
-
-Removed fields (not applicable to dataset-based scoring):
-- ~~role_confidence~~ - role is explicit in `teamPosition` JSON field
-- ~~current_streak~~ - match data is not linear; no temporal trajectory
-- ~~opscore_stability~~ - we measure capability, not consistency
-- ~~opscore_recent~~ - all matches in dataset are equally valid
+Role comes directly from Riot match JSON via `teamPosition`.
 
 ---
 
-## Step 1: Role-Based Scoring (The Foundation)
+## Current Stored Fields
 
-Each match is scored according to the **role the player actually played** (from `teamPosition`). The role determines which attributes matter most and their weight multipliers.
+The implemented normalization pipeline writes:
 
-### Role: TOP Lane
-
-**Expected Responsibilities:**  
-Solo lane dominance, duel strength, map control via buffs/vision, split-push pressure
-
-**Key Attributes & Weights:**
-| Attribute | Weight | Purpose |
-|-----------|--------|---------|
-| `kills` | +1.0 | Dueling success |
-| `deaths` | -0.25 | Penalty per death |
-| `assists` | +0.965 | Kill participation |
-| `damagePerMinute` | +1.15 | Laning phase damage |
-| `damageTakenOnTeamPercentage` | +1.0 | Damage absorption |
-| `buffsStolen` | +1.2 | Map control dominance |
-| `controlWardsPlaced` | +0.9 | River/enemy half awareness |
-| `damageDealtToBuildings` | +1.2 | Split-push value |
-| `damageDealtToTurrets` | +1.2 | Structure impact |
-| `killsNearEnemyTurret` | +0.8 | Dive statistics |
-| `takedownsInAlcove` | +0.7 | Special area control |
-| `wardTakedowns` | +0.7 | Vision denial |
-| `knockEnemyIntoTeamAndKill` | +0.8 | Setup plays |
-| `multikills` | +0.6 | Decisive moments |
-| `teamDamagePercentage` | +0.8 | Relative impact |
-| `firstBloodKill` | +0.5 | Early dominance |
-| `firstTowerKill` | +0.3 | Objective control |
-| `turretPlatesTaken` | +0.8 | Early objective value |
-| `epicMonsterStolenWithoutSmite` | +1.0 | High-value counterplay |
-| `visionScore` | +0.9 | Map awareness |
-| `win` | +0.25 | Match outcome |
-
-### Role: JUNGLE
-
-**Expected Responsibilities:**  
-Dragon/Baron/Scuttle control, ganking, vision clearing, level advantages, counter-jungling
-
-**Key Attributes & Weights:**
-| Attribute | Weight | Purpose |
-|-----------|--------|---------|
-| `kills` | +1.0 | Gank success |
-| `deaths` | -0.25 | Penalty |
-| `assists` | +0.965 | Gank participation |
-| `soloKills` | +0.8 | Dueling strength |
-| `soloBaronKills` | +1.5 | Solo objective control |
-| `teamBaronKills` | +1.2 | Major objective |
-| `teamElderDragonKills` | +1.3 | Ultimate objective |
-| `teamDragonKills` | +1.1 | Dragon priority |
-| `voidMonsterKill` | +0.4 | Bonus objective |
-| `takedownsAfterGainingLevelAdvantage` | +0.9 | Snowball efficiency |
-| `wardTakedowns` | +1.4 | **CORE JOB: Vision clearing** |
-| `detectorWardsPlaced` | +1.2 | Counter-warding |
-| `epicMonsterStolenWithoutSmite` | +1.0 | High-value play |
-| `killAfterHiddenWithAlly` | +0.9 | Setup coordination |
-| `killsOnLanersEarlyJungleAsJungler` | +0.9 | Early pressure |
-| `riftHeraldKills` | +0.8 | Structural setup |
-| `scuttleCrabs` | +0.7 | Map awareness/rotation |
-| `controlWardsPlaced` | +1.4 | Jungle pathing vision |
-| `visionScore` | +1.4 | **Map control + ward clearing** |
-| `firstBloodKill` | +0.5 | Early game initiation |
-| `knockEnemyIntoTeamAndKill` | +0.9 | Setup plays |
-| `damagePerMinute` | +1.0 | Balanced output |
-| `goldPerMinute` | +0.7 | Lower gold income role |
-| `totalHeal` | +0.3 | Some sustain |
-| `totalDamageShieldedOnTeammates` | +0.3 | Minimal utility |
-| `win` | +0.25 | Match outcome |
-
-### Role: MIDDLE
-
-**Expected Responsibilities:**  
-Roaming impact, map awareness, balanced ad-hoc damage, lane pressure with occasional rotations
-
-**Key Attributes & Weights:**
-| Attribute | Weight | Purpose |
-|-----------|--------|---------|
-| `kills` | +1.0 | Roaming kill contribution |
-| `deaths` | -0.25 | Penalty |
-| `assists` | +0.965 | Kill participation |
-| `damagePerMinute` | +1.05 | Mid-game damage |
-| `goldPerMinute` | +1.1 | Mid secures wave |
-| `visionScore` | +1.2 | Roaming timing vision |
-| `controlWardsPlaced` | +1.2 | Rotation vision |
-| `wardsPlaced` | +0.8 | Roaming support |
-| `detectorWardsPlaced` | +1.0 | Counter-warding |
-| `wardTakedowns` | +0.9 | Vision denial |
-| `damageDealtToBuildings` | +0.9 | Roam follow-up turrets |
-| `damageDealtToTurrets` | +0.9 | Objective participation |
-| `killsOnOtherLanesEarlyJungleAsLaner` | +1.0 | **ROAMING KILLS** |
-| `takedownsAfterGainingLevelAdvantage` | +0.8 | Leverage mid priority |
-| `physicalDamageDealtToChampions` | +0.5 | Damage type (AD viable) |
-| `magicDamageDealtToChampions` | +0.5 | Damage type (AP viable) |
-| `laneMinionsFirst10Minutes` | +0.7 | Early CS efficiency |
-| `teamDamagePercentage` | +0.8 | Relative impact |
-| `turretTakedowns` | +0.7 | Roam objective value |
-| `enemyChampionImmobilizations` | +0.5 | Some utility CA |
-| `firstBloodKill` | +0.5 | Early roam impact |
-| `firstTowerAssist` | +0.3 | Roam follow-up |
-| `skillshotsDodged` | +0.3 | Positioning for rotations |
-| `win` | +0.25 | Match outcome |
-
-### Role: BOTTOM (ADC)
-
-**Expected Responsibilities:**  
-Gold priority (carry resource), sustained DPS in teamfights, positioning safety, dual-lane synergy
-
-**Key Attributes & Weights:**
-| Attribute | Weight | Purpose |
-|-----------|--------|---------|
-| `kills` | +1.0 | Teamfight cleanup |
-| `deaths` | -0.25 | Penalty (critical resource) |
-| `assists` | +0.965 | Kill participation |
-| `goldPerMinute` | +1.3 | **HIGHEST gold priority** |
-| `goldEarned` | +0.8 | Direct resource priority |
-| `damagePerMinute` | +1.4 | **PRIMARY DPS source** |
-| `physicalDamageDealtToChampions` | +0.7 | Carry damage (mostly AD) |
-| `magicDamageDealtToChampions` | +0.5 | Carry damage (some AP) |
-| `trueDamageDealtToChampions` | +0.5 | All damage counts |
-| `visionScore` | +1.1 | **VISION CRITICAL for safety** |
-| `controlWardsPlaced` | +1.1 | Defensive warding |
-| `wardsPlaced` | +1.1 | Safety vision |
-| `visionWardsBoughtInGame` | +0.8 | Defensive warding investment |
-| `detectorWardsPlaced` | +0.8 | Duo lane sweeping |
-| `skillshotsDodged` | +0.5 | **Positioning safety measure** |
-| `damageSelfMitigated` | +0.4 | Positioning awareness |
-| `teamDamagePercentage` | +1.0 | Sustained damage focus |
-| `killsUnderOwnTurret` | +0.5 | Tower defense |
-| `takedowns` | +0.8 | Teamfight presence |
-| `killingSprees` | +0.7 | Carry snowball |
-| `multikills` | +0.6 | Teamfight cleanup |
-| `laneMinionsFirst10Minutes` | +0.8 | Early duo economy |
-| `firstBloodKill` | +0.4 | Early lane pressure |
-| `turretPlatesTaken` | +0.7 | Bot lane early objective |
-| `soloKills` | +0.3 | **LESS weight** (has support) |
-| `killsOnOtherLanesEarlyJungleAsLaner` | +0.2 | **LESS weight** (focus lane) |
-| `win` | +0.25 | Match outcome |
-
-### Role: UTILITY (Support)
-
-**Expected Responsibilities:**  
-Vision dominance, peeling/protection, damage mitigation, heals/shields, ward economy, vision clearing
-
-**Key Attributes & Weights:**
-| Attribute | Weight | Purpose |
-|-----------|--------|---------|
-| `kills` | +0.3 | **NOT primary** (setup value) |
-| `deaths` | -0.2 | **LOWER penalty** (expected to die more) |
-| `assists` | +0.965 | **PRIMARY contribution** |
-| `goldPerMinute` | +0.4 | **LOWEST gold role** |
-| `visionScore` | +1.8 | **MAXIMUM WEIGHT: Ward game** |
-| `wardsPlaced` | +1.5 | **PRIMARY STAT** |
-| `wardsKilled` | +0.9 | Vision preservation |
-| `controlWardsPlaced` | +1.4 | Ward economy items |
-| `detectorWardsPlaced` | +1.6 | **BIGGER WEIGHT: Sweeping job** |
-| `visionWardsBoughtInGame` | +1.0 | Warding investment |
-| `wardsGuarded` | +0.6 | Defense posture |
-| `wardTakedowns` | +1.5 | **BIGGER WEIGHT: Support clearing** |
-| `enemyChampionImmobilizations` | +1.5 | **CORE: CC is primary** |
-| `totalDamageShieldedOnTeammates` | +1.5 | **CORE: Peeling/protection** |
-| `totalHeal` | +1.4 | **CORE: Sustain enabled** |
-| `damageSelfMitigated` | +1.4 | **CORE: Tanking for team** |
-| `timeCCingOthers` | +1.2 | Teamfight control |
-| `knockEnemyIntoTeamAndKill` | +1.0 | Setup plays |
-| `damageDealtToBuildings` | +0.2 | Minimal (not their job) |
-| `damagePerMinute` | +0.5 | **NOT damage role** |
-| `physicalDamageDealtToChampions` | +0.3 | Minimal damage focus |
-| `magicDamageDealtToChampions` | +0.3 | Minimal damage focus |
-| `teamDamagePercentage` | +0.3 | Enablement role |
-| `laneMinionsFirst10Minutes` | +0.1 | Should be minimal |
-| `firstBloodAssist` | +0.3 | Setup assist value |
-| `firstTowerAssist` | +0.2 | Support enablement |
-| `win` | +0.25 | Match outcome |
+- `players.opscore`: final normalized opscore on a `0-10` scale
+- `players.feedscore`: final normalized feedscore on a `0-10` scale
+- `players.match_count`: number of matches seen for the player
+- `players.matches_processed`: number of matches used in score computation
+- `players.detected_role`: most common explicit role in the stored sample
+- `players.role_confidence`: share of matches played in that primary role
+- `players.score_computed_at`: recomputation timestamp
 
 ---
 
-## Step 2: Baseline Score Calculation
+## Step 1: Per-Match Artifact Extraction
 
-For each match, aggregate the role-weighted attributes:
+Each match is converted into 8 baseline performance artifacts.
 
-```
-baseline_per_match = sum(
-  attribute_value × role_weight × importance_factor
-)
-```
-
-Example for TOP lane with 10 kills, 3 deaths, 15 assists:
-```
-kda_component = (10 × 1.0) + (15 × 0.965) - (3 × 0.25) = 10 + 14.475 - 0.75 = 23.725
-```
-
-Then apply other weighted attributes the same way and sum total baseline.
-
----
-
-## Step 3: Dataset Averaging
-
-Average all role-weighted per-match scores across the player's matches:
-
-```
-player_opscore_raw = sum(baseline_per_match_i) / match_count
-```
-
-All matches in the dataset are equally weighted. We do not apply:
-- ~~Age-based decay~~ - Match data is fragmented, not temporal
-- ~~Stability bonuses~~ - We measure capability, not consistency
-- ~~Streak adjustments~~ - No linear timeline to track streaks
-
----
-
-## Step 4: Normalization to 0-10 Scale
-
-After computing raw scores for all players, the batch process derives:
-
-- global minimum raw score
-- global median raw score  
-- global maximum raw score
-
-Then the raw score is mapped piecewise:
+### Artifact 1: KDA Baseline
 
 ```javascript
-if (raw <= median) {
-  normalized = ((raw - min) / (median - min)) * 4;
-} else {
-  normalized = 4 + ((raw - median) / (max - median)) * 6;
+kda = kills + (assists * 0.965) - (deaths * 0.25)
+```
+
+### Artifact 2: Economy
+
+```javascript
+efficiency = clamp(goldSpent / max(1, goldEarned), 0.5, 1.0)
+economy = (goldEarned / gameDurationMinutes) / 10 + efficiency * 0.5
+```
+
+### Artifact 3: Map Awareness
+
+```javascript
+map_awareness =
+  (visionScore * 0.15) +
+  (wardsPlaced * 0.05) +
+  (detectorWardsPlaced * 0.04) +
+  (wardsKilled * 0.08) +
+  (controlWardsPlaced * 0.06)
+```
+
+### Artifact 4: Utility
+
+```javascript
+utility =
+  (enemyChampionImmobilizations * 0.08) +
+  (totalDamageShieldedOnTeammates * 0.001) +
+  (totalHeal * 0.001) +
+  (damageSelfMitigated * 0.002) +
+  (timeCCingOthers * 0.01)
+```
+
+### Artifact 5: Damage Output
+
+```javascript
+damage =
+  (
+    physicalDamageDealtToChampions +
+    magicDamageDealtToChampions +
+    trueDamageDealtToChampions
+  ) / 1000 * 0.2
+```
+
+### Artifact 6: Tanking
+
+```javascript
+tanking = (totalDamageTaken / gameDurationMinutes) * 0.05
+```
+
+### Artifact 7: Objectives
+
+```javascript
+objectives =
+  (damageDealtToBuildings * 0.002) +
+  (turretTakedowns * 0.25) +
+  (inhibitorTakedowns * 0.5) +
+  (turretPlatesTaken * 0.03) +
+  (damageDealtToTurrets * 0.001)
+```
+
+### Artifact 8: Early Game
+
+```javascript
+early_game =
+  (firstBloodKill * 0.5) +
+  (firstBloodAssist * 0.2) +
+  (firstTowerKill * 0.3) +
+  (firstTowerAssist * 0.1) +
+  (laneMinionsFirst10Minutes / 50)
+```
+
+The implementation reads these values from participant fields and `participant.challenges` where needed.
+
+---
+
+## Step 2: Explicit Role Mapping
+
+Implemented role normalization:
+
+- `TOP -> TOP`
+- `JUNGLE -> JUNGLE`
+- `MID` or `MIDDLE -> MIDDLE`
+- `BOT`, `ADC`, or `BOTTOM -> BOTTOM`
+- `SUPPORT` or `UTILITY -> UTILITY`
+- anything else -> `UNKNOWN`
+
+The backend uses `teamPosition` from each participant as the source of truth.
+
+---
+
+## Step 3: Role Multipliers
+
+After baseline artifact extraction, each artifact is multiplied by the role-specific weight table from `backend/scoring_config.js`.
+
+```javascript
+ROLE_MULTIPLIERS = {
+  TOP:     { kda: 1.1, economy: 1.05, map_awareness: 0.9, utility: 0.6, damage: 1.15, tanking: 1.0, objectives: 1.2, early_game: 1.05 },
+  JUNGLE:  { kda: 1.2, economy: 0.7,  map_awareness: 1.4, utility: 0.8, damage: 1.0,  tanking: 0.8, objectives: 1.4, early_game: 1.3  },
+  MIDDLE:  { kda: 1.0, economy: 1.1,  map_awareness: 1.2, utility: 1.0, damage: 1.05, tanking: 0.8, objectives: 1.0, early_game: 1.1  },
+  BOTTOM:  { kda: 1.2, economy: 1.3,  map_awareness: 1.1, utility: 0.7, damage: 1.4,  tanking: 0.6, objectives: 0.9, early_game: 1.0  },
+  UTILITY: { kda: 0.7, economy: 0.4,  map_awareness: 1.8, utility: 1.8, damage: 0.5,  tanking: 1.1, objectives: 0.7, early_game: 0.8  },
+  UNKNOWN: { kda: 1.0, economy: 1.0,  map_awareness: 1.0, utility: 1.0, damage: 1.0,  tanking: 1.0, objectives: 1.0, early_game: 1.0  }
 }
 ```
 
-Result is clamped to `0-10` range. This normalized value is written to `players.opscore`.
+The role-adjusted per-match opscore is:
+
+```javascript
+match_opscore_raw = sum(role_adjusted_artifacts)
+```
+
+This is the main implemented fairness mechanism so that strong `TOP`, `JUNGLE`, `UTILITY`, `MIDDLE`, and `BOTTOM` performances can land in comparable score ranges after normalization.
 
 ---
 
-## Feedscore Formula
+## Step 4: Feedscore by Role
 
-Feedscore penalizes deaths relative to participation:
+Baseline per-match feedscore:
 
+```javascript
+feedscore = deaths - (kills + assists) * 0.35
 ```
-feedscore_per_match = deaths - (kills + assists) * 0.35
-```
 
-**Role-Specific Death Tolerances (lower multiplier = less penalty):**
+Role-specific death tolerance:
 
 ```javascript
 DEATH_TOLERANCE = {
-  "TOP":    1.0,      // Standard penalty
-  "JUNGLE": 1.05,     // Slightly higher risk tolerance
-  "MIDDLE": 1.0,      // Standard penalty
-  "BOTTOM": 1.15,     // ADC deaths more costly (lost resource)
-  "UTILITY": 0.80     // Support deaths less penalized (expected sacrifice)
+  TOP: 1.0,
+  JUNGLE: 1.05,
+  MIDDLE: 1.0,
+  BOTTOM: 1.15,
+  UTILITY: 0.80,
+  UNKNOWN: 1.0
 }
 ```
 
-**Applied:**
-```
-role_adjusted_feedscore = deaths * role_tolerance - (kills + assists) * 0.35
+Applied form:
+
+```javascript
+role_adjusted_feedscore =
+  deaths * DEATH_TOLERANCE[role] - (kills + assists) * 0.35
 ```
 
-Like opscore, final feedscore is the arithmetic mean across all matches, then normalized to 0-10 scale.
+The backend averages this role-adjusted feedscore across a player's matches and then normalizes it to `0-10`.
+
+---
+
+## Step 5: Player-Level Aggregation
+
+For each player, the current backend computes:
+
+- average baseline opscore across matches
+- average baseline feedscore across matches
+- average role-adjusted opscore across matches
+- average role-adjusted feedscore across matches
+- primary role and role share
+
+Implemented aggregation:
+
+```javascript
+player_opscore_raw = average(match_opscore_raw_i)
+player_feedscore_raw = average(match_feedscore_raw_i)
+```
+
+All matches are weighted equally.
+
+There is no:
+
+- recency weighting
+- rolling window
+- streak multiplier
+- consistency bonus
+
+---
+
+## Step 6: Normalization
+
+After raw scores are computed for all players, the backend derives percentile-based anchors:
+
+- floor anchor: `p5`
+- center anchor: `p50`
+- ceiling anchor: `p95`
+
+Then it maps scores piecewise:
+
+```javascript
+if (rawScore <= floor) {
+  normalized = 0
+} else if (rawScore <= center) {
+  normalized = ((rawScore - floor) / (center - floor)) * 6.6
+} else if (rawScore <= ceiling) {
+  normalized = 6.6 + ((rawScore - center) / (ceiling - center)) * 3.4
+} else {
+  normalized = 10
+}
+```
+
+This is applied to:
+
+- raw role-adjusted opscore
+- raw role-adjusted feedscore
+
+This does two important things:
+
+- the middle of the population is lifted into a more humane score range
+- the top `5%` can already saturate at `10` instead of needing a once-in-a-dataset outlier
+
+Both normalized outputs are clamped to `0-10`.
 
 ---
 
 ## Implementation Notes
 
-- The batch recomputation happens in `normalizePlayersByPuuid()`.
-- Match JSON files processed in sorted filename order for deterministic results.
-- Role comes directly from the `teamPosition` field—no heuristic detection needed.
-- Each match scored independently using its own role multipliers before averaging.
-- Players with multiple roles automatically get multi-role representation in their average.
+The current implementation in `normalize_players_by_puuid.js` does the following:
+
+1. Reads all match JSON files in deterministic sorted order.
+2. Builds match stats from each participant.
+3. Uses explicit `teamPosition` role information.
+4. Extracts the 8 artifacts.
+5. Applies role multipliers.
+6. Averages per-player raw scores.
+7. Derives dataset-wide normalization anchors.
+8. Writes normalized scores back to the `players` table.
+
+It also logs:
+
+- raw opscore stats
+- normalized opscore stats
+- raw feedscore stats
+- normalized feedscore stats
+- normalization anchors
+- a role-balance snapshot by primary role
+
+That role-balance snapshot was added specifically to help tune whether strong players from different roles end up in comparable final score bands.
 
 ---
 
-## Example Output
+## Important Calibration Note
 
-On a normalization run:
+The formulas are implemented as written from the new scoring plan, but some artifacts can dominate raw totals on real Riot values:
 
-- processed matches: `3471`
-- unique players: `25618`
-- raw opscore range: `12.4 .. 847.2`
-- normalized opscore range: `0.00 .. 10.00`
-- normalization anchors: `min = 12.4`, `median = 185.3`, `max = 847.2`
+- `utility`
+- `tanking`
 
-These anchors update whenever the dataset changes.
+So the fairness question should be judged on:
+
+- full-dataset normalization
+- cross-role averages
+- leaderboard sanity checks
+- role-balance snapshots from normalization output
+
+If a strong `UTILITY` or `TOP` player is still systematically below equally strong `BOTTOM` or `MIDDLE` players, the next step is multiplier tuning, not reintroducing temporal logic.
 
 ---
 
-## Design Philosophy
+## Current Code Reality vs Old Design
 
-This scoring system answers:
+The previous temporal scoring idea has now been removed from the implemented logic.
 
-**"Given the matches in this dataset, what does this player's performance profile look like across the positions they play?"**
+Not used anymore:
 
-It does NOT answer:
-- "Is this player improving?"
-- "What is their peak form?"
-- "What's their recent momentum?"
+- heuristic role detection from wards/gold/kills
+- time-decayed averages
+- streak-based multipliers
+- stability CV bonuses
 
-Those are different analytical questions requiring different methodology.
+Kept:
 
-The score reflects **capability and contribution across the available match sample, weighted fairly for each position's unique responsibilities**.
+- dataset averaging
+- percentile-style normalization
+- feedscore concept
+- role-sensitive scoring
+
+---
+
+## Design Goal
+
+The intended behavior is:
+
+**A genuinely good top laner, jungler, support, mid laner, or ADC should be able to reach a similarly strong final normalized score if they perform their role well.**
+
+That is the main tuning target for this scoring system.

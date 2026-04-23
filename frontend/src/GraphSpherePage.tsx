@@ -6,6 +6,7 @@ import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeN
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
 import { useI18n } from "./i18n";
 import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "./theme";
+import PlayerPerformanceCard from "./components/PlayerPerformanceCard.tsx";
 
 type FocusRequest = {
   index: number;
@@ -486,6 +487,11 @@ export default function GraphSpherePage() {
                   {selectedIndex !== null ? (
                     <div style={{ color: "#7da0c6" }}>
                       {t.graphSphere.selectedNeighborhood}: {activeInfo.totalDegree.toLocaleString()}
+                    </div>
+                  ) : null}
+                  {selectedIndex !== null ? (
+                    <div style={{ marginTop: "0.6rem" }}>
+                      <PlayerPerformanceCard puuid={activeInfo.id} />
                     </div>
                   ) : null}
                 </>

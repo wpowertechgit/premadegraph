@@ -50,11 +50,112 @@ const SUMMONER_SPELL_ICONS: Record<number, { name: string; icon: string }> = {
 type PlayerInfo = {
   name: string;
   champion: string;
+  role: string;
   summonerSpellIds: [number, number];
   kda: string;
   gold: number;
   feedscore: number;
   opscore: number;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+const normalizeRole = (role?: string) => {
+  const normalized = String(role ?? "").trim().toUpperCase();
+  switch (normalized) {
+    case "TOP":
+      return "TOP";
+    case "JUNGLE":
+      return "JUNGLE";
+    case "MID":
+    case "MIDDLE":
+      return "MIDDLE";
+    case "BOT":
+    case "ADC":
+    case "BOTTOM":
+      return "BOTTOM";
+    case "SUPPORT":
+    case "UTILITY":
+      return "UTILITY";
+    default:
+      return "UNKNOWN";
+  }
+};
+
+const ROLE_MULTIPLIERS: Record<string, Record<string, number>> = {
+  TOP: { kda: 1.1, economy: 1.05, map_awareness: 0.9, utility: 0.6, damage: 1.15, tanking: 1.0, objectives: 1.2, early_game: 1.05 },
+  JUNGLE: { kda: 1.2, economy: 0.7, map_awareness: 1.4, utility: 0.8, damage: 1.0, tanking: 0.8, objectives: 1.4, early_game: 1.3 },
+  MIDDLE: { kda: 1.0, economy: 1.1, map_awareness: 1.2, utility: 1.0, damage: 1.05, tanking: 0.8, objectives: 1.0, early_game: 1.1 },
+  BOTTOM: { kda: 1.2, economy: 1.3, map_awareness: 1.1, utility: 0.7, damage: 1.4, tanking: 0.6, objectives: 0.9, early_game: 1.0 },
+  UTILITY: { kda: 0.7, economy: 0.4, map_awareness: 1.8, utility: 1.8, damage: 0.5, tanking: 1.1, objectives: 0.7, early_game: 0.8 },
+  UNKNOWN: { kda: 1.0, economy: 1.0, map_awareness: 1.0, utility: 1.0, damage: 1.0, tanking: 1.0, objectives: 1.0, early_game: 1.0 },
+};
+
+const DEATH_TOLERANCE: Record<string, number> = {
+  TOP: 1.0,
+  JUNGLE: 1.05,
+  MIDDLE: 1.0,
+  BOTTOM: 1.15,
+  UTILITY: 0.8,
+  UNKNOWN: 1.0,
+};
+
+const computeMatchScores = (participant: any, gameDurationRaw: number) => {
+  const challenges = participant?.challenges ?? {};
+  const gameDurationMinutes =
+    gameDurationRaw > 100000 ? Math.max(1, gameDurationRaw / 60000) : Math.max(1, gameDurationRaw / 60);
+  const role = normalizeRole(participant?.teamPosition);
+  const efficiency = clamp((participant?.goldSpent ?? 0) / Math.max(1, participant?.goldEarned ?? 0), 0.5, 1.0);
+
+  const artifacts = {
+    kda: (participant?.kills ?? 0) + (participant?.assists ?? 0) * 0.965 - (participant?.deaths ?? 0) * 0.25,
+    economy: ((participant?.goldEarned ?? 0) / gameDurationMinutes) / 10 + efficiency * 0.5,
+    map_awareness:
+      (participant?.visionScore ?? 0) * 0.15 +
+      (participant?.wardsPlaced ?? 0) * 0.05 +
+      (participant?.detectorWardsPlaced ?? 0) * 0.04 +
+      (participant?.wardsKilled ?? 0) * 0.08 +
+      ((participant?.controlWardsPlaced ?? 0) || (challenges?.controlWardsPlaced ?? 0)) * 0.06,
+    utility:
+      (challenges?.enemyChampionImmobilizations ?? 0) * 0.08 +
+      (participant?.totalDamageShieldedOnTeammates ?? 0) * 0.001 +
+      (participant?.totalHeal ?? 0) * 0.001 +
+      ((challenges?.damageSelfMitigated ?? 0) || (participant?.damageSelfMitigated ?? 0)) * 0.002 +
+      ((challenges?.timeCCingOthers ?? 0) || (participant?.timeCCingOthers ?? 0)) * 0.01,
+    damage:
+      ((participant?.physicalDamageDealtToChampions ?? 0) +
+        (participant?.magicDamageDealtToChampions ?? 0) +
+        (participant?.trueDamageDealtToChampions ?? 0)) /
+      1000 *
+      0.2,
+    tanking: ((participant?.totalDamageTaken ?? 0) / gameDurationMinutes) * 0.05,
+    objectives:
+      (participant?.damageDealtToBuildings ?? 0) * 0.002 +
+      (participant?.turretTakedowns ?? 0) * 0.25 +
+      (participant?.inhibitorTakedowns ?? 0) * 0.5 +
+      (challenges?.turretPlatesTaken ?? 0) * 0.03 +
+      (participant?.damageDealtToTurrets ?? 0) * 0.001,
+    early_game:
+      (participant?.firstBloodKill ? 1 : 0) * 0.5 +
+      (participant?.firstBloodAssist ? 1 : 0) * 0.2 +
+      (participant?.firstTowerKill ? 1 : 0) * 0.3 +
+      (participant?.firstTowerAssist ? 1 : 0) * 0.1 +
+      (challenges?.laneMinionsFirst10Minutes ?? 0) / 50,
+  };
+
+  const multipliers = ROLE_MULTIPLIERS[role] ?? ROLE_MULTIPLIERS.UNKNOWN;
+  const adjustedArtifacts = Object.entries(artifacts).reduce<Record<string, number>>((accumulator, [key, value]) => {
+    accumulator[key] = value * multipliers[key];
+    return accumulator;
+  }, {});
+
+  return {
+    role,
+    feedscore:
+      (participant?.deaths ?? 0) * (DEATH_TOLERANCE[role] ?? DEATH_TOLERANCE.UNKNOWN) -
+      ((participant?.kills ?? 0) + (participant?.assists ?? 0)) * 0.35,
+    opscore: Object.values(adjustedArtifacts).reduce((sum, value) => sum + value, 0),
+  };
 };
 
 const renderSummonerSpellIcons = (spellIds: [number, number]) => (
@@ -192,21 +293,19 @@ const MatchAnalysisForm = () => {
         matchDetails.push(matchData);
 
         const participants = matchData.info.participants;
+        const gameDuration = matchData.info.gameDuration;
         const allPlayers: PlayerInfo[] = participants.map((p: any) => {
           const name = `${p.riotIdGameName || "?"}#${p.riotIdTagline || "?"}`;
-          const feedscore = p.deaths - (p.kills + p.assists) * 0.5;
-          const opscore = p.kills + p.assists * 0.965 + p.goldEarned / 500;
+          const scores = computeMatchScores(p, gameDuration);
           return {
             name,
             champion: p.championName,
+            role: scores.role,
             summonerSpellIds: [p.summoner1Id, p.summoner2Id],
             kda: `${p.kills}/${p.deaths}/${p.assists}`,
             gold: p.goldEarned,
-            kills: p.kills,
-            deaths: p.deaths,
-            assists: p.assists,
-            feedscore,
-            opscore,
+            feedscore: scores.feedscore,
+            opscore: scores.opscore,
           };
         });
 
@@ -402,6 +501,7 @@ const MatchAnalysisForm = () => {
                               {bluePlayer?.name === match.topFeederPuuid ? ` ⭐ ` : ""}
                               <br />
                               {bluePlayer?.champion} <br />
+                              {bluePlayer?.role} <br />
                               {bluePlayer ? renderSummonerSpellIcons(bluePlayer.summonerSpellIds) : null}
                               {t.matchAnalysis.kda}: {bluePlayer?.kda} <br />
                               {t.matchAnalysis.gold}: {bluePlayer?.gold} <br />
@@ -413,6 +513,7 @@ const MatchAnalysisForm = () => {
                               {redPlayer?.name === match.topFeederPuuid ? ` ⭐ ` : ""}
                               <br />
                               {redPlayer?.champion} <br />
+                              {redPlayer?.role} <br />
                               {redPlayer ? renderSummonerSpellIcons(redPlayer.summonerSpellIds) : null}
                               {t.matchAnalysis.kda}: {redPlayer?.kda} <br />
                               {t.matchAnalysis.gold}: {redPlayer?.gold} <br />
