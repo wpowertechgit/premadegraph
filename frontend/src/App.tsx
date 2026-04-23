@@ -12,6 +12,7 @@ const MatchCollectorPage = lazy(() => import("./MatchCollectorPage"));
 const GraphPage = lazy(() => import("./GraphPage"));
 const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 const AssortativityPage = lazy(() => import("./AssortativityPage"));
+const DualAnalyticsView = lazy(() => import("./DualAnalyticsView"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
 const TRANSITION_TOTAL_MS = 320;
@@ -136,6 +137,14 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
             element={(
               <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
                 <AssortativityPage />
+              </Suspense>
+            )}
+          />
+          <Route
+            path="/analytics/signed-balance-assortativity"
+            element={(
+              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                <DualAnalyticsView />
               </Suspense>
             )}
           />

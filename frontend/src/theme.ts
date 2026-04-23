@@ -6,6 +6,12 @@ export const shellMetrics = {
   contentMaxWidth: "1360px",
 };
 
+export const INTERPRETATION_PALETTE = {
+  balanced: "#7fd2c3",
+  unbalanced: "#ef9b7d",
+  neutral: "#f0bb74",
+} as const;
+
 export const appTheme = createTheme({
   palette: {
     mode: "dark",

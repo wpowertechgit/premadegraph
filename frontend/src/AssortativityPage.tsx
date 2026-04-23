@@ -1,4 +1,5 @@
 import React, { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import GraphSphereScene from "./GraphSphereScene";
 import { buildMockBirdseyeData } from "./graphBirdseyeMock";
 import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta, runRustAssortativity } from "./pathfinderApi";
@@ -6,6 +7,8 @@ import { useI18n } from "./i18n";
 import { runAssortativityMock } from "./assortativityMock";
 import type { AssortativityMetricResult, AssortativityRequest, AssortativityResponse, AssortativitySample } from "./assortativityTypes";
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
+import { CoefficientBadge, EdgeCategoryLegend, InterpretationBanner, MethodologyCard, ParameterGuide } from "./analyticsComponents";
+import { explainAssortativityFinding, persistAssortativityRun } from "./analyticsState";
 import { buttonStyle, glassCardStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "./theme";
 
 const DEFAULT_REQUEST: AssortativityRequest = {
@@ -205,15 +208,23 @@ function ResultCard({ result, language, isHu }: { result: AssortativityMetricRes
     skippedMissingMetric: isHu ? "Hianyzo metrika miatt kihagyva" : "Skipped for missing metric",
     skippedLowMatchCount: isHu ? "Keves meccs miatt kihagyva" : "Skipped for low match count",
   };
+  const interpretation = explainAssortativityFinding(result.global.coefficient);
   return (
     <section style={{ ...panelStyle(), padding: "1.1rem", display: "grid", gap: "0.95rem" }}>
       <div style={{ display: "grid", gap: "0.25rem" }}>
         <div style={infoLabelStyle()}>{graphModeLabel(result.graphMode, isHu)}</div>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline", flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, fontSize: "1.35rem" }}>{metricLabel(result.metric)}</h3>
-          <div style={{ color: metricTone(result.global.coefficient), fontWeight: 700 }}>
-            {isHu ? "Egyutthato" : "Coefficient"}: {formatCoefficient(result.global.coefficient, language, isHu ? "nem definialt" : "undefined")}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", color: metricTone(result.global.coefficient), fontWeight: 700 }}>
+            <span>{isHu ? "Egyutthato" : "Coefficient"}:</span>
+            <CoefficientBadge value={result.global.coefficient} metric="assortativity" />
           </div>
+        </div>
+        <div style={{ color: metricTone(result.global.coefficient), lineHeight: 1.55, fontWeight: 700 }}>{interpretation}</div>
+        <div style={{ color: COLORS.muted, lineHeight: 1.55 }}>
+          {isHu
+            ? "A globalis egyutthato a teljes ervenyes elhalmaz atlagos iranyat mutatja, a reszbontasok pedig azt, hol erosodik vagy gyengul az effektus."
+            : "The global coefficient shows the overall direction across eligible edges, while the breakdowns show where the effect strengthens or weakens."}
         </div>
       </div>
 
@@ -239,6 +250,39 @@ function ResultCard({ result, language, isHu }: { result: AssortativityMetricRes
         <SampleChip label={isHu ? "Klaszterek kozott" : "Cross cluster"} sample={result.crossCluster} language={language} isHu={isHu} />
         <SampleChip label={isHu ? "Eros kapcsolatok" : "Strong ties"} sample={result.strongTies} language={language} isHu={isHu} />
         <SampleChip label={isHu ? "Gyenge kapcsolatok" : "Weak ties"} sample={result.weakTies} language={language} isHu={isHu} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.7rem" }}>
+        {[
+          {
+            label: isHu ? "Klaszteren belul" : "Within cluster",
+            text: isHu ? "Azonos kozossegben levo jatekosok kozotti hasonlosag." : "Similarity among players who sit inside the same detected community.",
+            sample: result.withinCluster,
+          },
+          {
+            label: isHu ? "Klaszterek kozott" : "Cross cluster",
+            text: isHu ? "Atmeno kapcsolatok a kozossegi hatarokon." : "Boundary-crossing ties that connect different communities.",
+            sample: result.crossCluster,
+          },
+          {
+            label: isHu ? "Eros kapcsolatok" : "Strong ties",
+            text: isHu ? "Gyakran megismetlodo kapcsolatok." : "Repeated ties with enough support to count as strong relationships.",
+            sample: result.strongTies,
+          },
+          {
+            label: isHu ? "Gyenge kapcsolatok" : "Weak ties",
+            text: isHu ? "A minimumot elero, de nem dominant kapcsolatok." : "Edges that pass the minimum filter but do not reach the strong-tie threshold.",
+            sample: result.weakTies,
+          },
+        ].map((item) => (
+          <div key={item.label} style={{ ...softCardStyle(), padding: "0.85rem", display: "grid", gap: "0.25rem" }}>
+            <div style={{ fontWeight: 800 }}>{item.label}</div>
+            <div style={{ color: COLORS.muted, lineHeight: 1.55 }}>{item.text}</div>
+            <div style={{ color: metricTone(item.sample.coefficient), fontWeight: 700 }}>
+              {item.sample.sampleSize.toLocaleString(language === "hu" ? "hu-HU" : "en-US")} edges, {formatCoefficient(item.sample.coefficient, language, isHu ? "nem definialt" : "undefined")}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -557,6 +601,44 @@ export default function AssortativityPage() {
     return groups;
   }, [result?.results]);
   const summaryBullets = useMemo(() => (result ? buildSummaryBullets(result, language, isHu) : []), [isHu, language, result]);
+  const parameterGuideItems = useMemo(
+    () => [
+      {
+        key: "minEdgeSupport",
+        label: isHu ? "Minimum eltamogatas" : "Minimum edge support",
+        explanation: isHu ? "Csak a megfeleloen alatamasztott kapcsolatok maradnak bent." : "Only sufficiently supported relationships stay in the graph before correlation is measured.",
+        impact: isHu ? "Magasabb kuszob: konzervativabb, kisebb minta. Alacsonyabb kuszob: tobb, de zajosabb kapcsolat." : "Higher thresholds make the run more conservative; lower thresholds keep more but noisier edges.",
+      },
+      {
+        key: "minPlayerMatchCount",
+        label: isHu ? "Minimum jatekos meccsszam" : "Minimum player match count",
+        explanation: isHu ? "A jatekosnak eleg meccse kell legyen a metrika hasznalatahoz." : "Players need enough history before their metrics count as reliable endpoints.",
+        impact: isHu ? "Ez ved a kis mintas szelsosegek ellen." : "This protects the analysis from very small-sample extremes.",
+      },
+      {
+        key: "strongTieThreshold",
+        label: isHu ? "Eros kapcsolat kuszob" : "Strong-tie threshold",
+        explanation: isHu ? "Ez valasztja szet az ismetlodo es az alkalmi kapcsolatokat." : "This separates repeated partnerships from lighter connections.",
+        impact: isHu ? "A strong/weak bontas mutatja meg, hogy az effektus a kapcsolat erossegevel valtozik-e." : "The strong-versus-weak split shows whether the effect changes with tie strength.",
+      },
+    ],
+    [isHu],
+  );
+  const featuredResult = useMemo(() => {
+    const preferred = result?.results.find((item) => item.graphMode === "social-path" && item.metric === "opscore" && item.global.coefficient !== null);
+    return preferred ?? result?.results.find((item) => item.global.coefficient !== null) ?? result?.results[0] ?? null;
+  }, [result?.results]);
+  const featuredLegend = useMemo(() => {
+    if (!featuredResult) {
+      return [];
+    }
+    return [
+      { name: "Within cluster", count: featuredResult.withinCluster.sampleSize, sampleSize: featuredResult.withinCluster.sampleSize, coefficient: featuredResult.withinCluster.coefficient },
+      { name: "Cross cluster", count: featuredResult.crossCluster.sampleSize, sampleSize: featuredResult.crossCluster.sampleSize, coefficient: featuredResult.crossCluster.coefficient },
+      { name: "Strong ties", count: featuredResult.strongTies.sampleSize, sampleSize: featuredResult.strongTies.sampleSize, coefficient: featuredResult.strongTies.coefficient },
+      { name: "Weak ties", count: featuredResult.weakTies.sampleSize, sampleSize: featuredResult.weakTies.sampleSize, coefficient: featuredResult.weakTies.coefficient },
+    ];
+  }, [featuredResult]);
 
   const runAnalysis = async () => {
     if (loading) return;
@@ -566,6 +648,7 @@ export default function AssortativityPage() {
     try {
       const response = datasetMode === "mock" ? await runAssortativityMock(request) : await runRustAssortativity(request);
       setResult(response);
+      persistAssortativityRun(request, response, datasetMode);
     } catch (runError) {
       console.error("Assortativity analysis failed:", runError);
       setError(runError instanceof Error ? runError.message : (isHu ? "Nem sikerult betolteni az asszortativitasi elemzest." : "Failed to load assortativity analysis."));
@@ -638,6 +721,19 @@ export default function AssortativityPage() {
               <span style={{ color: COLORS.muted, fontSize: "0.84rem", lineHeight: 1.5 }}>{isHu ? "Valaszd szet az ismetlodo kapcsolatokat erosebb es gyengebb kotesekre." : "Split repeated relationships into stronger and weaker ties for comparison."}</span>
             </label>
           </div>
+
+          <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap" }}>
+            <Link to="/analytics/signed-balance-assortativity" style={{ textDecoration: "none" }}>
+              <span style={{ ...buttonStyle("secondary"), display: "inline-flex", alignItems: "center" }}>
+                View Combined Analysis
+              </span>
+            </Link>
+            <Link to="/signed-balance" style={{ textDecoration: "none" }}>
+              <span style={{ ...buttonStyle("ghost"), display: "inline-flex", alignItems: "center" }}>
+                See Signed Balance Results
+              </span>
+            </Link>
+          </div>
         </section>
 
         {error ? <section style={{ ...panelStyle(), padding: "1rem", color: "#ffb39b" }}>{error}</section> : null}
@@ -667,6 +763,15 @@ export default function AssortativityPage() {
 
           {result ? (
             <section style={{ ...panelStyle(), padding: "1.1rem", display: "grid", gap: "0.85rem" }}>
+              <InterpretationBanner
+                finding={featuredResult?.global.coefficient !== null && featuredResult?.global.coefficient !== undefined
+                  ? (featuredResult.global.coefficient > 0.2 ? "high-assortativity" : featuredResult.global.coefficient < -0.2 ? "low-assortativity" : "neutral")
+                  : "neutral"}
+                title={featuredResult ? explainAssortativityFinding(featuredResult.global.coefficient) : "Performance largely uncorrelated with connection"}
+                description={featuredResult
+                  ? `${metricLabel(featuredResult.metric)} on ${graphModeLabel(featuredResult.graphMode, isHu)} reads ${formatCoefficient(featuredResult.global.coefficient, language, isHu ? "nem definialt" : "undefined")}. ${explainAssortativityFinding(featuredResult.global.coefficient)}`
+                  : (isHu ? "Az aktualis futasnak meg nincs kiemelt egyutthatoja." : "This run does not have a featured coefficient yet.")}
+              />
               <div style={{ display: "grid", gap: "0.2rem" }}>
                 <div style={infoLabelStyle()}>{isHu ? "Mit sugall ez a futas" : "What this run suggests"}</div>
                 <div style={{ fontSize: "1.15rem", fontWeight: 800 }}>{isHu ? "Kozertheto tanulsagok" : "Layman takeaways"}</div>
@@ -676,6 +781,10 @@ export default function AssortativityPage() {
               </div>
             </section>
           ) : null}
+
+          <ParameterGuide title={isHu ? "Miert szamitanak ezek a parameterek" : "Why these parameters matter"} parameters={parameterGuideItems} />
+
+          {featuredLegend.length > 0 ? <EdgeCategoryLegend categories={featuredLegend} /> : null}
 
           {(["social-path", "battle-path"] as const).map((graphMode) => {
             const modeResults = groupedResults.get(graphMode) ?? [];
@@ -698,6 +807,20 @@ export default function AssortativityPage() {
         {result ? (
           <section style={{ ...panelStyle(), padding: "1.1rem", display: "grid", gap: "0.8rem" }}>
             <div style={infoLabelStyle()}>{isHu ? "Dokumentalt dontesek" : "Documented decisions"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0.8rem" }}>
+              <MethodologyCard
+                title={isHu ? "Pearson endpoint-korrelacio" : "Pearson endpoint correlation"}
+                description={isHu ? "Az egyutthato azt meri, hogy a kapcsolat ket vegen allo jatekosok mennyire hasonloak a valasztott metrikaban." : "The coefficient measures how similar the two endpoints of each eligible edge are on the chosen metric."}
+                ruleText={result.decisions.assortativityFormula}
+                impact="high"
+              />
+              <MethodologyCard
+                title={isHu ? "Grafmodok kulon kezelve" : "Graph modes kept separate"}
+                description={isHu ? "A social-path es a battle-path kulon fut, hogy a kapcsolatjelentes ne mosodjon ossze." : "Social-path and battle-path stay separate so the relationship semantics do not blur together."}
+                ruleText={result.decisions.graphModeRule}
+                impact="medium"
+              />
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "0.8rem" }}>
               {[
                 [isHu ? "Graf modok" : "Graph modes", result.decisions.graphModes.join(", ")],

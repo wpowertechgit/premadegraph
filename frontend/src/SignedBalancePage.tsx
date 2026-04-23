@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { runRustSignedBalance } from "./pathfinderApi";
 import { useI18n } from "./i18n";
 import { runSignedBalanceMock } from "./signedBalanceMock";
+import { buildBalanceBanner, CoefficientBadge, InterpretationBanner, MethodologyCard, ParameterGuide } from "./analyticsComponents";
+import { explainBalanceFinding, formatSignedPercent, persistSignedBalanceRun } from "./analyticsState";
 import { buttonStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "./theme";
 import type {
   SignedBalanceRequest,
@@ -17,6 +20,8 @@ type TriadPattern = {
   balanced: boolean;
   description: string;
   interpretation: string;
+  nodeNames: [string, string, string];
+  context: string;
 };
 
 const DEFAULT_REQUEST: SignedBalanceRequest = {
@@ -101,6 +106,24 @@ function countMax(distribution: SignedTriadTypeCount[]) {
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
+}
+
+function mockClusterHint(playerId: string) {
+  const match = /^c(\d+)n/i.exec(playerId);
+  if (!match) {
+    return null;
+  }
+  return `Mock cluster C${match[1]}`;
+}
+
+function instabilityHint(instabilityScore: number, totalTriads: number) {
+  if (instabilityScore >= 0.5 && totalTriads >= 20) {
+    return "Likely exposed to cross-group contradictions.";
+  }
+  if (instabilityScore >= 0.35) {
+    return "Local contradiction hotspot.";
+  }
+  return "Moderate instability within the observed local neighborhood.";
 }
 
 function InfoDot({ text }: { text: string }) {
@@ -250,14 +273,18 @@ function DonutChart({
 function TriadExampleFigure({
   triadType,
   signs,
+  nodeNames,
+  context,
 }: {
   triadType: string;
   signs: [1 | -1, 1 | -1, 1 | -1];
+  nodeNames: [string, string, string];
+  context: string;
 }) {
   const nodes = {
-    a: { x: 44, y: 132, label: "A" },
-    b: { x: 100, y: 34, label: "B" },
-    c: { x: 156, y: 132, label: "C" },
+    a: { x: 44, y: 132, label: nodeNames[0], short: "A" },
+    b: { x: 100, y: 34, label: nodeNames[1], short: "B" },
+    c: { x: 156, y: 132, label: nodeNames[2], short: "C" },
   };
   const edges = [
     {
@@ -305,7 +332,7 @@ function TriadExampleFigure({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
         <strong style={{ fontSize: "1.15rem" }}>{triadType}</strong>
-        <span style={{ color: AMETHYST.soft, fontSize: "0.84rem" }}>A-B-C</span>
+        <span style={{ color: AMETHYST.soft, fontSize: "0.84rem" }}>{context}</span>
       </div>
       <svg viewBox="0 0 200 170" role="img" aria-label={`Signed triad example ${triadType}`} style={{ width: "100%", maxWidth: "220px", justifySelf: "center" }}>
         {edges.map((edge) => {
@@ -338,11 +365,18 @@ function TriadExampleFigure({
           <g key={node.label}>
             <circle cx={node.x} cy={node.y} r={19} fill="#0f141b" stroke="rgba(186, 207, 228, 0.5)" strokeWidth={2} />
             <text x={node.x} y={node.y + 5} textAnchor="middle" fill="#eef2f7" fontSize="16" fontWeight="700">
-              {node.label}
+              {node.short}
             </text>
           </g>
         ))}
       </svg>
+      <div style={{ display: "grid", gap: "0.25rem" }}>
+        {Object.values(nodes).map((node) => (
+          <div key={`${triadType}-${node.label}`} style={{ color: AMETHYST.muted, fontSize: "0.84rem", lineHeight: 1.5 }}>
+            <strong style={{ color: "#f5efff" }}>{node.short}</strong> {node.label}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -456,6 +490,7 @@ export default function SignedBalancePage() {
         ? await runSignedBalanceMock(nextRequest)
         : await runRustSignedBalance(nextRequest);
       setResult(response);
+      persistSignedBalanceRun(nextRequest, response, datasetMode);
     } catch (runError) {
       console.error("Signed balance analysis failed:", runError);
       setError(runError instanceof Error ? runError.message : t.signedBalance.loadFailed);
@@ -488,6 +523,50 @@ export default function SignedBalancePage() {
   const exampleTriads = useMemo(
     () => (Array.isArray(result?.exampleTriads) ? result.exampleTriads : []),
     [result?.exampleTriads],
+  );
+
+  const balanceBanner = useMemo(
+    () => buildBalanceBanner(result?.triads.balancedRatio),
+    [result?.triads.balancedRatio],
+  );
+
+  const parameterGuideItems = useMemo(
+    () => [
+      {
+        key: "minEdgeSupport",
+        label: t.signedBalance.minEdgeSupport,
+        explanation: "Edges must be observed often enough before they are allowed into the signed projection.",
+        impact: "Higher values keep only stronger evidence; lower values admit noisier ties and can change the triad pool.",
+      },
+      {
+        key: "tiePolicy",
+        label: t.signedBalance.tiePolicy,
+        explanation: "This decides what happens when ally and enemy evidence for one edge are evenly split.",
+        impact: "Excluding ties makes the projection more conservative; forcing ally or enemy can move balance ratios materially.",
+      },
+      {
+        key: "maxTopNodes",
+        label: t.signedBalance.maxTopNodes,
+        explanation: "Limits how many instability-heavy players are displayed in the ranking.",
+        impact: "A higher value expands inspection depth without changing the underlying analysis.",
+      },
+      {
+        key: "clusterSummary",
+        label: t.signedBalance.clusterSummaries,
+        explanation: "Adds local balance summaries for clusters that survive the signed projection.",
+        impact: "Useful for checking whether instability is global or concentrated in specific community pockets.",
+      },
+    ],
+    [t.signedBalance.clusterSummaries, t.signedBalance.maxTopNodes, t.signedBalance.minEdgeSupport, t.signedBalance.tiePolicy],
+  );
+
+  const clusterComparisons = useMemo(
+    () =>
+      (result?.clusterSummaries ?? []).map((cluster) => ({
+        ...cluster,
+        deltaFromGlobal: cluster.balancedRatio - (result?.triads.balancedRatio ?? 0),
+      })),
+    [result?.clusterSummaries, result?.triads.balancedRatio],
   );
 
   const graphPipeline = useMemo(() => {
@@ -524,6 +603,8 @@ export default function SignedBalancePage() {
           allNegative: t.signedBalance.triadTypeAllNegative,
         }),
         interpretation: t.signedBalance.triadMeaningAllPositive,
+        nodeNames: ["Alice", "Bora", "Cora"],
+        context: "Premade trio stays aligned",
       },
       {
         triadType: "++-",
@@ -536,6 +617,8 @@ export default function SignedBalancePage() {
           allNegative: t.signedBalance.triadTypeAllNegative,
         }),
         interpretation: t.signedBalance.triadMeaningTwoPositive,
+        nodeNames: ["Alice", "Bora", "Darin"],
+        context: "Friend of my friend becomes my enemy",
       },
       {
         triadType: "+--",
@@ -548,6 +631,8 @@ export default function SignedBalancePage() {
           allNegative: t.signedBalance.triadTypeAllNegative,
         }),
         interpretation: t.signedBalance.triadMeaningOnePositive,
+        nodeNames: ["Mira", "Rook", "Vera"],
+        context: "Enemy of my enemy helps stabilize the trio",
       },
       {
         triadType: "---",
@@ -560,6 +645,8 @@ export default function SignedBalancePage() {
           allNegative: t.signedBalance.triadTypeAllNegative,
         }),
         interpretation: t.signedBalance.triadMeaningAllNegative,
+        nodeNames: ["Ilya", "Nox", "Tari"],
+        context: "Everyone remains opposed",
       },
     ],
     [t.signedBalance.triadMeaningAllNegative, t.signedBalance.triadMeaningAllPositive, t.signedBalance.triadMeaningOnePositive, t.signedBalance.triadMeaningTwoPositive, t.signedBalance.triadTypeAllNegative, t.signedBalance.triadTypeAllPositive, t.signedBalance.triadTypeOnePositive, t.signedBalance.triadTypeTwoPositive],
@@ -844,6 +931,19 @@ export default function SignedBalancePage() {
                   {datasetMode === "mock" ? t.signedBalance.runHintMock : t.signedBalance.runHint}
                 </div>
               </div>
+
+              <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap" }}>
+                <Link to="/analytics/signed-balance-assortativity" style={{ textDecoration: "none" }}>
+                  <span style={{ ...buttonStyle("secondary"), display: "inline-flex", alignItems: "center" }}>
+                    View Combined Analysis
+                  </span>
+                </Link>
+                <Link to="/assortativity" style={{ textDecoration: "none" }}>
+                  <span style={{ ...buttonStyle("ghost"), display: "inline-flex", alignItems: "center" }}>
+                    See Assortativity Results
+                  </span>
+                </Link>
+              </div>
             </div>
           </div>
         </section>
@@ -860,6 +960,12 @@ export default function SignedBalancePage() {
 
         {result ? (
           <>
+            <InterpretationBanner
+              finding={balanceBanner.finding}
+              title={balanceBanner.title}
+              description={`Balance ratio ${percent(result.triads.balancedRatio)}. ${explainBalanceFinding(result.triads.balancedRatio)} Balanced triads: ${result.triads.balancedCount.toLocaleString()}; unbalanced triads: ${result.triads.unbalancedCount.toLocaleString()}.`}
+            />
+
             {result.warnings.length > 0 ? (
               <section style={{ ...foldedPaperStyle(), padding: "1rem 1.1rem", display: "grid", gap: "0.45rem" }}>
                 <div style={{ fontWeight: 700 }}>{t.signedBalance.warnings}</div>
@@ -868,6 +974,8 @@ export default function SignedBalancePage() {
                 ))}
               </section>
             ) : null}
+
+            <ParameterGuide title="Why these signed-balance parameters matter" parameters={parameterGuideItems} />
 
             <section
               style={{
@@ -1043,9 +1151,24 @@ export default function SignedBalancePage() {
               </SectionCard>
             </div>
 
+            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "0.9rem" }}>
+              <MethodologyCard
+                title="Canonical signed projection"
+                description="Each edge is collapsed into one sign before triads are counted, so sign semantics directly shape the experiment."
+                ruleText={`Tie policy: ${request.tiePolicy}. Minimum support: ${request.minEdgeSupport}.`}
+                impact="high"
+              />
+              <MethodologyCard
+                title="Observed triads only"
+                description="Only fully connected triples enter the signed-balance calculation, which keeps the result interpretable and reproducible."
+                ruleText="Missing edges do not create inferred triads."
+                impact="medium"
+              />
+            </section>
+
             <SectionCard title={t.signedBalance.instabilityChart} subtitle={t.signedBalance.instabilityChartText}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.8rem" }}>
-                {result.topUnbalancedNodes.slice(0, Math.min(request.maxTopNodes, 8)).map((node) => (
+                {result.topUnbalancedNodes.slice(0, Math.min(request.maxTopNodes, 8)).map((node, index) => (
                   <div
                     key={node.playerId}
                     style={{
@@ -1057,6 +1180,10 @@ export default function SignedBalancePage() {
                       gap: "0.55rem",
                     }}
                   >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+                      <div style={{ color: "#f0bb74", fontSize: "0.82rem", fontWeight: 800 }}>Rank #{index + 1}</div>
+                      <CoefficientBadge value={node.instabilityScore} metric="balance" size="sm" />
+                    </div>
                     <div style={{ fontWeight: 700, wordBreak: "break-word" }}>{node.label}</div>
                     <div style={{ color: "#8aa0b5", fontSize: "0.84rem" }}>{node.totalTriads.toLocaleString()} {t.signedBalance.localTriads}</div>
                     <div style={{ height: "82px", display: "grid", alignItems: "end" }}>
@@ -1068,6 +1195,9 @@ export default function SignedBalancePage() {
                           background: "linear-gradient(180deg, #f2ba74 0%, #d97d63 100%)",
                         }}
                       />
+                    </div>
+                    <div style={{ color: "#d7c9ef", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                      {mockClusterHint(node.playerId) ?? instabilityHint(node.instabilityScore, node.totalTriads)}
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", color: "#d8c18d" }}>
                       <span>{t.signedBalance.instabilityScore}</span>
@@ -1083,21 +1213,27 @@ export default function SignedBalancePage() {
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "720px" }}>
                   <thead>
                     <tr style={{ color: "#8fa4ba", textAlign: "left" }}>
+                      <th style={{ padding: "0.65rem 0.5rem" }}>Rank</th>
                       <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.player}</th>
                       <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.playerId}</th>
                       <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.totalTriads}</th>
                       <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.unbalancedCount}</th>
                       <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.instabilityScore}</th>
+                      <th style={{ padding: "0.65rem 0.5rem" }}>Reading</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {result.topUnbalancedNodes.map((node) => (
+                    {result.topUnbalancedNodes.map((node, index) => (
                       <tr key={node.playerId} style={{ borderTop: "1px solid rgba(79, 96, 115, 0.22)" }}>
+                        <td style={{ padding: "0.75rem 0.5rem", color: "#f0bb74", fontWeight: 800 }}>{index + 1}</td>
                         <td style={{ padding: "0.75rem 0.5rem", fontWeight: 700 }}>{node.label}</td>
                         <td style={{ padding: "0.75rem 0.5rem", color: "#8ca0b5", wordBreak: "break-all" }}>{node.playerId}</td>
                         <td style={{ padding: "0.75rem 0.5rem" }}>{node.totalTriads.toLocaleString()}</td>
                         <td style={{ padding: "0.75rem 0.5rem" }}>{node.unbalancedTriads.toLocaleString()}</td>
                         <td style={{ padding: "0.75rem 0.5rem", color: "#ebc97e" }}>{percent(node.instabilityScore)}</td>
+                        <td style={{ padding: "0.75rem 0.5rem", color: "#cdbfe4", maxWidth: "280px", lineHeight: 1.55 }}>
+                          {mockClusterHint(node.playerId) ?? instabilityHint(node.instabilityScore, node.totalTriads)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1107,6 +1243,36 @@ export default function SignedBalancePage() {
 
             {request.includeClusterSummaries && result.clusterSummaries.length > 0 ? (
               <SectionCard title={t.signedBalance.clusterSummaries} subtitle={t.signedBalance.clusterSummariesText}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.8rem" }}>
+                  {clusterComparisons.slice(0, 4).map((cluster) => {
+                    const aboveGlobal = cluster.deltaFromGlobal >= 0;
+                    return (
+                      <div
+                        key={`${cluster.clusterId}-card`}
+                        style={{
+                          borderRadius: "18px",
+                          border: `1px solid ${aboveGlobal ? "rgba(127, 210, 195, 0.28)" : "rgba(239, 155, 125, 0.28)"}`,
+                          background: aboveGlobal ? "rgba(127, 210, 195, 0.08)" : "rgba(239, 155, 125, 0.08)",
+                          padding: "0.95rem",
+                          display: "grid",
+                          gap: "0.35rem",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+                          <strong>{cluster.clusterId}</strong>
+                          <span style={{ color: aboveGlobal ? "#7fd2c3" : "#ef9b7d", fontSize: "0.82rem", fontWeight: 800 }}>
+                            {aboveGlobal ? "Above" : "Below"} global
+                          </span>
+                        </div>
+                        <div style={{ color: "#c9bddf" }}>{cluster.size.toLocaleString()} players, {cluster.localTriads.toLocaleString()} local triads</div>
+                        <div style={{ color: "#f5efff", fontWeight: 700 }}>{percent(cluster.balancedRatio)} balanced</div>
+                        <div style={{ color: aboveGlobal ? "#7fd2c3" : "#ef9b7d" }}>
+                          Delta vs global: {cluster.deltaFromGlobal >= 0 ? "+" : ""}{formatSignedPercent(cluster.deltaFromGlobal)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
                     <thead>
@@ -1117,10 +1283,11 @@ export default function SignedBalancePage() {
                         <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.balancedCount}</th>
                         <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.unbalancedCount}</th>
                         <th style={{ padding: "0.65rem 0.5rem" }}>{t.signedBalance.balancedRatio}</th>
+                        <th style={{ padding: "0.65rem 0.5rem" }}>Vs global</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {result.clusterSummaries.slice(0, 12).map((cluster) => (
+                      {clusterComparisons.slice(0, 12).map((cluster) => (
                         <tr key={cluster.clusterId} style={{ borderTop: "1px solid rgba(79, 96, 115, 0.22)" }}>
                           <td style={{ padding: "0.75rem 0.5rem", fontWeight: 700 }}>{cluster.clusterId}</td>
                           <td style={{ padding: "0.75rem 0.5rem" }}>{cluster.size.toLocaleString()}</td>
@@ -1128,6 +1295,9 @@ export default function SignedBalancePage() {
                           <td style={{ padding: "0.75rem 0.5rem" }}>{cluster.balancedCount.toLocaleString()}</td>
                           <td style={{ padding: "0.75rem 0.5rem" }}>{cluster.unbalancedCount.toLocaleString()}</td>
                           <td style={{ padding: "0.75rem 0.5rem", color: "#9dd6a9" }}>{percent(cluster.balancedRatio)}</td>
+                          <td style={{ padding: "0.75rem 0.5rem", color: cluster.deltaFromGlobal >= 0 ? "#7fd2c3" : "#ef9b7d" }}>
+                            {cluster.deltaFromGlobal >= 0 ? "+" : ""}{formatSignedPercent(cluster.deltaFromGlobal)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1201,7 +1371,7 @@ export default function SignedBalancePage() {
                     gap: "0.8rem",
                   }}
                 >
-                  <TriadExampleFigure triadType={example.triadType} signs={example.signs} />
+                  <TriadExampleFigure triadType={example.triadType} signs={example.signs} nodeNames={example.nodeNames} context={example.context} />
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
                     <div style={{ color: "#97aabc" }}>{example.description}</div>
                     <div
@@ -1218,6 +1388,7 @@ export default function SignedBalancePage() {
                     </div>
                   </div>
                   <div style={{ color: "#9db0c4", lineHeight: 1.65 }}>{example.interpretation}</div>
+                  <div style={{ color: "#cebfe8", lineHeight: 1.55 }}>{example.context}</div>
                 </div>
               ))}
             </div>

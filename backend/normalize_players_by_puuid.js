@@ -1,6 +1,22 @@
 const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const scoringUtils = require("./lib/scoring_utils");
+
+const DYNAMIC_PLAYER_COLUMNS = [
+  { name: "opscore_legacy", definition: "REAL" },
+  { name: "feedscore_legacy", definition: "REAL" },
+  { name: "opscore_decay", definition: "REAL" },
+  { name: "feedscore_decay", definition: "REAL" },
+  { name: "opscore_recent", definition: "REAL" },
+  { name: "feedscore_recent", definition: "REAL" },
+  { name: "opscore_stability", definition: "REAL" },
+  { name: "detected_role", definition: "TEXT DEFAULT 'unknown'" },
+  { name: "role_confidence", definition: "REAL DEFAULT 0.0" },
+  { name: "current_streak", definition: "REAL DEFAULT 0.0" },
+  { name: "matches_processed", definition: "INTEGER DEFAULT 0" },
+  { name: "dynamic_score_updated", definition: "TEXT" },
+];
 
 function resolvePathFromEnv(...keys) {
   for (const key of keys) {
@@ -54,48 +70,51 @@ function resolveMatchDir(explicitPath) {
   return path.join(__dirname, "data");
 }
 
-// Normalize opscore to 0-10 scale using actual data thresholds
-function normalizeOpScore(rawOpScore) {
-  // Based on actual analyzed data:
-  // Average: 456.02, Min: 146.92, Max: 1252.11
-  
-  const thresholds = [
-    { score: 1252.11, grade: 10.0 },  // Maximum
-    { score: 874.65, grade: 9.0 },   // Top 1%
-    { score: 751.02, grade: 8.0 },   // Top 5%
-    { score: 675.50, grade: 7.0 },   // Top 10%
-    { score: 600, grade: 6.0 },      // Interpolated
-    { score: 512.91, grade: 5.0 },   // Top 25%
-    { score: 424.93, grade: 4.0 },   // Median (50%)
-    { score: 350, grade: 3.0 },      // Interpolated
-    { score: 280, grade: 2.0 },      // Interpolated
-    { score: 220, grade: 1.0 },      // Interpolated
-    { score: 146.92, grade: 0.0 }    // Minimum
-  ];
+function dbRun(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function runCallback(err) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(this);
+    });
+  });
+}
 
-  // Handle edge cases
-  if (rawOpScore >= 1252.11) return 10.0;
-  if (rawOpScore <= 146.92) return 0.0;
+function dbAll(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(rows);
+    });
+  });
+}
 
-  // Find the two thresholds this score falls between and interpolate
-  for (let i = 0; i < thresholds.length - 1; i++) {
-    const upper = thresholds[i];
-    const lower = thresholds[i + 1];
-    
-    if (rawOpScore <= upper.score && rawOpScore > lower.score) {
-      // Linear interpolation between the two points
-      const scoreRange = upper.score - lower.score;
-      const gradeRange = upper.grade - lower.grade;
-      const scoreOffset = rawOpScore - lower.score;
-      const interpolatedGrade = lower.grade + (scoreOffset / scoreRange) * gradeRange;
-      
-      // Round to 2 decimal places
-      return Math.round(interpolatedGrade * 100) / 100;
+async function ensurePlayersTableSchema(db) {
+  await dbRun(
+    db,
+    `CREATE TABLE IF NOT EXISTS players (
+      puuid TEXT PRIMARY KEY,
+      names TEXT,
+      feedscore REAL,
+      opscore REAL,
+      country TEXT,
+      match_count INTEGER
+    )`,
+  );
+
+  const columns = await dbAll(db, "PRAGMA table_info(players)");
+  const existingColumns = new Set(columns.map((column) => column.name));
+
+  for (const column of DYNAMIC_PLAYER_COLUMNS) {
+    if (!existingColumns.has(column.name)) {
+      await dbRun(db, `ALTER TABLE players ADD COLUMN ${column.name} ${column.definition}`);
     }
   }
-
-  // Fallback (shouldn't reach here)
-  return 0.0;
 }
 
 async function normalizePlayersByPuuid(options = {}) {
@@ -108,11 +127,30 @@ async function normalizePlayersByPuuid(options = {}) {
     let totalMatches = 0;
     let totalPlayers = 0;
 
-    // Start fresh - clear existing data and reset match counts
-    db.serialize(() => {
-      db.run(`UPDATE players SET opscore = 0, feedscore = 0, match_count = 0 WHERE 1=1`);
+    (async () => {
       try {
-        const files = fs.readdirSync(matchDir).filter(f => f.endsWith(".json"));
+        await ensurePlayersTableSchema(db);
+        await dbRun(
+          db,
+          `UPDATE players
+           SET opscore = 0,
+               feedscore = 0,
+               match_count = 0,
+               opscore_legacy = NULL,
+               feedscore_legacy = NULL,
+               opscore_decay = NULL,
+               feedscore_decay = NULL,
+               opscore_recent = NULL,
+               feedscore_recent = NULL,
+               opscore_stability = NULL,
+               detected_role = 'unknown',
+               role_confidence = 0.0,
+               current_streak = 0.0,
+               matches_processed = 0,
+               dynamic_score_updated = NULL`,
+        );
+
+        const files = fs.readdirSync(matchDir).filter(f => f.endsWith(".json")).sort();
         console.log(`Processing ${files.length} match files...`);
 
         for (const file of files) {
@@ -128,6 +166,13 @@ async function normalizePlayersByPuuid(options = {}) {
             totalMatches++;
             const gameDurationSeconds = data.info.gameDuration;
             const gameDurationMinutes = gameDurationSeconds / 60;
+            const matchEndTimestamp = Number(data.info.gameEndTimestamp)
+              || Number(data.info.gameCreation)
+              || fs.statSync(path.join(matchDir, file)).mtimeMs;
+            const ageInDays = Math.max(
+              0,
+              (Date.now() - matchEndTimestamp) / (1000 * 60 * 60 * 24),
+            );
             
             for (const p of data.info.participants) {
               // Validate required fields
@@ -137,32 +182,33 @@ async function normalizePlayersByPuuid(options = {}) {
               }
 
               const puuid = p.puuid;
-              const name = `${p.riotIdGameName || 'Unknown'}#${p.riotIdTagline || 'Unknown'}`;
-              
-              // Handle potential missing values with defaults
-              const kills = p.kills || 0;
-              const deaths = p.deaths || 0;
-              const assists = p.assists || 0;
-              const goldEarned = p.goldEarned || 0;
-              const visionScore = p.visionScore || 0;
-              const feedscore = deaths - (kills + assists) * 0.35;
-              const rawOpScore = kills + assists * 0.965 + goldEarned / gameDurationMinutes + visionScore * 0.15;
+              const name = `${scoringUtils.normalizeName(p.riotIdGameName)}#${scoringUtils.normalizeName(p.riotIdTagline)}`;
+              const matchStats = scoringUtils.buildMatchStats(p, gameDurationMinutes);
+              const role = scoringUtils.detectPlayerRoleFromMatch(matchStats);
 
               if (!playersMap.has(puuid)) {
                 playersMap.set(puuid, {
                   names: new Set([name]),
-                  feedscoreSum: feedscore,
-                  opscoreSum: rawOpScore,
                   match_count: 1,
                   country: null,
+                  matches: [{
+                    ageInDays,
+                    matchStats,
+                    role,
+                    timestampMs: matchEndTimestamp,
+                  }],
                 });
                 totalPlayers++;
               } else {
                 const player = playersMap.get(puuid);
                 player.names.add(name);
-                player.feedscoreSum += feedscore;
-                player.opscoreSum += rawOpScore;
                 player.match_count += 1;
+                player.matches.push({
+                  ageInDays,
+                  matchStats,
+                  role,
+                  timestampMs: matchEndTimestamp,
+                });
               }
             }
           } catch (fileErr) {
@@ -172,6 +218,17 @@ async function normalizePlayersByPuuid(options = {}) {
         }
 
         console.log(`Processed ${totalMatches} matches and found ${totalPlayers} unique players`);
+        if (playersMap.size === 0) {
+          console.log("No players found in match directory; normalization completed with no updates.");
+          db.close((closeErr) => {
+            if (closeErr) {
+              reject(closeErr);
+              return;
+            }
+            resolve();
+          });
+          return;
+        }
         
         // Log some statistics
         const matchCounts = Array.from(playersMap.values()).map(p => p.match_count);
@@ -181,125 +238,183 @@ async function normalizePlayersByPuuid(options = {}) {
         
         console.log(`Match count stats - Avg: ${avgMatches.toFixed(2)}, Min: ${minMatches}, Max: ${maxMatches}`);
 
-        // Create table with original structure if it doesn't exist
-        db.run(`CREATE TABLE IF NOT EXISTS players (
-          puuid TEXT PRIMARY KEY,
-          names TEXT,
-          feedscore REAL,
-          opscore REAL,
-          country TEXT,
-          match_count INTEGER
-        )`);
+        const computedProfiles = [...playersMap.entries()].map(([puuid, data]) => ({
+          puuid,
+          names: [...data.names].sort(),
+          country: data.country,
+          match_count: data.match_count,
+          profile: scoringUtils.computePlayerDynamicProfile(data.matches),
+        }));
 
-        db.run("BEGIN TRANSACTION", (beginErr) => {
-          if (beginErr) {
-            db.close();
-            return reject(beginErr);
-          }
+        const rawDynamicOpscores = computedProfiles.map((entry) => entry.profile.dynamicOpscoreRaw);
+        const percentiles = scoringUtils.derivePercentiles(rawDynamicOpscores);
+        const rawLegacyOpscores = computedProfiles.map((entry) => entry.profile.baselineOpscore);
+        const normalizedOpscores = [];
+        const logFilePath = path.join(path.dirname(dbFile), "raw_scores_log.txt");
+        const logStream = fs.createWriteStream(logFilePath, { flags: "w" });
+        logStream.write(
+          "puuid;legacy_opscore_raw;dynamic_opscore_raw;dynamic_opscore_normalized;role;role_confidence;streak;stability\n",
+        );
 
-          const stmt = db.prepare(`
-            INSERT OR REPLACE INTO players (puuid, names, feedscore, opscore, country, match_count)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `);
+        await dbRun(db, "BEGIN TRANSACTION");
+        const stmt = db.prepare(`
+          INSERT OR REPLACE INTO players (
+            puuid,
+            names,
+            feedscore,
+            opscore,
+            country,
+            match_count,
+            opscore_legacy,
+            feedscore_legacy,
+            opscore_decay,
+            feedscore_decay,
+            opscore_recent,
+            feedscore_recent,
+            opscore_stability,
+            detected_role,
+            role_confidence,
+            current_streak,
+            matches_processed,
+            dynamic_score_updated
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-          let insertedCount = 0;
-          const rawOpScores = [];
-          const normalizedOpScores = [];
-          
-          // Create log file for raw scores
-          const logFilePath = path.join(path.dirname(dbFile), "raw_scores_log.txt");
-          const logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
-          logStream.write("puuid;avgopscore_before_normalization\n");
-          
-          for (const [puuid, data] of playersMap) {
-            const avgFeed = data.feedscoreSum / data.match_count;
-            const avgRawOp = data.opscoreSum / data.match_count;
-            const normalizedOp = normalizeOpScore(avgRawOp);
-            
-            logStream.write(`${puuid};${avgRawOp.toFixed(2)}\n`);
-            
-            rawOpScores.push(avgRawOp);
-            normalizedOpScores.push(normalizedOp);
+        let insertedCount = 0;
+        for (const entry of computedProfiles) {
+          const normalizedDynamicOpscore = scoringUtils.roundTo(
+            scoringUtils.normalizeOpscoreTo0To10(entry.profile.dynamicOpscoreRaw, percentiles),
+            2,
+          );
+          const normalizedRecentOpscore = scoringUtils.roundTo(
+            scoringUtils.normalizeOpscoreTo0To10(entry.profile.recentOpscoreRaw, percentiles),
+            2,
+          );
+          normalizedOpscores.push(normalizedDynamicOpscore);
 
+          logStream.write(
+            [
+              entry.puuid,
+              entry.profile.baselineOpscore.toFixed(4),
+              entry.profile.dynamicOpscoreRaw.toFixed(4),
+              normalizedDynamicOpscore.toFixed(2),
+              entry.profile.detectedRole,
+              entry.profile.roleConfidence.toFixed(4),
+              entry.profile.currentStreak.toFixed(4),
+              entry.profile.opscoreStability.toFixed(4),
+            ].join(";") + "\n",
+          );
+
+          await new Promise((resolveStmt, rejectStmt) => {
             stmt.run(
-              puuid,
-              JSON.stringify([...data.names]),
-              avgFeed,
-              normalizedOp,
-              data.country,
-              data.match_count
+              entry.puuid,
+              JSON.stringify(entry.names),
+              entry.profile.dynamicFeedscore,
+              normalizedDynamicOpscore,
+              entry.country,
+              entry.match_count,
+              entry.profile.baselineOpscore,
+              entry.profile.baselineFeedscore,
+              normalizedDynamicOpscore,
+              entry.profile.dynamicFeedscore,
+              normalizedRecentOpscore,
+              entry.profile.recentFeedscore,
+              entry.profile.opscoreStability,
+              entry.profile.detectedRole,
+              entry.profile.roleConfidence,
+              entry.profile.currentStreak,
+              entry.profile.matchesProcessed,
+              new Date().toISOString(),
+              (err) => {
+                if (err) {
+                  rejectStmt(err);
+                  return;
+                }
+                resolveStmt();
+              },
             );
-            insertedCount++;
-          }
+          });
+          insertedCount++;
+        }
 
-          logStream.end();
-          console.log(`Raw scores logged to: ${logFilePath}`);
+        logStream.end();
+        console.log(`Raw scores logged to: ${logFilePath}`);
 
-          stmt.finalize((finalizeErr) => {
-            if (finalizeErr) {
-              db.run("ROLLBACK", () => {
-                db.close();
-                reject(finalizeErr);
-              });
+        await new Promise((resolveStmt, rejectStmt) => {
+          stmt.finalize((err) => {
+            if (err) {
+              rejectStmt(err);
               return;
             }
-
-            db.run("COMMIT", (commitErr) => {
-              if (commitErr) {
-                db.run("ROLLBACK", () => {
-                  db.close();
-                  reject(commitErr);
-                });
-                return;
-              }
-
-              console.log(`Inserted ${insertedCount} players in database with normalized opscores`);
-
-              const avgRaw = rawOpScores.reduce((a, b) => a + b, 0) / rawOpScores.length;
-              const minRaw = Math.min(...rawOpScores);
-              const maxRaw = Math.max(...rawOpScores);
-              
-              const avgNormalized = normalizedOpScores.reduce((a, b) => a + b, 0) / normalizedOpScores.length;
-              const minNormalized = Math.min(...normalizedOpScores);
-              const maxNormalized = Math.max(...normalizedOpScores);
-              
-              console.log(`Raw opscore stats - Avg: ${avgRaw.toFixed(2)}, Min: ${minRaw.toFixed(2)}, Max: ${maxRaw.toFixed(2)}`);
-              console.log(`Normalized opscore stats - Avg: ${avgNormalized.toFixed(2)}, Min: ${minNormalized.toFixed(2)}, Max: ${maxNormalized.toFixed(2)}`);
-              
-              const bins = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-              const distribution = new Array(bins.length - 1).fill(0);
-              
-              for (const score of normalizedOpScores) {
-                for (let i = 0; i < bins.length - 1; i++) {
-                  if (score >= bins[i] && score < bins[i + 1]) {
-                    distribution[i]++;
-                    break;
-                  } else if (score === 10 && i === bins.length - 2) {
-                    distribution[i]++;
-                    break;
-                  }
-                }
-              }
-              
-              console.log('Normalized score distribution:');
-              for (let i = 0; i < distribution.length; i++) {
-                const range = `${bins[i]}-${bins[i + 1]}`;
-                console.log(`  ${range}: ${distribution[i]} players`);
-              }
-
-              db.close((closeErr) => {
-                if (closeErr) reject(closeErr);
-                else resolve();
-              });
-            });
+            resolveStmt();
           });
         });
+        await dbRun(db, "COMMIT");
 
+        console.log(`Inserted ${insertedCount} players with dynamic opscores`);
+
+        const avgLegacyRaw = scoringUtils.average(rawLegacyOpscores);
+        const minLegacyRaw = Math.min(...rawLegacyOpscores);
+        const maxLegacyRaw = Math.max(...rawLegacyOpscores);
+        const avgDynamicRaw = scoringUtils.average(rawDynamicOpscores);
+        const minDynamicRaw = Math.min(...rawDynamicOpscores);
+        const maxDynamicRaw = Math.max(...rawDynamicOpscores);
+        const avgNormalized = scoringUtils.average(normalizedOpscores);
+        const minNormalized = Math.min(...normalizedOpscores);
+        const maxNormalized = Math.max(...normalizedOpscores);
+
+        console.log(
+          `Legacy raw opscore stats - Avg: ${avgLegacyRaw.toFixed(2)}, Min: ${minLegacyRaw.toFixed(2)}, Max: ${maxLegacyRaw.toFixed(2)}`,
+        );
+        console.log(
+          `Dynamic raw opscore stats - Avg: ${avgDynamicRaw.toFixed(2)}, Min: ${minDynamicRaw.toFixed(2)}, Max: ${maxDynamicRaw.toFixed(2)}`,
+        );
+        console.log(
+          `Dynamic normalized opscore stats - Avg: ${avgNormalized.toFixed(2)}, Min: ${minNormalized.toFixed(2)}, Max: ${maxNormalized.toFixed(2)}`,
+        );
+        console.log(
+          `Dynamic normalization anchors - Min: ${percentiles.min.toFixed(2)}, Median: ${percentiles.median.toFixed(2)}, Max: ${percentiles.max.toFixed(2)}`,
+        );
+
+        const bins = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        const distribution = new Array(bins.length - 1).fill(0);
+
+        for (const score of normalizedOpscores) {
+          for (let i = 0; i < bins.length - 1; i++) {
+            if (score >= bins[i] && score < bins[i + 1]) {
+              distribution[i]++;
+              break;
+            } else if (score === 10 && i === bins.length - 2) {
+              distribution[i]++;
+              break;
+            }
+          }
+        }
+
+        console.log("Normalized score distribution:");
+        for (let i = 0; i < distribution.length; i++) {
+          const range = `${bins[i]}-${bins[i + 1]}`;
+          console.log(`  ${range}: ${distribution[i]} players`);
+        }
+
+        db.close((closeErr) => {
+          if (closeErr) {
+            reject(closeErr);
+            return;
+          }
+          resolve();
+        });
       } catch (err) {
+        try {
+          await dbRun(db, "ROLLBACK");
+        } catch {
+          // Ignore rollback errors if a transaction was never opened.
+        }
         db.close();
-        return reject(err);
+        reject(err);
       }
-    });
+    })();
   });
 }
 

@@ -125,11 +125,6 @@ export default function PathfinderGraphOverlay({
     <div
       className="pathfinder-overlay"
       style={{
-        position: "fixed",
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: "var(--sidebar-width, 340px)",
         background: "rgba(7, 10, 14, 0.42)",
         backdropFilter: "blur(18px)",
         WebkitBackdropFilter: "blur(18px)",
