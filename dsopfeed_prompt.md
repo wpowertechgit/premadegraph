@@ -342,20 +342,275 @@ function feedscoreAdjusted(baseline, role) {
 
 ---
 
-## Section 5: Role Multipliers (Configuration)
+## Section 5: Role-Specific Attribute Specifications
+
+### TOP Lane Role Implementation
+
+**Responsibilities:** Solo dominance, duel strength, map control, split-push
+
+**Weighted Attributes:**
+```javascript
+TOP_ATTRIBUTES = {
+  // Core KDA
+  kills:                                  { multiplier: 1.0,  source: "kills", meaning: "dueling success" },
+  assists:                                { multiplier: 0.965, source: "assists", meaning: "kill participation" },
+  deaths:                                 { multiplier: -0.25, source: "deaths", meaning: "dying penalty" },
+  
+  // Damage & Fight
+  damagePerMinute:                        { multiplier: 1.15, source: "challenges.damagePerMinute", meaning: "laning output" },
+  damageTakenOnTeamPercentage:            { multiplier: 1.0,  source: "challenges.damageTakenOnTeamPercentage", meaning: "damage absorption" },
+  physicalDamageDealtToChampions:         { multiplier: 0.8,  source: "physicalDamageDealtToChampions", meaning: "AD damage" },
+  magicDamageDealtToChampions:            { multiplier: 0.8,  source: "magicDamageDealtToChampions", meaning: "AP damage" },
+  
+  // Objectives
+  damageDealtToBuildings:                 { multiplier: 1.2, source: "damageDealtToBuildings", meaning: "split-push value" },
+  damageDealtToTurrets:                   { multiplier: 1.2, source: "damageDealtToTurrets", meaning: "structure impact" },
+  turretTakedowns:                        { multiplier: 0.8, source: "turretTakedowns", meaning: "early objective" },
+  turretPlatesTaken:                      { multiplier: 0.8, source: "challenges.turretPlatesTaken", meaning: "early plates" },
+  inhibitorTakedowns:                     { multiplier: 1.0, source: "inhibitorTakedowns", meaning: "major objective" },
+  
+  // Map Control
+  buffsStolen:                            { multiplier: 1.2, source: "challenges.buffsStolen", meaning: "map dominance" },
+  controlWardsPlaced:                     { multiplier: 0.9, source: "controlWardsPlaced", meaning: "river awareness" },
+  visionScore:                            { multiplier: 0.9, source: "visionScore", meaning: "map awareness" },
+  detectorWardsPlaced:                    { multiplier: 0.8, source: "detectorWardsPlaced", meaning: "counter-warding" },
+  wardTakedowns:                          { multiplier: 0.7, source: "wardTakedowns", meaning: "vision denial" },
+  epicMonsterStolenWithoutSmite:          { multiplier: 1.0, source: "challenges.epicMonsterStolenWithoutSmite", meaning: "high-value play" },
+  
+  // Teamfight
+  killsNearEnemyTurret:                   { multiplier: 0.8, source: "challenges.killsNearEnemyTurret", meaning: "dive stats" },
+  knockEnemyIntoTeamAndKill:              { multiplier: 0.8, source: "challenges.knockEnemyIntoTeamAndKill", meaning: "setup plays" },
+  multikills:                             { multiplier: 0.6, source: "multikills", meaning: "decisive moments" },
+  takedownsInAlcove:                      { multiplier: 0.7, source: "challenges.takedownsInAlcove", meaning: "alcove control" },
+  
+  // Economy & Early
+  goldPerMinute:                          { multiplier: 1.05, source: "calculated from goldEarned/gameDuration", meaning: "economy" },
+  firstBloodKill:                         { multiplier: 0.5, source: "firstBloodKill", meaning: "early dominance" },
+  firstTowerKill:                         { multiplier: 0.3, source: "firstTowerKill", meaning: "first objective" },
+  laneMinionsFirst10Minutes:              { multiplier: 0.7, source: "challenges.laneMinionsFirst10Minutes", meaning: "CS early" },
+  
+  // Impact
+  teamDamagePercentage:                   { multiplier: 0.8, source: "challenges.teamDamagePercentage", meaning: "relative impact" },
+  win:                                    { multiplier: 0.25, source: "win", meaning: "outcome weight" }
+}
+```
+
+### JUNGLE Role Implementation
+
+**Responsibilities:** Objective control, ganking,  vision clearing, level advantages, counter-jungling
+
+**Weighted Attributes:**
+```javascript
+JUNGLE_ATTRIBUTES = {
+  // Core KDA
+  kills:                                  { multiplier: 1.0,  source: "kills", meaning: "gank success" },
+  assists:                                { multiplier: 0.965, source: "assists", meaning: "gank participation" },
+  deaths:                                 { multiplier: -0.25, source: "deaths", meaning: "penalty" },
+  
+  // Solo Plays
+  soloKills:                              { multiplier: 0.8, source: "challenges.soloKills", meaning: "dueling strength" },
+  soloBaronKills:                         { multiplier: 1.5, source: "challenges.soloBaronKills", meaning: "solo objective" },
+  
+  // Objectives (PRIMARY)
+  teamBaronKills:                         { multiplier: 1.2, source: "baronKills", meaning: "major objective" },
+  teamDragonKills:                        { multiplier: 1.1, source: "dragonKills", meaning: "dragon priority" },
+  teamElderDragonKills:                   { multiplier: 1.3, source: "challenges.elderDragonKillsWithOpposingSoul (related)", meaning: "ultimate objective" },
+  riftHeraldKills:                        { multiplier: 0.8, source: "challenges.riftHeraldTakedowns", meaning: "structural setup" },
+  scuttleCrabs:                           { multiplier: 0.7, source: "challenges.scuttleCrabKills", meaning: "map awareness + rotation" },
+  
+  // Vision (CORE JOB)
+  wardTakedowns:                          { multiplier: 1.4, source: "wardTakedowns", meaning: "clearing vision **BIGGER WEIGHT**" },
+  detectorWardsPlaced:                    { multiplier: 1.2, source: "detectorWardsPlaced", meaning: "counter-warding" },
+  controlWardsPlaced:                     { multiplier: 1.4, source: "controlWardsPlaced", meaning: "jungle pathing vision" },
+  visionScore:                            { multiplier: 1.4, source: "visionScore", meaning: "map control + clearing" },
+  
+  // Plays & Cooldowns
+  epicMonsterStolenWithoutSmite:          { multiplier: 1.0, source: "challenges.epicMonsterStolenWithoutSmite", meaning: "high-value counterplay" },
+  killAfterHiddenWithAlly:                { multiplier: 0.9, source: "challenges.killAfterHiddenWithAlly", meaning: "setup coordination" },
+  killsOnLanersEarlyJungleAsJungler:      { multiplier: 0.9, source: "challenges.killsOnLanersEarlyJungleAsJungler", meaning: "early pressure" },
+  takedownsAfterGainingLevelAdvantage:    { multiplier: 0.9, source: "challenges.takedownsAfterGainingLevelAdvantage", meaning: "snowball efficiency" },
+  
+  // Damage & Utility
+  damagePerMinute:                        { multiplier: 1.0, source: "challenges.damagePerMinute", meaning: "balanced output" },
+  knockEnemyIntoTeamAndKill:              { multiplier: 0.9, source: "challenges.knockEnemyIntoTeamAndKill", meaning: "setup plays" },
+  totalHeal:                              { multiplier: 0.3, source: "totalHeal", meaning: "some sustain" },
+  totalDamageShieldedOnTeammates:         { multiplier: 0.3, source: "totalDamageShieldedOnTeammates", meaning: "minimal utility" },
+  
+  // Economy
+  goldPerMinute:                          { multiplier: 0.7, source: "calculated", meaning: "lower gold than laners" },
+  
+  // Early & Impact
+  firstBloodKill:                         { multiplier: 0.5, source: "firstBloodKill", meaning: "early initiation" },
+  win:                                    { multiplier: 0.25, source: "win", meaning: "outcome" }
+}
+```
+
+### MIDDLE Role Implementation
+
+**Responsibilities:** Roaming, map awareness, balanced damage, lane pressure
+
+**Weighted Attributes:**
+```javascript
+MIDDLE_ATTRIBUTES = {
+  // Core KDA + Roaming
+  kills:                                  { multiplier: 1.0, source: "kills", meaning: "roaming kill contribution" },
+  assists:                                { multiplier: 0.965, source: "assists", meaning: "kill participation" },
+  deaths:                                 { multiplier: -0.25, source: "deaths", meaning: "penalty" },
+  killsOnOtherLanesEarlyJungleAsLaner:   { multiplier: 1.0, source: "challenges.killsOnOtherLanesEarlyJungleAsLaner", meaning: "**ROAMING KILLS**" },
+  
+  // Damage & Output
+  damagePerMinute:                        { multiplier: 1.05, source: "challenges.damagePerMinute", meaning: "mid-game damage" },
+  physicalDamageDealtToChampions:         { multiplier: 0.5, source: "physicalDamageDealtToChampions", meaning: "AD viable" },
+  magicDamageDealtToChampions:            { multiplier: 0.5, source: "magicDamageDealtToChampions", meaning: "AP viable" },
+  teamDamagePercentage:                   { multiplier: 0.8, source: "challenges.teamDamagePercentage", meaning: "relative impact" },
+  
+  // Vision & Roaming
+  visionScore:                            { multiplier: 1.2, source: "visionScore", meaning: "roaming timing vision" },
+  controlWardsPlaced:                     { multiplier: 1.2, source: "controlWardsPlaced", meaning: "rotation vision" },
+  wardsPlaced:                            { multiplier: 0.8, source: "wardsPlaced", meaning: "roaming support" },
+  detectorWardsPlaced:                    { multiplier: 1.0, source: "detectorWardsPlaced", meaning: "counter-warding" },
+  wardTakedowns:                          { multiplier: 0.9, source: "wardTakedowns", meaning: "vision denial" },
+  
+  // Objectives & Pressure
+  damageDealtToBuildings:                 { multiplier: 0.9, source: "damageDealtToBuildings", meaning: "roam follow-up turrets" },
+  damageDealtToTurrets:                   { multiplier: 0.9, source: "damageDealtToTurrets", meaning: "objective participation" },
+  turretTakedowns:                        { multiplier: 0.7, source: "turretTakedowns", meaning: "roam objective" },
+  takedownsAfterGainingLevelAdvantage:    { multiplier: 0.8, source: "challenges.takedownsAfterGainingLevelAdvantage", meaning: "leverage mid priority" },
+  
+  // Utility & Plays
+  enemyChampionImmobilizations:           { multiplier: 0.5, source: "challenges.enemyChampionImmobilizations", meaning: "some utility CC" },
+  knockEnemyIntoTeamAndKill:              { multiplier: 0.7, source: "challenges.knockEnemyIntoTeamAndKill", meaning: "setup plays" },
+  
+  // Economy & Early
+  goldPerMinute:                          { multiplier: 1.1, source: "calculated", meaning: "mid secures wave" },
+  laneMinionsFirst10Minutes:              { multiplier: 0.7, source: "challenges.laneMinionsFirst10Minutes", meaning: "CS efficiency early" },
+  firstBloodKill:                         { multiplier: 0.5, source: "firstBloodKill", meaning: "early roam impact" },
+  firstTowerAssist:                       { multiplier: 0.3, source: "firstTowerAssist", meaning: "roam follow-up" },
+  
+  // Positioning
+  skillshotsDodged:                       { multiplier: 0.3, source: "challenges.skillshotsDodged", meaning: "positioning for rotations" },
+  
+  // Outcome
+  win:                                    { multiplier: 0.25, source: "win", meaning: "outcome" }
+}
+```
+
+### BOTTOM (ADC) Role Implementation
+
+**Responsibilities:** Gold priority, sustained DPS, positioning safety, dual-lane synergy
+
+**Weighted Attributes:**
+```javascript
+BOTTOM_ATTRIBUTES = {
+  // Core KDA
+  kills:                                  { multiplier: 1.0, source: "kills", meaning: "teamfight cleanup" },
+  assists:                                { multiplier: 0.965, source: "assists", meaning: "kill participation" },
+  deaths:                                 { multiplier: -0.25, source: "deaths", meaning: "penalty (critical resource)" },
+  
+  // Economy (PRIORITY ROLE)
+  goldPerMinute:                          { multiplier: 1.3, source: "calculated", meaning: "**HIGHEST gold priority**" },
+  goldEarned:                             { multiplier: 0.8, source: "goldEarned", meaning: "direct resource" },
+  
+  // Damage (PRIMARY DPS)
+  damagePerMinute:                        { multiplier: 1.4, source: "challenges.damagePerMinute", meaning: "**PRIMARY DPS source**" },
+  physicalDamageDealtToChampions:         { multiplier: 0.7, source: "physicalDamageDealtToChampions", meaning: "carry damage (mostly AD)" },
+  magicDamageDealtToChampions:            { multiplier: 0.5, source: "magicDamageDealtToChampions", meaning: "carry damage (some AP)" },
+  trueDamageDealtToChampions:             { multiplier: 0.5, source: "trueDamageDealtToChampions", meaning: "all damage counts" },
+  teamDamagePercentage:                   { multiplier: 1.0, source: "challenges.teamDamagePercentage", meaning: "sustained damage focus" },
+  
+  // Vision (IMPORTANT - NOT LESS THAN SUPPORT)
+  visionScore:                            { multiplier: 1.1, source: "visionScore", meaning: "**VISION CRITICAL for safety**" },
+  controlWardsPlaced:                     { multiplier: 1.1, source: "controlWardsPlaced", meaning: "defensive warding" },
+  wardsPlaced:                            { multiplier: 1.1, source: "wardsPlaced", meaning: "safety vision" },
+  visionWardsBoughtInGame:                { multiplier: 0.8, source: "visionWardsBoughtInGame", meaning: "defensive investment" },
+  detectorWardsPlaced:                    { multiplier: 0.8, source: "detectorWardsPlaced", meaning: "duo lane sweeping" },
+  
+  // Positioning (CRITICAL FOR ADC)
+  skillshotsDodged:                       { multiplier: 0.5, source: "challenges.skillshotsDodged", meaning: "**positioning safety measure**" },
+  damageSelfMitigated:                    { multiplier: 0.4, source: "challenges.damageSelfMitigated", meaning: "positioning awareness" },
+  
+  // Teamfight & Plays
+  takedowns:                              { multiplier: 0.8, source: "challenges.takedowns", meaning: "teamfight presence" },
+  killingSprees:                          { multiplier: 0.7, source: "killingSprees", meaning: "carry snowball" },
+  multikills:                             { multiplier: 0.6, source: "multikills", meaning: "teamfight cleanup" },
+  killsUnderOwnTurret:                    { multiplier: 0.5, source: "challenges.killsUnderOwnTurret", meaning: "tower defense" },
+  
+  // Early Game & Objectives
+  firstBloodKill:                         { multiplier: 0.4, source: "firstBloodKill", meaning: "early lane pressure" },
+  laneMinionsFirst10Minutes:              { multiplier: 0.8, source: "challenges.laneMinionsFirst10Minutes", meaning: "early duo economy" },
+  turretPlatesTaken:                      { multiplier: 0.7, source: "challenges.turretPlatesTaken", meaning: "bot lane early objective" },
+  
+  // De-weighted (solo lane mechanics)
+  soloKills:                              { multiplier: 0.3, source: "challenges.soloKills", meaning: "**LESS weight** (has support)" },
+  killsOnOtherLanesEarlyJungleAsLaner:   { multiplier: 0.2, source: "challenges.killsOnOtherLanesEarlyJungleAsLaner", meaning: "**LESS weight** (focus lane)" },
+  
+  // Outcome
+  win:                                    { multiplier: 0.25, source: "win", meaning: "outcome" }
+}
+```
+
+### UTILITY (Support) Role Implementation
+
+**Responsibilities:** Vision dominance, peeling, damage mitigation, heals/shields, ward economy
+
+**Weighted Attributes:**
+```javascript
+UTILITY_ATTRIBUTES = {
+  // Core KDA (Assists PRIMARY)
+  kills:                                  { multiplier: 0.3, source: "kills", meaning: "**NOT primary** (setup value)" },
+  assists:                                { multiplier: 0.965, source: "assists", meaning: "**PRIMARY contribution**" },
+  deaths:                                 { multiplier: -0.2, source: "deaths", meaning: "**LOWER penalty** (expected)" },
+  
+  // Economy (NOT RELEVANT)
+  goldPerMinute:                          { multiplier: 0.4, source: "calculated", meaning: "**LOWEST gold role**" },
+  
+  // Vision (MAXIMUM WEIGHT - WARD GAME)
+  visionScore:                            { multiplier: 1.8, source: "visionScore", meaning: "**MAXIMUM WEIGHT: Ward game**" },
+  wardsPlaced:                            { multiplier: 1.5, source: "wardsPlaced", meaning: "**PRIMARY STAT**" },
+  controlWardsPlaced:                     { multiplier: 1.4, source: "controlWardsPlaced", meaning: "ward economy items" },
+  detectorWardsPlaced:                    { multiplier: 1.6, source: "detectorWardsPlaced", meaning: "**BIGGER WEIGHT: Sweeping job**" },
+  visionWardsBoughtInGame:                { multiplier: 1.0, source: "visionWardsBoughtInGame", meaning: "warding investment" },
+  wardsGuarded:                           { multiplier: 0.6, source: "challenges.wardsGuarded", meaning: "defense posture" },
+  
+  // Vision Clearing (CORE JOB)
+  wardsKilled:                            { multiplier: 0.9, source: "wardsKilled", meaning: "vision preservation" },
+  wardTakedowns:                          { multiplier: 1.5, source: "wardTakedowns", meaning: "**BIGGER WEIGHT: Support clearing**" },
+  
+  // Peeling & Utility (CORE STATS)
+  enemyChampionImmobilizations:           { multiplier: 1.5, source: "challenges.enemyChampionImmobilizations", meaning: "**CORE: CC is primary**" },
+  totalDamageShieldedOnTeammates:         { multiplier: 1.5, source: "totalDamageShieldedOnTeammates", meaning: "**CORE: Peeling/protection**" },
+  totalHeal:                              { multiplier: 1.4, source: "totalHeal", meaning: "**CORE: Sustain enabled**" },
+  damageSelfMitigated:                    { multiplier: 1.4, source: "challenges.damageSelfMitigated", meaning: "**CORE: Tanking for team**" },
+  timeCCingOthers:                        { multiplier: 1.2, source: "challenges.timeCCingOthers", meaning: "teamfight control duration" },
+  knockEnemyIntoTeamAndKill:              { multiplier: 1.0, source: "challenges.knockEnemyIntoTeamAndKill", meaning: "setup plays" },
+  
+  // NOT Damage Role
+  damagePerMinute:                        { multiplier: 0.5, source: "challenges.damagePerMinute", meaning: "**NOT damage role**" },
+  physicalDamageDealtToChampions:         { multiplier: 0.3, source: "physicalDamageDealtToChampions", meaning: "minimal damage" },
+  magicDamageDealtToChampions:            { multiplier: 0.3, source: "magicDamageDealtToChampions", meaning: "minimal damage" },
+  teamDamagePercentage:                   { multiplier: 0.3, source: "challenges.teamDamagePercentage", meaning: "enablement role" },
+  damageDealtToBuildings:                 { multiplier: 0.2, source: "damageDealtToBuildings", meaning: "minimal (not job)" },
+  
+  // Economy & Early (MINIMAL)
+  laneMinionsFirst10Minutes:              { multiplier: 0.1, source: "challenges.laneMinionsFirst10Minutes", meaning: "should be minimal" },
+  firstBloodAssist:                       { multiplier: 0.3, source: "firstBloodAssist", meaning: "setup assist value" },
+  firstTowerAssist:                       { multiplier: 0.2, source: "firstTowerAssist", meaning: "support enablement" },
+  
+  // Outcome
+  win:                                    { multiplier: 0.25, source: "win", meaning: "outcome" }
+}
+```
 
 ---
 
----
+## Section 6: Role Multipliers Configuration
 
-## Section 5: Role Multipliers Configuration
-
-In `backend/scoring_config.js`:
+In `backend/scoring_config.js`, use these pre-calculated multipliers derived from the attribute specifications above:
 
 ```javascript
 /**
  * Performance Scoring Configuration
- * 8-artifact system with role-specific multipliers
+ * Role-specific multipliers for 8-artifact scoring
  */
 
 const ROLE_MULTIPLIERS = {
@@ -379,7 +634,7 @@ module.exports = { ROLE_MULTIPLIERS, DEATH_TOLERANCE };
 
 ---
 
-## Section 6: Implementation Functions
+## Section 7: Implementation Functions
 
 In `backend/lib/scoring_utils.js`:
 
