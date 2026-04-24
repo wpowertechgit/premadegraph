@@ -26,5 +26,3 @@ backend/pathfinder-rust/cache
 .tectonic-cache/
 .tools/
 tmp-tectonic-test/
-docs/mainraw.pdf
-docs/mainraw.tex
