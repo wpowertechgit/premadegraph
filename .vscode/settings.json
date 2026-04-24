@@ -1,0 +1,31 @@
+{
+  "latex-workshop.latex.outDir": "%DIR%",
+  "latex-workshop.latex.autoBuild.run": "never",
+  "latex-workshop.latex.tools": [
+    {
+      "name": "tectonic",
+      "command": "${workspaceFolder}/.tools/tectonic/tectonic.exe",
+      "env": {
+        "TECTONIC_CACHE_DIR": "${workspaceFolder}/.tectonic-cache"
+      },
+      "args": [
+        "%DOC%"
+      ]
+    }
+  ],
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "tectonic",
+      "tools": [
+        "tectonic"
+      ]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "first",
+  "latex-workshop.latex.rootFile.useSubFile": false,
+  "latex-workshop.latex.search.rootFiles.include": [
+    "docs/*.tex",
+    "docs/*.tex.tex"
+  ],
+  "latex-workshop.view.pdf.viewer": "tab"
+}

@@ -23,4 +23,8 @@ AGENTS.md
 backend/pathfinder-rust/cache
 *.db
 *cwd
-*.pdf
+.tectonic-cache/
+.tools/
+tmp-tectonic-test/
+docs/mainraw.pdf
+docs/mainraw.tex
