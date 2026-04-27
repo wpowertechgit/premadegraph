@@ -1,0 +1,44 @@
+{
+  "datasetId": "soloq",
+  "collectorMode": "soloq-radial",
+  "mode": "radial-random",
+  "platformRouting": "eun1",
+  "regionalRouting": "europe",
+  "queueType": "420",
+  "seedPlayers": [],
+  "seedCount": 1,
+  "matchesPerPlayer": 10,
+  "initialMatchesPerSeed": 15,
+  "maxPlayers": 120,
+  "maxIterations": 120,
+  "maxMatches": 950,
+  "requestsPerSecond": 15,
+  "requestsPer2Min": 90,
+  "probeMatchCount": 5,
+  "minimumPremadeRepeats": 2,
+  "randomSeed": 42,
+  "persistMetadata": true,
+  "resumeFromCheckpoint": true,
+  "checkpointEveryMatches": 5,
+  "discovery": {
+    "randomPlayersPerMatchMin": 1,
+    "randomPlayersPerMatchMax": 2
+  },
+  "constraints": {
+    "strict": true,
+    "minTier": "MASTER",
+    "allowedTiers": [
+      "MASTER"
+    ],
+    "minLeaguePoints": 700,
+    "maxLeaguePoints": 800,
+    "requireRankValidation": true,
+    "rejectPremadeRepeatAt": 4,
+    "maxMatchAgeDays": 30,
+    "requireCompleteParticipantFields": true
+  },
+  "notes": {
+    "purpose": "Master+ EUNE SoloQ control dataset for performance-only baseline and genetic-neurosim seeding.",
+    "manualSeedOverride": "Put one chosen entry-player PUUID in seedPlayers to skip automatic 700-800 LP Master seed discovery."
+  }
+}

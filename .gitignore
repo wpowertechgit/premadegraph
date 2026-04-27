@@ -26,3 +26,11 @@ backend/pathfinder-rust/cache
 .tectonic-cache/
 .tools/
 tmp-tectonic-test/
+*stderr.txt
+*stdout.txt
+tools/
+docs/databaseproject/simple-interface/bin
+docs/databaseproject/simple-interface/Data
+docs/databaseproject/simple-interface/obj
+*.mmd
+*.drawio

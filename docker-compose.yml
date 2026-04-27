@@ -12,6 +12,23 @@ services:
       - NODE_ENV=development
       - GRAPH_DB_PATH=/app/data/databases/default/playersrefined.db
       - PATHFINDER_RUST_BIN=/app/pathfinder-rust/target/debug/pathfinder_rust
+      - DB_EXPLORER_ORIGIN=http://db-explorer:5088
+    depends_on:
+      - db-explorer
+
+  db-explorer:
+    build:
+      context: .
+      dockerfile: docs/databaseproject/simple-interface/Dockerfile
+    ports:
+      - "5088:5088"
+    volumes:
+      - ./backend:/workspace/backend
+      - ./playersrefined.db:/workspace/playersrefined.db
+      - ./docs/databaseproject/simple-interface/Data:/workspace/docs/databaseproject/simple-interface/Data
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:5088
+      - DB_EXPLORER_PATH_BASE=/db-explorer
 
   frontend:
     build: ./frontend

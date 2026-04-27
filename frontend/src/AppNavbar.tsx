@@ -49,6 +49,7 @@ type NavItem = {
   label: string;
   description: string;
   icon: React.ReactNode;
+  external?: boolean;
 };
 
 type ActionCardProps = {
@@ -84,6 +85,25 @@ function SidebarLink({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  if (item.external) {
+    return (
+      <a
+        href={item.to}
+        title={collapsed ? item.label : item.description}
+        className="app-sidebar__link"
+        onClick={onNavigate}
+      >
+        <span className="app-sidebar__link-icon">{item.icon}</span>
+        {!collapsed ? (
+          <span className="app-sidebar__link-copy">
+            <span className="app-sidebar__link-label">{item.label}</span>
+            <span className="app-sidebar__link-meta">{item.description}</span>
+          </span>
+        ) : null}
+      </a>
+    );
+  }
+
   return (
     <NavLink
       to={item.to}
@@ -246,6 +266,15 @@ export default function AppNavbar({
       label: t.app.nav.pathfinderLab,
       description: t.app.nav.pathfinderLabDescription,
       icon: <FaRoute />,
+    },
+    {
+      to: "http://localhost:3001/db-explorer/",
+      label: language === "hu" ? "DB Explorer" : "DB Explorer",
+      description: language === "hu"
+        ? "ASP.NET Core adatbázis-böngésző datasetválasztóval"
+        : "ASP.NET Core database browser with dataset selection",
+      icon: <FaDatabase />,
+      external: true,
     },
   ];
 

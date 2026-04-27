@@ -1,0 +1,97 @@
+{
+  "datasetId": "flexset",
+  "collectorMode": "seed-expansion",
+  "mode": "seed-based",
+  "platformRouting": "eun1",
+  "regionalRouting": "europe",
+  "queueType": "440",
+  "seedPlayers": [
+    "r1udQeRaorQ5U2U2UGQFF2bvOwWOhtN5UkR94-4aloDPxPTRT1dpciOHAvBk9tz-J4vyEMEeSUkPOw",
+    "A5XFXdy-Ih2O3JFlDTgl8lW9FyfTaFdKu-u4BiRPXSA8dPaDJqbcUyCZcRe8z35ZgTVb0seq_duV4Q",
+    "ILCTUacom-TxSosSsG-4x5cc_AQxbVD_t5V-Tf6X4GgZF0rm_pIBuhd0BK1R5bDKr05DVHffqXtbYQ",
+    "gL_yzeED0I55kChG1atzz5F3H1VgfictxeMEtOPSVqtn_91P9QXJcVYXMaiGwH8V33uyhQmyrCjHlA",
+    "gfBTGpP-V3UJ9OCG-n6wq8CDPNjA2Wv5H3FgS3n6j1FJAdajY7mfieksBKxNS2jgbA9gk4fuuSZxEQ",
+    "dHKyBQWZiYfYnkeyPS_QTQZ14xIZ63Ejf-oeeHaRYS_3Y2uOGE5fT6YKVV3Ka7YPaL4MDsSgukuGtg",
+    "rLyqr1_vxGAAATcS75huWHWZ93MIwD43zrCBRc9z5eGzlNy-oFGuq_AU_xRw0f_Sn6EIqusdmJiWdg",
+    "iWC-G68ta-WpSVdHoWZQKDelA6J7eBiP3fBfzQ8TweTOGt1s05JhOrmH9Mzzsuei7OmvaGXDHHY6jQ",
+    "4ZLfelHugq8GFjS_-IjVUUZc3Xyr2qSE-9nYbVsBnoEAb9T73mQivpef8FSWgb-G3O-UmP6bVUddKg",
+    "CCYkJ_p8eqwt94cvWDWy4PbZnzENX2dyJSs7KvYB_fyqu28Kh36Co58P5Dmefocp0x1-PRviZh6Yeg"
+  ],
+  "seedMetadata": [
+    {
+      "riotId": "HARAMBET#EUNE",
+      "role": "MID",
+      "puuid": "r1udQeRaorQ5U2U2UGQFF2bvOwWOhtN5UkR94-4aloDPxPTRT1dpciOHAvBk9tz-J4vyEMEeSUkPOw"
+    },
+    {
+      "riotId": "Cωelzahar#UwU",
+      "role": "MID",
+      "puuid": "A5XFXdy-Ih2O3JFlDTgl8lW9FyfTaFdKu-u4BiRPXSA8dPaDJqbcUyCZcRe8z35ZgTVb0seq_duV4Q"
+    },
+    {
+      "riotId": "Anakin390#EUN",
+      "role": "ADC",
+      "puuid": "ILCTUacom-TxSosSsG-4x5cc_AQxbVD_t5V-Tf6X4GgZF0rm_pIBuhd0BK1R5bDKr05DVHffqXtbYQ"
+    },
+    {
+      "riotId": "Zauns Lightning#POCO",
+      "role": "ADC",
+      "puuid": "gL_yzeED0I55kChG1atzz5F3H1VgfictxeMEtOPSVqtn_91P9QXJcVYXMaiGwH8V33uyhQmyrCjHlA"
+    },
+    {
+      "riotId": "Crismalone#EUNE",
+      "role": "JUNGLE",
+      "puuid": "gfBTGpP-V3UJ9OCG-n6wq8CDPNjA2Wv5H3FgS3n6j1FJAdajY7mfieksBKxNS2jgbA9gk4fuuSZxEQ"
+    },
+    {
+      "riotId": "szolim21savage#2115",
+      "role": "JUNGLE",
+      "puuid": "dHKyBQWZiYfYnkeyPS_QTQZ14xIZ63Ejf-oeeHaRYS_3Y2uOGE5fT6YKVV3Ka7YPaL4MDsSgukuGtg"
+    },
+    {
+      "riotId": "Camera Rio#EUNE",
+      "role": "SUPPORT",
+      "puuid": "rLyqr1_vxGAAATcS75huWHWZ93MIwD43zrCBRc9z5eGzlNy-oFGuq_AU_xRw0f_Sn6EIqusdmJiWdg"
+    },
+    {
+      "riotId": "STEFANSTEFANSKY#EUNE1",
+      "role": "SUPPORT",
+      "puuid": "iWC-G68ta-WpSVdHoWZQKDelA6J7eBiP3fBfzQ8TweTOGt1s05JhOrmH9Mzzsuei7OmvaGXDHHY6jQ"
+    },
+    {
+      "riotId": "Nicram#Urgod",
+      "role": "TOP",
+      "puuid": "4ZLfelHugq8GFjS_-IjVUUZc3Xyr2qSE-9nYbVsBnoEAb9T73mQivpef8FSWgb-G3O-UmP6bVUddKg"
+    },
+    {
+      "riotId": "jBancio#BOSS",
+      "role": "TOP",
+      "puuid": "CCYkJ_p8eqwt94cvWDWy4PbZnzENX2dyJSs7KvYB_fyqu28Kh36Co58P5Dmefocp0x1-PRviZh6Yeg"
+    }
+  ],
+  "seedCount": 10,
+  "matchesPerPlayer": 20,
+  "initialMatchesPerSeed": 30,
+  "maxPlayers": 600,
+  "maxIterations": 600,
+  "maxMatches": 5000,
+  "requestsPerSecond": 15,
+  "requestsPer2Min": 90,
+  "randomSeed": 42,
+  "persistMetadata": true,
+  "resumeFromCheckpoint": true,
+  "checkpointEveryMatches": 5,
+  "discovery": {
+    "includeParticipants": "all"
+  },
+  "constraints": {
+    "strict": false,
+    "requireRankValidation": false,
+    "maxMatchAgeDays": 30,
+    "requireCompleteParticipantFields": true
+  },
+  "notes": {
+    "purpose": "Master+ EUNE Ranked Flex seed expansion for signed graph, structural balance, assortativity, and temporal analysis.",
+    "manualSeedOverride": "Put 10 verified non-overlapping seed PUUIDs in seedPlayers to skip automatic Master+ seed discovery."
+  }
+}

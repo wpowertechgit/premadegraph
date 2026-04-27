@@ -1,11 +1,13 @@
 const express = require("express");
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const PORT = 3001;
+const DB_EXPLORER_ORIGIN = process.env.DB_EXPLORER_ORIGIN || "http://localhost:5088";
 const { execFile, spawn } = require("child_process");
 const { normalizePlayersByPuuid } = require("./normalize_players_by_puuid");
 const {
@@ -26,8 +28,12 @@ const LEGACY_RAW_DB_PATH = path.resolve(__dirname, "players.db");
 const LEGACY_REFINED_DB_PATH = path.resolve(__dirname, "..", "playersrefined.db");
 const LEGACY_CACHE_ROOT = path.resolve(__dirname, "pathfinder-rust", "cache");
 const ENV_FILE_PATH = path.join(__dirname, ".env");
+const COLLECTOR_CONFIGS_DIR = path.join(__dirname, "collector_configs");
 const DATASET_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-const MANAGED_RUNTIME_KEYS = new Set(["RIOT_API_KEY", "OPENROUTER_API_KEY"]);
+const MANAGED_RUNTIME_KEYS = new Set([
+  "RIOT_API_KEY",
+  "OPENROUTER_API_KEY",
+]);
 const MATCH_COLLECTOR_EVENT_PREFIX = "@@MATCH_COLLECTOR@@";
 const MATCH_COLLECTOR_LOG_LIMIT = 80;
 
@@ -217,6 +223,18 @@ function collectorDefaultConfig() {
     requestsPer2Min: 90,
     probeMatchCount: 5,
     minimumPremadeRepeats: 2,
+    platformRouting: "eun1",
+    regionalRouting: "europe",
+    seedPlayers: [],
+    seedCount: 1,
+    initialMatchesPerSeed: 10,
+    maxPlayers: 1,
+    maxMatches: 1000,
+    constraints: {},
+    discovery: {},
+    persistMetadata: true,
+    resumeFromCheckpoint: true,
+    checkpointEveryMatches: 5,
   };
 }
 
@@ -312,13 +330,23 @@ async function buildCollectorDatasetSummary(dataset = getActiveDataset()) {
 
 function normalizeCollectorStartPayload(payload = {}) {
   const defaults = collectorDefaultConfig();
-  const collectorMode = payload.collectorMode === "strengthen-graph" ? "strengthen-graph" : "standard";
-  const mode = payload.mode === "specific-puuid" ? "specific-puuid" : "random";
+  const collectorModes = new Set(["standard", "strengthen-graph", "seed-expansion", "soloq-radial"]);
+  const modes = new Set(["random", "specific-puuid", "seed-based", "radial-random"]);
+  const collectorMode = collectorModes.has(payload.collectorMode) ? payload.collectorMode : "standard";
+  const requestedMode = modes.has(payload.mode) ? payload.mode : "random";
+  const mode = collectorMode === "strengthen-graph"
+    ? "random"
+    : collectorMode === "seed-expansion"
+      ? "seed-based"
+      : collectorMode === "soloq-radial"
+        ? "radial-random"
+        : requestedMode;
   const queueType = ["", "420", "430", "440"].includes(String(payload.queueType ?? "")) ? String(payload.queueType ?? "") : "";
 
   return {
+    datasetId: payload.datasetId ? String(payload.datasetId).trim() : null,
     collectorMode,
-    mode: collectorMode === "strengthen-graph" ? "random" : mode,
+    mode,
     specificPuuid: String(payload.specificPuuid || "").trim(),
     matchesPerPlayer: Math.max(1, Math.min(20, Number(payload.matchesPerPlayer ?? defaults.matchesPerPlayer) || defaults.matchesPerPlayer)),
     maxIterations: Math.max(1, Math.min(500, Number(payload.maxIterations ?? defaults.maxIterations) || defaults.maxIterations)),
@@ -327,7 +355,54 @@ function normalizeCollectorStartPayload(payload = {}) {
     requestsPer2Min: Math.max(1, Math.min(99, Number(payload.requestsPer2Min ?? defaults.requestsPer2Min) || defaults.requestsPer2Min)),
     probeMatchCount: Math.max(1, Math.min(5, Number(payload.probeMatchCount ?? defaults.probeMatchCount) || defaults.probeMatchCount)),
     minimumPremadeRepeats: Math.max(2, Math.min(5, Number(payload.minimumPremadeRepeats ?? defaults.minimumPremadeRepeats) || defaults.minimumPremadeRepeats)),
+    platformRouting: String(payload.platformRouting || defaults.platformRouting).trim().toLowerCase(),
+    regionalRouting: String(payload.regionalRouting || defaults.regionalRouting).trim().toLowerCase(),
+    seedPlayers: Array.isArray(payload.seedPlayers) ? payload.seedPlayers.map((value) => String(value).trim()).filter(Boolean) : [],
+    seedCount: Math.max(1, Math.min(50, Number(payload.seedCount ?? defaults.seedCount) || defaults.seedCount)),
+    initialMatchesPerSeed: Math.max(1, Math.min(20, Number(payload.initialMatchesPerSeed ?? payload.matchesPerPlayer ?? defaults.initialMatchesPerSeed) || defaults.initialMatchesPerSeed)),
+    maxPlayers: Math.max(1, Math.min(1000, Number(payload.maxPlayers ?? payload.maxIterations ?? defaults.maxPlayers) || defaults.maxPlayers)),
+    maxMatches: Math.max(1, Math.min(10000, Number(payload.maxMatches ?? defaults.maxMatches) || defaults.maxMatches)),
+    constraints: payload.constraints && typeof payload.constraints === "object" ? payload.constraints : {},
+    discovery: payload.discovery && typeof payload.discovery === "object" ? payload.discovery : {},
+    persistMetadata: payload.persistMetadata !== false,
+    resumeFromCheckpoint: payload.resumeFromCheckpoint !== false,
+    checkpointEveryMatches: Math.max(1, Math.min(100, Number(payload.checkpointEveryMatches ?? defaults.checkpointEveryMatches) || defaults.checkpointEveryMatches)),
+    randomSeed: payload.randomSeed,
   };
+}
+
+function loadCollectorPresets() {
+  if (!fs.existsSync(COLLECTOR_CONFIGS_DIR)) {
+    return [];
+  }
+  return fs.readdirSync(COLLECTOR_CONFIGS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => {
+      const filePath = path.join(COLLECTOR_CONFIGS_DIR, entry.name);
+      const config = readJsonFile(filePath);
+      const presetName = entry.name.replace(/\.json$/u, "");
+      return {
+        id: presetName,
+        fileName: entry.name,
+        label: config.notes?.purpose || config.datasetId || presetName,
+        datasetId: config.datasetId || null,
+        collectorMode: config.collectorMode || "standard",
+        queueType: String(config.queueType || ""),
+        matchesPerPlayer: config.matchesPerPlayer,
+        maxPlayers: config.maxPlayers,
+        maxMatches: config.maxMatches,
+        constraints: config.constraints || {},
+        discovery: config.discovery || {},
+        notes: config.notes || {},
+        config,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function buildRiotApiKeyList() {
+  const key = parseEnvValue("RIOT_API_KEY");
+  return key ? [{ id: "riot", value: key }] : [];
 }
 
 function applyCollectorEvent(event) {
@@ -914,7 +989,12 @@ async function startMatchCollectorJob(payload) {
   ensureRiotApiKey();
 
   const normalized = normalizeCollectorStartPayload(payload);
-  const dataset = getActiveDataset();
+  const dataset = normalized.datasetId ? selectActiveDataset(normalized.datasetId) : getActiveDataset();
+  if (!dataset) {
+    const error = new Error(`Dataset "${normalized.datasetId}" does not exist.`);
+    error.statusCode = 400;
+    throw error;
+  }
   const datasetSummary = await buildCollectorDatasetSummary(dataset);
 
   if (normalized.collectorMode === "strengthen-graph" && !datasetSummary.canUseStrengthenMode) {
@@ -943,7 +1023,9 @@ async function startMatchCollectorJob(payload) {
     datasetId: dataset.id,
     rawDbPath: dataset.rawDbAbsolutePath,
     matchesDir: dataset.matchesAbsolutePath,
-    apiKey: parseEnvValue("RIOT_API_KEY"),
+    cacheDir: dataset.cacheAbsolutePath,
+    apiKey: ensureRiotApiKey(),
+    apiKeys: buildRiotApiKeyList(),
     stopSignalPath,
     randomSeed: Date.now(),
   };
@@ -1046,6 +1128,39 @@ function requestStopMatchCollectorJob() {
 }
 
 app.use(cors());
+app.use("/db-explorer", (req, res) => {
+  const target = new URL(req.originalUrl, DB_EXPLORER_ORIGIN);
+  const proxyRequest = http.request(
+    target,
+    {
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: target.host,
+      },
+    },
+    (proxyResponse) => {
+      res.status(proxyResponse.statusCode || 502);
+      for (const [header, value] of Object.entries(proxyResponse.headers)) {
+        if (typeof value !== "undefined") {
+          res.setHeader(header, value);
+        }
+      }
+      proxyResponse.pipe(res);
+    },
+  );
+
+  proxyRequest.on("error", (error) => {
+    console.error("Database explorer proxy failed:", error.message);
+    if (!res.headersSent) {
+      res.status(502).send("Database explorer service is unavailable.");
+    } else {
+      res.end();
+    }
+  });
+
+  req.pipe(proxyRequest);
+});
 app.use(bodyParser.json({ limit: "25mb" }));
 app.use('/graph-view', express.static(path.join(__dirname, 'output')));
 const backendDir = __dirname;
@@ -1361,6 +1476,15 @@ app.get("/api/match-collector/config", async (req, res) => {
   } catch (error) {
     console.error("Failed to load match collector config:", error.message);
     res.status(500).json({ error: "Failed to load match collector config." });
+  }
+});
+
+app.get("/api/match-collector/presets", (req, res) => {
+  try {
+    res.json({ presets: loadCollectorPresets() });
+  } catch (error) {
+    console.error("Failed to load match collector presets:", error.message);
+    res.status(500).json({ error: "Failed to load match collector presets." });
   }
 });
 
