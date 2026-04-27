@@ -173,6 +173,9 @@ export default function AppNavbar({
   const [runtimeKeyDrafts, setRuntimeKeyDrafts] = useState<Record<string, string>>({});
   const [savingRuntimeKey, setSavingRuntimeKey] = useState<string | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
+  const visibleRuntimeKeys = runtimeKeys.filter(
+    (runtimeKey) => !["RIOT_API_KEY_APP", "RIOT_API_KEY_DEVELOPER"].includes(runtimeKey.keyName),
+  );
 
   const navCopy = language === "hu"
     ? {
@@ -542,7 +545,7 @@ export default function AppNavbar({
                 caption={navCopy.runtimeKeysCaption}
                 collapsed={collapsed}
               >
-                {!collapsed ? runtimeKeys.map((runtimeKey) => (
+                {!collapsed ? visibleRuntimeKeys.map((runtimeKey) => (
                     <div key={runtimeKey.keyName} className="app-sidebar__key-card">
                     <div className="app-sidebar__key-header">
                       <div className="app-sidebar__key-name">
