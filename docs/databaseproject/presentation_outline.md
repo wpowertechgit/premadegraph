@@ -12,7 +12,7 @@ Az esport meccselőzmények strukturált játékos-, csapat-, szerep-, teljesít
 
 ## 3. dia - Szakirodalmi háttér
 
-Röviden említhető a MOBA szakirodalom, a League of Legends teljesítménymetrikák, a játékosközpontú hálózatok, a csapathatékonyság és hálózatszerkezet kapcsolata, valamint az időbeli online játékos hálózatok.
+Röviden említhető a MOBA szakirodalom, a League of Legends teljesítménymetrikák, a játékosközpontú hálózatok, a strukturális egyensúly, az assortativitás és a Brandes-féle betweenness centrality.
 
 ## 4. dia - Adatbázismodell
 
@@ -20,7 +20,7 @@ Mutasd be az ER diagramot. Magyarázd el a játékosok, meccsek, csapatok, rész
 
 ## 5. dia - Relációs megvalósítás
 
-Mutasd be a 10 táblás PostgreSQL sémát és a fő idegen kulcsokat. Emeld ki, hogy minden táblának legalább 5 attribútuma és mintaadata van.
+Mutasd be a 10 táblás PostgreSQL sémát és a fő idegen kulcsokat. Emeld ki, hogy minden táblának legalább 5 attribútuma és legalább 10 mintaadata van.
 
 ## 6. dia - Lekérdezések és nézetek
 
@@ -28,6 +28,7 @@ Mutasd be a két nézetet és néhány reprezentatív lekérdezést:
 
 - játékos teljesítmény összegzés;
 - klaszterállapot;
+- strukturális egyensúly és assortativitás eredménymezők;
 - JSON elemzési paraméterek;
 - rekurzív kapcsolatbejárás;
 - útkeresési előzmények.
@@ -57,8 +58,8 @@ Emeld ki, hogy a felület a backend meglévő SQLite adatbázisaiból generált 
 
 ## 9. dia - Eredmények
 
-Összefoglalható, hogy az adatbázis játékosrangsorolást, klaszterelemzést, kapcsolati bizonyítékokat, útkeresési előzményeket és reprodukálható elemzési futásokat támogat.
+Összefoglalható, hogy az adatbázis játékosrangsorolást, klaszterprofilokat, aláírt kapcsolati bizonyítékokat, útkeresési előzményeket és reprodukálható elemzési futásokat támogat.
 
 ## 10. dia - Következtetés
 
-Az adatbázis a Premade Graph projektet dokumentált elemző rendszerré alakítja. A beadandó teljes SQL csomagot, magyar LaTeX dokumentációt, ER/relációs diagramokat és valós backend-adatokra kötött ASP.NET Core adatbázis-böngészőt tartalmaz.
+Az adatbázis a Premade Graph projektet dokumentált elemző rendszerré alakítja. A beadandó teljes SQL csomagot, magyar LaTeX dokumentációt, diagramokat és valós backend-adatokra kötött ASP.NET Core adatbázis-böngészőt tartalmaz.

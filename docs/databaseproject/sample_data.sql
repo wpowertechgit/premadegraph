@@ -55,8 +55,8 @@ INSERT INTO clusters (cluster_code, cluster_type, algorithm, member_count, densi
 ('balance:1', 'signed_balance', 'triad_balance', 3, 1.00000, 7.80, 2.80, '{"balanced_ratio":0.83}'),
 ('balance:2', 'signed_balance', 'triad_balance', 3, 0.90000, 6.60, 3.90, '{"balanced_ratio":0.67}'),
 ('assortativity:1', 'assortativity', 'pearson_numeric', 5, 0.48000, 7.30, 3.00, '{"metric":"opscore"}'),
-('temporal:1', 'temporal_stability', 'rolling_variance', 2, 0.50000, 7.85, 2.45, '{"window":5}'),
-('cohesion:1', 'community_cohesion', 'edge_density', 4, 0.82000, 7.10, 3.20, '{"cohesion_rank":1}');
+('brandes:1', 'betweenness_centrality', 'brandes_parallel', 4, 0.50000, 7.85, 2.45, '{"weight_rule":"1/strength"}'),
+('neurosim_seed:1', 'profile_export', 'graph_profile_seed', 4, 0.82000, 7.10, 3.20, '{"target":"genetic_neurosim_v2"}');
 
 INSERT INTO cluster_members (cluster_id, player_id, member_role, is_bridge, is_star, centrality_score)
 SELECT ((player_id - 1) % 10) + 1, player_id,
@@ -65,19 +65,19 @@ SELECT ((player_id - 1) % 10) + 1, player_id,
 FROM players;
 
 INSERT INTO analysis_runs (run_type, graph_mode, started_at, finished_at, status, processed_nodes, processed_edges, parameters, result_summary) VALUES
-('cluster_build', 'ally', '2026-02-10 10:00', '2026-02-10 10:02', 'finished', 10, 10, '{"min_weight":3}', '{"clusters":3}'),
+('dataset_import', 'flexset', '2026-02-10 10:00', '2026-02-10 10:02', 'finished', 10, 10, '{"queue":"RANKED_FLEX_SR"}', '{"matches":4}'),
 ('signed_balance', 'signed', '2026-02-10 10:10', '2026-02-10 10:12', 'finished', 10, 10, '{"min_confidence":0.6}', '{"balanced_ratio":0.74}'),
 ('assortativity', 'ally', '2026-02-10 10:20', '2026-02-10 10:21', 'finished', 10, 6, '{"metric":"opscore"}', '{"coefficient":0.52}'),
 ('assortativity', 'battle', '2026-02-10 10:25', '2026-02-10 10:26', 'finished', 10, 10, '{"metric":"feedscore"}', '{"coefficient":0.08}'),
-('temporal_stability', 'matches', '2026-02-10 10:30', '2026-02-10 10:33', 'finished', 10, 0, '{"window":5}', '{"stable_players":4}'),
+('brandes_serial', 'battle', '2026-02-10 10:30', '2026-02-10 10:33', 'finished', 10, 10, '{"weight_rule":"1/strength"}', '{"top_player":"JunglePulse"}'),
 ('pathfinding', 'ally', '2026-02-10 10:40', '2026-02-10 10:41', 'finished', 10, 6, '{"algorithm":"astar"}', '{"queries":4}'),
 ('pathfinding', 'battle', '2026-02-10 10:45', '2026-02-10 10:46', 'finished', 10, 10, '{"algorithm":"dijkstra"}', '{"queries":3}'),
-('community_cohesion', 'ally', '2026-02-10 10:50', '2026-02-10 10:52', 'finished', 10, 6, '{"min_cluster_size":2}', '{"top_density":0.82}'),
-('brandes', 'ally', '2026-02-10 11:00', '2026-02-10 11:04', 'finished', 10, 6, '{"parallel":true}', '{"top_player":"JunglePulse"}'),
-('score_calibration', 'matches', '2026-02-10 11:10', '2026-02-10 11:15', 'finished', 10, 0, '{"model":"linear"}', '{"features":6}');
+('brandes_parallel', 'battle', '2026-02-10 10:50', '2026-02-10 10:52', 'finished', 10, 10, '{"parallel":true,"weight_rule":"1/strength"}', '{"top_player":"JunglePulse"}'),
+('profile_export', 'flexset', '2026-02-10 11:00', '2026-02-10 11:04', 'finished', 10, 6, '{"target":"neurosim_v2"}', '{"profiles":4}'),
+('dataset_import', 'soloq_dataset', '2026-02-10 11:10', '2026-02-10 11:15', 'finished', 10, 0, '{"queue":"RANKED_SOLO_5x5"}', '{"matches":6}');
 
-INSERT INTO performance_snapshots (player_id, run_id, match_sample_size, opscore, feedscore, volatility_index, best_streak, worst_streak)
-SELECT player_id, 5, match_count, opscore, feedscore, (10 - opscore) / 5.0, (player_id % 4) + 1, (player_id % 3)
+INSERT INTO performance_snapshots (player_id, run_id, match_sample_size, opscore, feedscore, score_spread, sample_quality, source_dataset)
+SELECT player_id, 3, match_count, opscore, feedscore, (10 - opscore) / 5.0, 'derived', 'flexset'
 FROM players;
 
 INSERT INTO path_queries (run_id, source_player_id, target_player_id, algorithm, graph_mode, path_length, total_weight, path_json) VALUES

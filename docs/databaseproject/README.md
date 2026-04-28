@@ -6,19 +6,16 @@ Ez a mappa a jelenlegi Premade Graph szakdolgozati projekt alapján készült ad
 
 ## Fájlok
 
-- `documentation.tex` - magyar nyelvű LaTeX dokumentáció, Times New Roman 12 pt beállítással.
-- `documentation.pdf` - Tectonic-kal generált PDF.
+- `documentation.tex` - magyar nyelvű LaTeX dokumentáció, Times New Roman 12 pt beállítással, a jelenlegi kutatási fókuszhoz igazítva.
+- `Adatbazis Project Dokumentacio.pdf` - Tectonic-kal generált, leadásra kész PDF.
 - `references.bib` - szakirodalmi hivatkozások gyűjteménye.
 - `week_plan.md` - heti bontású megfelelőségi térkép a kiírás alapján.
 - `schema.sql` - PostgreSQL séma 10 táblával, táblánként legalább 5 attribútummal.
 - `sample_data.sql` - mintaadatok, legalább 10 sor táblánként.
 - `views_queries.sql` - 2 nézet és 20 különböző lekérdezés.
 - `procedures_triggers.sql` - 5 tárolt eljárás, rekurzív függvény és 2 trigger.
-- `er_diagram.puml` - PlantUML ER diagramforrás.
-- `er_diagram.png` - PlantUML-ből renderelt ER diagram, amelyet a LaTeX dokumentáció is beilleszt.
-- `er_diagram.mmd` - Mermaid ER diagramforrás.
-- `relational_diagram.mmd` - Mermaid relációs diagram.
-- `premadegraph_database.drawio` - draw.io diagramforrás.
+- `er_diagram.png` - ER diagram kép, amelyet a LaTeX dokumentáció is beilleszt.
+- `premadegraph_database.drawio.png` - exportált adatbázisdiagram kép.
 - `simple-interface/` - ASP.NET Core adatbázis-böngésző, amely a backend valódi SQLite adatbázisaiból generált projektadatbázist olvassa.
 
 ## SQL futtatás
@@ -36,12 +33,6 @@ psql -d premadegraph_db -f procedures_triggers.sql
 
 ```bash
 tectonic documentation.tex
-```
-
-Az ER diagram újrarenderelése PlantUML-lel:
-
-```bash
-java -Djava.awt.headless=true -jar ../../tools/plantuml.jar -tpng er_diagram.puml
 ```
 
 ## ASP.NET adatbázis-böngésző futtatása
@@ -74,3 +65,14 @@ A böngésző a backend `data/datasets.json` regisztere alapján datasetválaszt
 Docker Compose indításkor a böngésző a fő backend felől is elérhető: `http://localhost:3001/db-explorer/`.
 
 PostgreSQL azért lett kiválasztva a tantárgyi változathoz, mert a feladat tárolt eljárásokat, triggereket, JSON lekérdezéseket, rekurzív logikát és output paramétereket is kér. A tényleges alkalmazás jelenleg SQLite-ot használ, de a fogalmi modell azonos.
+
+## Aktuális kutatási fókusz
+
+A dokumentáció és a mintaadatok a jelenlegi szakdolgozati scope-hoz igazodnak:
+
+- Flex Queue a fő aláírt hálózati adathalmaz;
+- SoloQ kontroll adathalmazként szerepel;
+- strukturális egyensúly, teljesítmény-assortativitás és Brandes-betweenness centrality a fő gráfelemzési irány;
+- Genetic NeuroSim v2 csak validált játékos- vagy klaszterprofilokból kap seed adatot.
+
+Nem része a csomagnak: Contraction Hierarchies, időbeli játékosstabilitás, közösségi kohézió kontra teljesítmény elemzés és adatvezérelt `opscore`-újratanítás.

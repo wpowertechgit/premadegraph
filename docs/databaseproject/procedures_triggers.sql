@@ -111,9 +111,9 @@ BEGIN
         match_sample_size,
         opscore,
         feedscore,
-        volatility_index,
-        best_streak,
-        worst_streak
+        score_spread,
+        sample_quality,
+        source_dataset
     )
     VALUES (
         p_player_id,
@@ -122,13 +122,15 @@ BEGIN
         COALESCE(refreshed_opscore, 0),
         COALESCE(refreshed_feedscore, 0),
         GREATEST(0, 10 - COALESCE(refreshed_opscore, 0)) / 5.0,
-        0,
-        0
+        'derived',
+        'flexset'
     )
     ON CONFLICT (player_id, run_id) DO UPDATE
     SET opscore = EXCLUDED.opscore,
         feedscore = EXCLUDED.feedscore,
-        volatility_index = EXCLUDED.volatility_index,
+        score_spread = EXCLUDED.score_spread,
+        sample_quality = EXCLUDED.sample_quality,
+        source_dataset = EXCLUDED.source_dataset,
         computed_at = CURRENT_TIMESTAMP
     RETURNING snapshot_id INTO p_snapshot_id;
 END;
@@ -230,7 +232,7 @@ $$;
 -- Example calls:
 -- CALL sp_get_player_summary(1, NULL, NULL, NULL, NULL);
 -- CALL sp_refresh_player_scores(1, NULL, NULL);
--- CALL sp_refresh_player_and_snapshot(1, 5, NULL);
+-- CALL sp_refresh_player_and_snapshot(1, 3, NULL);
 -- SELECT fn_relationship_reach_count(1, 3);
 -- CALL sp_create_path_query(6, 1, 10, 'astar', 'ally', '[1,2,3,5,10]'::jsonb, NULL);
 -- CALL sp_finish_analysis_run(6, 'finished', NULL);

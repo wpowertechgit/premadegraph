@@ -127,9 +127,9 @@ CREATE TABLE performance_snapshots (
     match_sample_size INTEGER NOT NULL DEFAULT 0,
     opscore NUMERIC(5,2) NOT NULL DEFAULT 0,
     feedscore NUMERIC(5,2) NOT NULL DEFAULT 0,
-    volatility_index NUMERIC(8,4) NOT NULL DEFAULT 0,
-    best_streak INTEGER NOT NULL DEFAULT 0,
-    worst_streak INTEGER NOT NULL DEFAULT 0,
+    score_spread NUMERIC(8,4) NOT NULL DEFAULT 0,
+    sample_quality TEXT NOT NULL DEFAULT 'sample',
+    source_dataset TEXT NOT NULL DEFAULT 'flexset',
     computed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (player_id, run_id)
 );

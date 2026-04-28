@@ -8,14 +8,14 @@ Fontos megkülönböztetés: a tantárgyi követelményekhez készült teljes ad
 
 | Követelmény | Állapot | Megvalósítás |
 | --- | --- | --- |
-| Magyar dokumentáció | Kész | `documentation.tex`, `documentation.pdf` |
-| Minimum 6 oldal | Kész | `documentation.pdf` |
+| Magyar dokumentáció | Kész | `documentation.tex`, `Adatbazis Project Dokumentacio.pdf` |
+| Minimum 6 oldal | Kész | `Adatbazis Project Dokumentacio.pdf` |
 | Times New Roman 12 | Kész | `documentation.tex` preambulum: `12pt`, `\setmainfont{Times New Roman}` |
 | LaTeX dokumentáció | Kész | `documentation.tex`, Tectonic-kal fordítva |
 | Bevezetés | Kész | `documentation.tex`, `\section{Bevezetés}` |
 | Legalább 5 tudományos hivatkozás | Kész | `references.bib`, valamint `documentation.tex` hivatkozási szakasz |
-| ER modell | Kész | `er_diagram.puml`, `er_diagram.png`, `er_diagram.mmd` |
-| Relációs diagram | Kész | `relational_diagram.mmd`, `premadegraph_database.drawio` |
+| ER modell | Kész | `er_diagram.png` |
+| Relációs/áttekintő diagram | Kész | `premadegraph_database.drawio.png` |
 | 10 tábla, min. 5 attribútum | Kész a PostgreSQL beadandóban | `schema.sql` |
 | Min. 10 sor táblánként | Kész a mintaadatokban | `sample_data.sql` |
 | Legalább 2 nézet | Kész | `views_queries.sql`: `v_player_performance_summary`, `v_cluster_health` |
@@ -46,7 +46,7 @@ Megvalósítás:
 - `references.bib`: tudományos hivatkozások gyűjteménye;
 - `documentation.tex`: `\section{Hivatkozások}`.
 
-A szakirodalmi rész MOBA kutatásra, esport teljesítményelemzésre, hálózatos játékoselemzésre, időbeli csapatstruktúrákra és játékosmetrikákra hivatkozik. Ez teljesíti az elvárt bevezető és bibliográfiai részt.
+A szakirodalmi rész MOBA kutatásra, esport teljesítményelemzésre, játékosközpontú hálózatokra, strukturális egyensúlyra, assortativitásra és betweenness centralityre hivatkozik. Ez teljesíti az elvárt bevezető és bibliográfiai részt.
 
 ## 3. hét - ER modell és relációs diagram
 
@@ -58,14 +58,11 @@ Kiírás:
 
 Megvalósítás:
 
-- `er_diagram.puml`: PlantUML ER diagram a ténylegesen generált projekt SQLite adatbázishoz;
-- `er_diagram.png`: a PlantUML-ből renderelt ábra, amelyet a LaTeX dokumentáció beilleszt;
-- `er_diagram.mmd`: Mermaid ER diagram a bővebb PostgreSQL beadandó modellhez;
-- `relational_diagram.mmd`: relációs diagram;
-- `premadegraph_database.drawio`: draw.io forrás;
+- `er_diagram.png`: ER ábra, amelyet a LaTeX dokumentáció beilleszt;
+- `premadegraph_database.drawio.png`: exportált áttekintő diagram;
 - `documentation.tex`: `\section{Rendszerarchitektúra és részletes terv}`, `\subsection{Egyed-kapcsolat modell}`, `\subsection{Relációs táblák}`.
 
-Megjegyzés: az ábrák két nézetet fednek le. A PlantUML ábra a valódi UI által olvasott SQLite projektadatbázist mutatja. A PostgreSQL szkriptekben szereplő bővebb modell a tantárgyi követelmények 10 táblás modellje.
+Megjegyzés: az ábrák két nézetet fednek le. Az ER ábra a valódi UI által olvasott SQLite projektadatbázist mutatja. A PostgreSQL szkriptekben szereplő bővebb modell a tantárgyi követelmények 10 táblás modellje.
 
 ## 4. hét - Diagramok finomítása és módosítások megbeszélése
 
@@ -76,14 +73,12 @@ Kiírás:
 
 Megvalósítás:
 
-- `er_diagram.puml`: finomított PlantUML ER diagram a projekt SQLite adatbázishoz;
 - `er_diagram.png`: frissen renderelt ábra a dokumentációhoz;
-- `relational_diagram.mmd`: relációs diagram;
-- `premadegraph_database.drawio`: draw.io diagramforrás;
+- `premadegraph_database.drawio.png`: exportált áttekintő diagram;
 - `documentation.tex`: architektúra és diagrammagyarázat;
 - `README.md`: diagramfájlok és újrarenderelési parancs dokumentálása.
 
-A módosítás lényege: a dokumentációban szereplő 1. ábra már nem kézzel rajzolt LaTeX dobozdiagram, hanem PlantUML-ből generált ER ábra. Ez javítja a diagram pontosságát és reprodukálhatóságát.
+A módosítás lényege: a dokumentációban szereplő 1. ábra már nem kézzel rajzolt LaTeX dobozdiagram, hanem külön diagramképként beillesztett ER ábra. Ez javítja a diagram olvashatóságát és leadhatóságát.
 
 ## 5. hét - Táblák létrehozása és feltöltése
 
@@ -204,7 +199,7 @@ Kiírás:
 Megvalósítás:
 
 - `documentation.tex`: teljes magyar nyelvű dokumentáció;
-- `documentation.pdf`: Tectonic-kal generált PDF;
+- `Adatbazis Project Dokumentacio.pdf`: Tectonic-kal generált PDF;
 - `documentation.tex`: `\section{Bevezetés}`;
 - `documentation.tex`: `\section{Szakirodalmi kutatás}`;
 - `documentation.tex`: `\section{Rendszerkövetelmények}`;
@@ -234,4 +229,4 @@ Megvalósítás:
 
 - `presentation_outline.md`: 10 diás, 5-10 perces prezentációs vázlat;
 - a vázlat tartalmazza a témát, motivációt, szakirodalmi hátteret, adatbázismodellt, lekérdezéseket, tárolt eljárásokat, triggereket, egyszerű felületet és következtetéseket;
-- `documentation.pdf`: végleges dokumentációként is leadható.
+- `Adatbazis Project Dokumentacio.pdf`: végleges dokumentációként is leadható.

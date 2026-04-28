@@ -7,7 +7,7 @@ SELECT
     p.match_count,
     p.opscore,
     p.feedscore,
-    COALESCE(AVG(ps.volatility_index), 0) AS average_volatility,
+    COALESCE(AVG(ps.score_spread), 0) AS average_score_spread,
     COUNT(DISTINCT cm.cluster_id) AS cluster_count,
     COUNT(DISTINCT pq.path_query_id) FILTER (
         WHERE pq.source_player_id = p.player_id OR pq.target_player_id = p.player_id
@@ -129,7 +129,7 @@ ORDER BY rw.depth, p.display_name;
 SELECT *
 FROM v_player_performance_summary
 WHERE match_count >= 30
-ORDER BY opscore DESC, average_volatility ASC;
+ORDER BY opscore DESC, average_score_spread ASC;
 
 -- 13. Cluster health report with bridge count.
 SELECT cluster_code, cluster_type, density, live_average_opscore, live_average_feedscore, bridge_count
@@ -193,13 +193,14 @@ FROM analysis_runs
 GROUP BY started_at::date
 ORDER BY run_date;
 
--- 20. Composite analytical query: high performers in dense clusters with stable snapshots.
-SELECT p.display_name, c.cluster_code, c.density, ps.opscore, ps.volatility_index
+-- 20. Composite analytical query: high performers in dense clusters with well-supported snapshots.
+SELECT p.display_name, c.cluster_code, c.density, ps.opscore, ps.score_spread, ps.sample_quality
 FROM players p
 JOIN cluster_members cm ON cm.player_id = p.player_id
 JOIN clusters c ON c.cluster_id = cm.cluster_id
 JOIN performance_snapshots ps ON ps.player_id = p.player_id
 WHERE c.density >= 0.6
   AND ps.opscore >= 7.0
-  AND ps.volatility_index < 1.0
+  AND ps.match_sample_size >= 30
+  AND ps.sample_quality IN ('derived', 'validated')
 ORDER BY c.density DESC, ps.opscore DESC;
