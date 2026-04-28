@@ -293,7 +293,8 @@ pub(super) fn assortativity_significance_response(
 
     for graph_mode_name in &graph_modes {
         for metric_name in &metrics {
-            let graph_mode = GraphMode::parse(graph_mode_name).expect("graph mode already normalized");
+            let graph_mode =
+                GraphMode::parse(graph_mode_name).expect("graph mode already normalized");
             let metric = MetricKey::parse(metric_name).expect("metric already normalized");
             let observed = compute_observed_assortativity(
                 graph,
@@ -304,11 +305,8 @@ pub(super) fn assortativity_significance_response(
                 None,
             );
             let mut null_samples = Vec::with_capacity(permutation_count);
-            let eligible_metric_map = eligible_metric_values(
-                graph,
-                metric,
-                request.min_player_match_count,
-            );
+            let eligible_metric_map =
+                eligible_metric_values(graph, metric, request.min_player_match_count);
             let eligible_node_ids: Vec<String> = {
                 let mut ids: Vec<String> = eligible_metric_map.keys().cloned().collect();
                 ids.sort();
@@ -320,7 +318,8 @@ pub(super) fn assortativity_significance_response(
                 .collect();
 
             for _ in 0..permutation_count {
-                let shuffled_map = shuffled_metric_map(&eligible_node_ids, &eligible_values, &mut rng);
+                let shuffled_map =
+                    shuffled_metric_map(&eligible_node_ids, &eligible_values, &mut rng);
                 let permutation = compute_observed_assortativity(
                     graph,
                     graph_mode,
@@ -521,7 +520,8 @@ fn eligible_metric_values(
     metric: MetricKey,
     min_player_match_count: u32,
 ) -> HashMap<String, f64> {
-    graph.player_rows
+    graph
+        .player_rows
         .iter()
         .filter_map(|(node_id, row)| {
             if row.match_count < min_player_match_count || !graph.node_map.contains_key(node_id) {
@@ -542,11 +542,7 @@ fn shuffled_metric_map(
         let swap_index = rng.gen_index(index + 1);
         values.swap(index, swap_index);
     }
-    eligible_node_ids
-        .iter()
-        .cloned()
-        .zip(values)
-        .collect()
+    eligible_node_ids.iter().cloned().zip(values).collect()
 }
 
 fn compute_observed_assortativity(
@@ -599,7 +595,8 @@ fn compute_observed_assortativity(
             stats.skipped_missing_metric_edges += 1;
             continue;
         };
-        if left_row.match_count < min_player_match_count || right_row.match_count < min_player_match_count
+        if left_row.match_count < min_player_match_count
+            || right_row.match_count < min_player_match_count
         {
             stats.skipped_low_match_count_edges += 1;
             continue;
@@ -745,7 +742,12 @@ mod tests {
         }
     }
 
-    fn player_row(label: &str, opscore: Option<f64>, feedscore: Option<f64>, match_count: u32) -> PlayerDbRow {
+    fn player_row(
+        label: &str,
+        opscore: Option<f64>,
+        feedscore: Option<f64>,
+        match_count: u32,
+    ) -> PlayerDbRow {
         PlayerDbRow {
             label: label.to_string(),
             opscore,
@@ -782,12 +784,24 @@ mod tests {
         graph.node_map = HashMap::from([
             ("a".to_string(), graph_node("a", "Alpha", Some("cluster:1"))),
             ("b".to_string(), graph_node("b", "Bravo", Some("cluster:1"))),
-            ("c".to_string(), graph_node("c", "Charlie", Some("cluster:1"))),
+            (
+                "c".to_string(),
+                graph_node("c", "Charlie", Some("cluster:1")),
+            ),
         ]);
         graph.player_rows = HashMap::from([
-            ("a".to_string(), player_row("Alpha", Some(1.0), Some(9.0), 5)),
-            ("b".to_string(), player_row("Bravo", Some(2.0), Some(8.0), 5)),
-            ("c".to_string(), player_row("Charlie", Some(3.0), Some(7.0), 5)),
+            (
+                "a".to_string(),
+                player_row("Alpha", Some(1.0), Some(9.0), 5),
+            ),
+            (
+                "b".to_string(),
+                player_row("Bravo", Some(2.0), Some(8.0), 5),
+            ),
+            (
+                "c".to_string(),
+                player_row("Charlie", Some(3.0), Some(7.0), 5),
+            ),
         ]);
         graph.pair_relations = HashMap::from([
             (

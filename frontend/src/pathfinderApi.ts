@@ -8,6 +8,7 @@ import type {
   SavedReplayRecord,
 } from "./pathfinderTypes";
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
+import type { GraphV2Buffers, GraphV2ClusterMeta, GraphV2Manifest, GraphV2NodeMeta } from "./graphV2Types";
 import type { SignedBalanceRequest, SignedBalanceResponse } from "./signedBalanceTypes";
 import type { AssortativityRequest, AssortativityResponse } from "./assortativityTypes";
 
@@ -153,7 +154,7 @@ export async function deletePathfinderReplay(replayId: number): Promise<{ ok: tr
 async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
   const response = await fetch(url);
   if (!response.ok) {
-    let message = "Birdseye backend request failed.";
+    let message = "Rust graph artifact request failed.";
     try {
       const payload = await response.json();
       message = payload?.error || message;
@@ -163,6 +164,13 @@ async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
     throw new Error(message);
   }
   return response.arrayBuffer();
+}
+
+function graphV2ApiBase(datasetId?: string): string {
+  if (!datasetId) {
+    return `${RUST_API_BASE}/graph-v2`;
+  }
+  return `${RUST_API_BASE}/datasets/${encodeURIComponent(datasetId)}/graph-v2`;
 }
 
 export async function fetchRustBirdseyeManifest(): Promise<BirdseyeManifest> {
@@ -189,6 +197,60 @@ export async function fetchRustBirdseyeBuffers(): Promise<BirdseyeBuffers> {
     edgePairs: new Uint32Array(edgePairs),
     edgeProps: new Uint32Array(edgeProps),
   };
+}
+
+export async function fetchRustGraphV2Manifest(datasetId?: string): Promise<GraphV2Manifest> {
+  const response = await fetch(`${graphV2ApiBase(datasetId)}/manifest`);
+  return parseJsonResponse<GraphV2Manifest>(response);
+}
+
+export async function fetchRustGraphV2NodeMeta(datasetId?: string): Promise<GraphV2NodeMeta> {
+  const response = await fetch(`${graphV2ApiBase(datasetId)}/node-meta`);
+  return parseJsonResponse<GraphV2NodeMeta>(response);
+}
+
+export async function fetchRustGraphV2ClusterMeta(datasetId?: string): Promise<GraphV2ClusterMeta> {
+  const response = await fetch(`${graphV2ApiBase(datasetId)}/cluster-meta`);
+  return parseJsonResponse<GraphV2ClusterMeta>(response);
+}
+
+export async function fetchRustGraphV2Summary(datasetId?: string): Promise<string> {
+  const response = await fetch(`${graphV2ApiBase(datasetId)}/summary`);
+  if (!response.ok) {
+    let message = "Rust graph summary request failed.";
+    try {
+      const payload = await response.json();
+      message = payload?.error || message;
+    } catch {
+      // Keep fallback when the backend returns plain text.
+    }
+    throw new Error(message);
+  }
+  return response.text();
+}
+
+export async function fetchRustGraphV2Buffers(datasetId?: string): Promise<GraphV2Buffers> {
+  const baseUrl = graphV2ApiBase(datasetId);
+  const [nodePositions, nodeMetrics, edgePairs, edgeProps] = await Promise.all([
+    fetchArrayBuffer(`${baseUrl}/node-positions`),
+    fetchArrayBuffer(`${baseUrl}/node-metrics`),
+    fetchArrayBuffer(`${baseUrl}/edge-pairs`),
+    fetchArrayBuffer(`${baseUrl}/edge-props`),
+  ]);
+
+  return {
+    nodePositions: new Float32Array(nodePositions),
+    nodeMetrics: new Uint32Array(nodeMetrics),
+    edgePairs: new Uint32Array(edgePairs),
+    edgeProps: new Uint32Array(edgeProps),
+  };
+}
+
+export async function rebuildRustGraphV2(datasetId?: string): Promise<{ ok: true; manifest: GraphV2Manifest }> {
+  const response = await fetch(`${graphV2ApiBase(datasetId)}/rebuild`, {
+    method: "POST",
+  });
+  return parseJsonResponse<{ ok: true; manifest: GraphV2Manifest }>(response);
 }
 
 export async function runRustSignedBalance(request: SignedBalanceRequest): Promise<SignedBalanceResponse> {

@@ -4,8 +4,8 @@ mod models;
 use engine::{
     apply_runtime_breakdown, assortativity_analysis, assortativity_significance_analysis,
     build_graph_state, compare_algorithms, engine_spec_response, export_birdseye_bundle,
-    global_view_response, options_response, player_focus_response, run_search,
-    signed_balance_analysis, signed_balance_sensitivity_analysis,
+    export_graph_v2_bundle, global_view_response, options_response, player_focus_response,
+    run_search, signed_balance_analysis, signed_balance_sensitivity_analysis,
 };
 use models::{
     AssortativityRequest, AssortativitySignificanceRequest, CompareRequest, PathfinderRequest,
@@ -66,8 +66,10 @@ fn execute_command(
     let mut graph_build_ms = 0.0;
 
     match command {
-        "options" => serde_json::to_string(&options_response(ensure_graph(graph, &mut graph_build_ms)))
-            .map_err(|error| error.to_string()),
+        "options" => {
+            serde_json::to_string(&options_response(ensure_graph(graph, &mut graph_build_ms)))
+                .map_err(|error| error.to_string())
+        }
         "global-view" => serde_json::to_string(&global_view_response(ensure_graph(
             graph,
             &mut graph_build_ms,
@@ -76,8 +78,8 @@ fn execute_command(
         "spec" => serde_json::to_string(&engine_spec_response()).map_err(|error| error.to_string()),
         "run" => {
             let input = payload.unwrap_or_default();
-            let request: PathfinderRequest =
-                serde_json::from_str(input).map_err(|error| format!("invalid run payload: {error}"))?;
+            let request: PathfinderRequest = serde_json::from_str(input)
+                .map_err(|error| format!("invalid run payload: {error}"))?;
             let graph_state = ensure_graph(graph, &mut graph_build_ms);
             let mut response = run_search(graph_state, request);
             apply_runtime_breakdown(
@@ -113,8 +115,9 @@ fn execute_command(
         "signed-balance" => {
             let input = payload.unwrap_or_default();
             let request: SignedBalanceRequest = if input.trim().is_empty() {
-                serde_json::from_str("{}")
-                    .map_err(|error| format!("failed to build default signed balance request: {error}"))?
+                serde_json::from_str("{}").map_err(|error| {
+                    format!("failed to build default signed balance request: {error}")
+                })?
             } else {
                 serde_json::from_str(input)
                     .map_err(|error| format!("invalid signed balance payload: {error}"))?
@@ -128,8 +131,9 @@ fn execute_command(
         "assortativity" => {
             let input = payload.unwrap_or_default();
             let request: AssortativityRequest = if input.trim().is_empty() {
-                serde_json::from_str("{}")
-                    .map_err(|error| format!("failed to build default assortativity request: {error}"))?
+                serde_json::from_str("{}").map_err(|error| {
+                    format!("failed to build default assortativity request: {error}")
+                })?
             } else {
                 serde_json::from_str(input)
                     .map_err(|error| format!("invalid assortativity payload: {error}"))?
@@ -143,8 +147,9 @@ fn execute_command(
         "balance-sweep" => {
             let input = payload.unwrap_or_default();
             let request: SignedBalanceSweepRequest = if input.trim().is_empty() {
-                serde_json::from_str("{}")
-                    .map_err(|error| format!("failed to build default balance sweep request: {error}"))?
+                serde_json::from_str("{}").map_err(|error| {
+                    format!("failed to build default balance sweep request: {error}")
+                })?
             } else {
                 serde_json::from_str(input)
                     .map_err(|error| format!("invalid balance sweep payload: {error}"))?
@@ -173,6 +178,7 @@ fn execute_command(
             .map_err(|error| error.to_string())
         }
         "birdseye-3d-export" => Ok(export_birdseye_bundle().display().to_string()),
+        "graph-v2-export" => Ok(export_graph_v2_bundle().display().to_string()),
         _ => serde_json::to_string(&engine_spec_response()).map_err(|error| error.to_string()),
     }
 }
@@ -187,7 +193,9 @@ fn run_server() {
 
     loop {
         line.clear();
-        let read = reader.read_line(&mut line).expect("failed to read serve input");
+        let read = reader
+            .read_line(&mut line)
+            .expect("failed to read serve input");
         if read == 0 {
             break;
         }
@@ -197,12 +205,17 @@ fn run_server() {
 
         let envelope: Result<ServeEnvelope, _> = serde_json::from_str(line.trim_end());
         let response = match envelope {
-            Ok(request) => match execute_command(&request.command, Some(&request.payload.to_string()), &mut graph)
-            {
+            Ok(request) => match execute_command(
+                &request.command,
+                Some(&request.payload.to_string()),
+                &mut graph,
+            ) {
                 Ok(output) => ServeResponseEnvelope {
                     id: request.id,
                     ok: true,
-                    result: serde_json::from_str(&output).ok().or_else(|| Some(serde_json::Value::String(output))),
+                    result: serde_json::from_str(&output)
+                        .ok()
+                        .or_else(|| Some(serde_json::Value::String(output))),
                     error: None,
                 },
                 Err(error) => ServeResponseEnvelope {

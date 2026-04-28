@@ -47,7 +47,13 @@ let signedBalanceQueue = Promise.resolve();
 let signedBalanceActivePromise = null;
 let signedBalanceActiveKey = null;
 let birdseyeCachePromise = null;
+let graphV2CachePromises = new Map();
 const SQLITE_BUSY_TIMEOUT_MS = 5000;
+const GRAPH_V2_EXPECTED_VERSIONS = {
+  graphBuilderVersion: "graph-builder-v2.2",
+  clusteringAlgorithmVersion: "bounded-ally-groups-v2",
+  layoutVersion: "bridge-orbit-layout-v1",
+};
 let activeDatasetRegistry = null;
 let activeDataset = null;
 let matchCollectorJob = null;
@@ -63,6 +69,19 @@ function getBirdseyeArtifactPaths(cacheDir) {
   };
 }
 
+function getGraphV2ArtifactPaths(cacheDir) {
+  return {
+    manifest: path.join(cacheDir, "manifest.json"),
+    summary: path.join(cacheDir, "summary.md"),
+    nodeMeta: path.join(cacheDir, "node_meta.json"),
+    nodePositions: path.join(cacheDir, "node_positions.f32"),
+    nodeMetrics: path.join(cacheDir, "node_metrics.u32"),
+    edgePairs: path.join(cacheDir, "edge_pairs.u32"),
+    edgeProps: path.join(cacheDir, "edge_props.u32"),
+    clusterMeta: path.join(cacheDir, "cluster_meta.json"),
+  };
+}
+
 function clearRustRuntimeState() {
   rustResponseCache.options = null;
   rustResponseCache.spec = null;
@@ -72,6 +91,7 @@ function clearRustRuntimeState() {
   signedBalanceActivePromise = null;
   signedBalanceActiveKey = null;
   birdseyeCachePromise = null;
+  graphV2CachePromises.clear();
   shutdownDaemon();
 }
 
@@ -758,13 +778,44 @@ function getActiveBirdseyeArtifactPaths() {
   return getBirdseyeArtifactPaths(getActiveBirdseyeCacheDir());
 }
 
+function getActiveGraphV2CacheDir() {
+  return path.join(getActiveCachePath(), "graph-v2");
+}
+
+function getActiveGraphV2ArtifactPaths() {
+  return getGraphV2ArtifactPaths(getActiveGraphV2CacheDir());
+}
+
+function getDatasetConfigById(datasetId) {
+  const registry = activeDatasetRegistry || loadDatasetRegistry();
+  const dataset = registry.datasets.find((entry) => entry.id === datasetId);
+  if (!dataset) {
+    return null;
+  }
+  ensureDatasetStorage(dataset);
+  return materializeDatasetConfig(dataset);
+}
+
+function getGraphV2CacheDirForDataset(dataset) {
+  return path.join(dataset.cacheAbsolutePath, "graph-v2");
+}
+
+function getGraphV2ArtifactPathsForDataset(dataset) {
+  return getGraphV2ArtifactPaths(getGraphV2CacheDirForDataset(dataset));
+}
+
 function getActiveRustEnv() {
   const dataset = getActiveDataset();
+  return getRustEnvForDataset(dataset);
+}
+
+function getRustEnvForDataset(dataset) {
   return {
     DATASET_ID: dataset.id,
     GRAPH_DB_PATH: dataset.refinedDbAbsolutePath,
     PATHFINDER_MATCH_DIR: dataset.matchesAbsolutePath,
-    PATHFINDER_BIRDSEYE_CACHE_DIR: getActiveBirdseyeCacheDir(),
+    PATHFINDER_BIRDSEYE_CACHE_DIR: path.join(dataset.cacheAbsolutePath, "birdseye-3d-v2"),
+    PATHFINDER_GRAPH_V2_CACHE_DIR: getGraphV2CacheDirForDataset(dataset),
   };
 }
 
@@ -954,6 +1005,119 @@ async function streamBirdseyeArtifact(res, artifactKey, contentType) {
   });
   stream.on("end", () => {
     console.log(`[birdseye] finished ${path.basename(artifactPath)} in ${Date.now() - startedAt}ms.`);
+  });
+  stream.pipe(res);
+}
+
+function hasGraphV2Artifacts(dataset = getActiveDataset()) {
+  const artifactPaths = getGraphV2ArtifactPathsForDataset(dataset);
+  if (!Object.values(artifactPaths).every((artifactPath) => fs.existsSync(artifactPath))) {
+    return false;
+  }
+
+  try {
+    const manifest = readJsonFile(artifactPaths.manifest);
+    const datasetId = dataset.id;
+    const summaryArchiveFile = typeof manifest.summaryArchiveFile === "string" ? manifest.summaryArchiveFile : "";
+    const summaryArchivePath = summaryArchiveFile
+      ? path.join(getGraphV2CacheDirForDataset(dataset), path.basename(summaryArchiveFile))
+      : "";
+    const isCurrent =
+      manifest.datasetId === datasetId &&
+      manifest.graphBuilderVersion === GRAPH_V2_EXPECTED_VERSIONS.graphBuilderVersion &&
+      manifest.clusteringAlgorithmVersion === GRAPH_V2_EXPECTED_VERSIONS.clusteringAlgorithmVersion &&
+      manifest.layoutVersion === GRAPH_V2_EXPECTED_VERSIONS.layoutVersion &&
+      manifest.summaryFile === "summary.md" &&
+      summaryArchiveFile.length > 0 &&
+      fs.existsSync(summaryArchivePath);
+
+    if (!isCurrent) {
+      console.log(
+        `[graph-v2] stale artifact manifest detected. dataset=${manifest.datasetId ?? "unknown"} builder=${manifest.graphBuilderVersion ?? "unknown"} clustering=${manifest.clusteringAlgorithmVersion ?? "unknown"} layout=${manifest.layoutVersion ?? "unknown"}`,
+      );
+    }
+
+    return isCurrent;
+  } catch (error) {
+    console.warn("[graph-v2] failed to validate artifact manifest:", error.message);
+    return false;
+  }
+}
+
+function startGraphV2Export({ force = false } = {}) {
+  return startGraphV2ExportForDataset(getActiveDataset(), { force });
+}
+
+function startGraphV2ExportForDataset(dataset, { force = false } = {}) {
+  const cacheDir = getGraphV2CacheDirForDataset(dataset);
+  console.log(`[graph-v2] ensure requested. dataset=${dataset.id} cacheDir=${cacheDir}`);
+
+  if (graphV2CachePromises.has(dataset.id)) {
+    console.log(`[graph-v2] cache build already in flight for dataset=${dataset.id}. Reusing active promise.`);
+    return graphV2CachePromises.get(dataset.id);
+  }
+
+  if (!force && hasGraphV2Artifacts(dataset)) {
+    console.log(`[graph-v2] cache hit for dataset=${dataset.id}. Artifacts already exist on disk.`);
+    return Promise.resolve(getGraphV2ArtifactPathsForDataset(dataset));
+  }
+
+  const startedAt = Date.now();
+  console.log(`[graph-v2] cache miss/rebuild for dataset=${dataset.id}. Starting Rust export...`);
+  const promise = executeRustCommandRaw("graph-v2-export", undefined, getRustEnvForDataset(dataset))
+    .then(() => {
+      if (!hasGraphV2Artifacts(dataset)) {
+        throw new Error("Graph Builder V2 artifact export completed, but required files are missing.");
+      }
+      console.log(`[graph-v2] Rust export finished for dataset=${dataset.id} in ${Date.now() - startedAt}ms.`);
+      return getGraphV2ArtifactPathsForDataset(dataset);
+    })
+    .catch((error) => {
+      console.error(`[graph-v2] Rust export failed for dataset=${dataset.id} after ${Date.now() - startedAt}ms:`, error.message);
+      throw error;
+    })
+    .finally(() => {
+      graphV2CachePromises.delete(dataset.id);
+    });
+
+  graphV2CachePromises.set(dataset.id, promise);
+  return promise;
+}
+
+async function ensureGraphV2Artifacts() {
+  return ensureGraphV2ArtifactsForDataset(getActiveDataset());
+}
+
+async function ensureGraphV2ArtifactsForDataset(dataset) {
+  if (hasGraphV2Artifacts(dataset)) {
+    console.log(`[graph-v2] cache hit for dataset=${dataset.id}. Artifacts already exist on disk.`);
+    return getGraphV2ArtifactPathsForDataset(dataset);
+  }
+
+  await startGraphV2ExportForDataset(dataset);
+  return getGraphV2ArtifactPathsForDataset(dataset);
+}
+
+async function streamGraphV2Artifact(res, artifactKey, contentType, dataset = getActiveDataset()) {
+  const startedAt = Date.now();
+  const artifactPaths = await ensureGraphV2ArtifactsForDataset(dataset);
+  const artifactPath = artifactPaths[artifactKey];
+  if (!artifactPath) {
+    throw new Error(`Unknown Graph V2 artifact key: ${artifactKey}`);
+  }
+  console.log(`[graph-v2] request for ${path.basename(artifactPath)} started.`);
+  const stats = fs.statSync(artifactPath);
+  console.log(
+    `[graph-v2] streaming ${path.basename(artifactPath)} size=${stats.size} bytes contentType="${contentType}"`,
+  );
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", "no-store");
+  const stream = fs.createReadStream(artifactPath);
+  stream.on("error", (error) => {
+    console.error(`[graph-v2] stream error for ${path.basename(artifactPath)}:`, error.message);
+  });
+  stream.on("end", () => {
+    console.log(`[graph-v2] finished ${path.basename(artifactPath)} in ${Date.now() - startedAt}ms.`);
   });
   stream.pipe(res);
 }
@@ -2579,6 +2743,100 @@ app.get("/api/pathfinder-rust/birdseye-3d/edge-props", async (req, res) => {
   } catch (error) {
     console.error("Rust birdseye edge props failed:", error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+function resolveGraphV2RouteDataset(req) {
+  if (!req.params.datasetId) {
+    return getActiveDataset();
+  }
+
+  const dataset = getDatasetConfigById(req.params.datasetId);
+  if (!dataset) {
+    const error = new Error(`Unknown dataset: ${req.params.datasetId}`);
+    error.statusCode = 404;
+    throw error;
+  }
+  return dataset;
+}
+
+async function sendGraphV2RouteArtifact(req, res, artifactKey, contentType, label) {
+  try {
+    await streamGraphV2Artifact(res, artifactKey, contentType, resolveGraphV2RouteDataset(req));
+  } catch (error) {
+    console.error(`Rust graph v2 ${label} failed:`, error.message);
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+}
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/manifest",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/manifest",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "manifest", "application/json; charset=utf-8", "manifest");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/summary",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/summary",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "summary", "text/markdown; charset=utf-8", "analysis summary");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/node-meta",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/node-meta",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "nodeMeta", "application/json; charset=utf-8", "node metadata");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/node-positions",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/node-positions",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "nodePositions", "application/octet-stream", "node positions");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/node-metrics",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/node-metrics",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "nodeMetrics", "application/octet-stream", "node metrics");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/edge-pairs",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/edge-pairs",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "edgePairs", "application/octet-stream", "edge pairs");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/edge-props",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/edge-props",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "edgeProps", "application/octet-stream", "edge props");
+});
+
+app.get([
+  "/api/pathfinder-rust/graph-v2/cluster-meta",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/cluster-meta",
+], async (req, res) => {
+  await sendGraphV2RouteArtifact(req, res, "clusterMeta", "application/json; charset=utf-8", "cluster metadata");
+});
+
+app.post([
+  "/api/pathfinder-rust/graph-v2/rebuild",
+  "/api/pathfinder-rust/datasets/:datasetId/graph-v2/rebuild",
+], async (req, res) => {
+  try {
+    const dataset = resolveGraphV2RouteDataset(req);
+    await startGraphV2ExportForDataset(dataset, { force: true });
+    const manifest = readJsonFile(getGraphV2ArtifactPathsForDataset(dataset).manifest);
+    res.json({ ok: true, manifest });
+  } catch (error) {
+    console.error("Rust graph v2 rebuild failed:", error.message);
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 

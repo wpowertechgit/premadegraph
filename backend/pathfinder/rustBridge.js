@@ -41,10 +41,21 @@ function getRustBinaryCandidates() {
 }
 
 function resolveRustExecutable() {
-  for (const candidate of getRustBinaryCandidates()) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
+  const explicitBinary = process.env.PATHFINDER_RUST_BIN;
+  if (explicitBinary && fs.existsSync(explicitBinary)) {
+    return explicitBinary;
+  }
+
+  const candidates = getRustBinaryCandidates()
+    .filter((candidate) => candidate !== explicitBinary && fs.existsSync(candidate))
+    .map((candidate) => ({
+      path: candidate,
+      mtimeMs: fs.statSync(candidate).mtimeMs,
+    }))
+    .sort((left, right) => right.mtimeMs - left.mtimeMs);
+
+  if (candidates.length > 0) {
+    return candidates[0].path;
   }
 
   return null;

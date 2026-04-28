@@ -1,7 +1,7 @@
 use super::graph::{GraphState, PlayerDbRow};
 use crate::models::{
-    AssortativityDecisions, AssortativityMetricResult, AssortativityRequest,
-    AssortativityResponse, AssortativitySample,
+    AssortativityDecisions, AssortativityMetricResult, AssortativityRequest, AssortativityResponse,
+    AssortativitySample,
 };
 use std::collections::HashSet;
 
@@ -235,7 +235,9 @@ fn compute_metric_result(
         }
 
         computation.analyzed_edges += 1;
-        computation.global.add_undirected_edge(left_value, right_value);
+        computation
+            .global
+            .add_undirected_edge(left_value, right_value);
 
         if same_cluster(graph, left_id, right_id) {
             computation
@@ -248,9 +250,13 @@ fn compute_metric_result(
         }
 
         if support >= request.strong_tie_threshold {
-            computation.strong_ties.add_undirected_edge(left_value, right_value);
+            computation
+                .strong_ties
+                .add_undirected_edge(left_value, right_value);
         } else {
-            computation.weak_ties.add_undirected_edge(left_value, right_value);
+            computation
+                .weak_ties
+                .add_undirected_edge(left_value, right_value);
         }
     }
 
@@ -322,7 +328,12 @@ mod tests {
         }
     }
 
-    fn player_row(label: &str, opscore: Option<f64>, feedscore: Option<f64>, match_count: u32) -> PlayerDbRow {
+    fn player_row(
+        label: &str,
+        opscore: Option<f64>,
+        feedscore: Option<f64>,
+        match_count: u32,
+    ) -> PlayerDbRow {
         PlayerDbRow {
             label: label.to_string(),
             opscore,
@@ -359,11 +370,20 @@ mod tests {
         graph.node_map = HashMap::from([
             ("a".to_string(), graph_node("a", "Alpha", Some("cluster:1"))),
             ("b".to_string(), graph_node("b", "Bravo", Some("cluster:1"))),
-            ("c".to_string(), graph_node("c", "Charlie", Some("cluster:2"))),
+            (
+                "c".to_string(),
+                graph_node("c", "Charlie", Some("cluster:2")),
+            ),
         ]);
         graph.player_rows = HashMap::from([
-            ("a".to_string(), player_row("Alpha", Some(1.0), Some(10.0), 5)),
-            ("b".to_string(), player_row("Bravo", Some(2.0), Some(20.0), 5)),
+            (
+                "a".to_string(),
+                player_row("Alpha", Some(1.0), Some(10.0), 5),
+            ),
+            (
+                "b".to_string(),
+                player_row("Bravo", Some(2.0), Some(20.0), 5),
+            ),
             ("c".to_string(), player_row("Charlie", Some(3.0), None, 2)),
         ]);
         graph.pair_relations = HashMap::from([
@@ -453,7 +473,8 @@ mod tests {
             include_cluster_breakdown: true,
         };
 
-        let result = compute_metric_result(&graph, &request, GraphMode::SocialPath, MetricKey::Opscore);
+        let result =
+            compute_metric_result(&graph, &request, GraphMode::SocialPath, MetricKey::Opscore);
 
         assert_eq!(result.candidate_edges, 2);
         assert_eq!(result.analyzed_edges, 2);
@@ -472,8 +493,12 @@ mod tests {
             include_cluster_breakdown: true,
         };
 
-        let feed_result =
-            compute_metric_result(&graph, &request, GraphMode::BattlePath, MetricKey::Feedscore);
+        let feed_result = compute_metric_result(
+            &graph,
+            &request,
+            GraphMode::BattlePath,
+            MetricKey::Feedscore,
+        );
         let op_result =
             compute_metric_result(&graph, &request, GraphMode::BattlePath, MetricKey::Opscore);
 

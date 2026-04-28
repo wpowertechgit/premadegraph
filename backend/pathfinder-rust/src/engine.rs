@@ -2,6 +2,7 @@ mod assortativity;
 mod birdseye;
 mod experiments;
 mod graph;
+mod graph_v2;
 mod search;
 mod signed_balance;
 
@@ -11,6 +12,7 @@ use self::experiments::{assortativity_significance_response, signed_balance_swee
 use self::graph::{
     global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
 };
+use self::graph_v2::export_graph_v2_artifacts;
 use self::search::{search_astar, search_bfs, search_bidirectional, search_dijkstra, SearchResult};
 use self::signed_balance::signed_balance_response;
 use crate::models::*;
@@ -206,8 +208,7 @@ pub fn run_search(graph: &GraphState, request: PathfinderRequest) -> PathfinderR
         warnings,
     };
 
-    response.summary.response_assembly_ms =
-        response_started_at.elapsed().as_secs_f64() * 1000.0;
+    response.summary.response_assembly_ms = response_started_at.elapsed().as_secs_f64() * 1000.0;
     response.summary.total_runtime_ms =
         response.summary.search_runtime_ms + response.summary.response_assembly_ms;
     response.summary.runtime_ms = response.summary.total_runtime_ms;
@@ -392,6 +393,10 @@ pub fn assortativity_analysis(
 
 pub fn export_birdseye_bundle() -> std::path::PathBuf {
     export_birdseye_3d_artifacts()
+}
+
+pub fn export_graph_v2_bundle() -> std::path::PathBuf {
+    export_graph_v2_artifacts()
 }
 
 pub fn signed_balance_sensitivity_analysis(

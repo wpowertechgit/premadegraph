@@ -5,8 +5,12 @@
   "platformRouting": "eun1",
   "regionalRouting": "europe",
   "queueType": "420",
-  "seedPlayers": [],
-  "seedCount": 1,
+  "seedPlayers": [
+    "_q3eHbW5qM9ewmNDWHuFakQRpw43QmcnSOVq2rkF_SrvWfY09gnJQLLKMfJdLYCiGEAZxgX_PZo0yw",
+    "H5gwd26cXJvwr4SSB7X46WBTLdJq_AljET90jkDb3NJwX606SlKErFE-JwETErTaEsD4KcFtSJXLbA",
+    "rKG044VbHEcRqhzrBowQAPSaRhHRiXd_uT18YdQ_e-8NqRni4tB8YBApbmUEFRxVFJE5-CRoYj5hvA"
+  ],
+  "seedCount": 3,
   "matchesPerPlayer": 10,
   "initialMatchesPerSeed": 15,
   "maxPlayers": 120,
@@ -25,20 +29,14 @@
     "randomPlayersPerMatchMax": 2
   },
   "constraints": {
-    "strict": true,
-    "minTier": "MASTER",
-    "allowedTiers": [
-      "MASTER"
-    ],
-    "minLeaguePoints": 700,
-    "maxLeaguePoints": 800,
-    "requireRankValidation": true,
+    "strict": false,
+    "requireRankValidation": false,
     "rejectPremadeRepeatAt": 4,
     "maxMatchAgeDays": 30,
     "requireCompleteParticipantFields": true
   },
   "notes": {
     "purpose": "Master+ EUNE SoloQ control dataset for performance-only baseline and genetic-neurosim seeding.",
-    "manualSeedOverride": "Put one chosen entry-player PUUID in seedPlayers to skip automatic 700-800 LP Master seed discovery."
+    "manualSeedOverride": "Configured with 2 Challenger and 1 Grandmaster manual seed PUUIDs to skip automatic 700-800 LP Master seed discovery."
   }
 }

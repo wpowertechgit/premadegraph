@@ -93,11 +93,7 @@ fn push_trace_step(
     ));
 }
 
-fn should_record_trace(
-    include_trace: bool,
-    trace: &[TraceStep],
-    phase: &str,
-) -> bool {
+fn should_record_trace(include_trace: bool, trace: &[TraceStep], phase: &str) -> bool {
     include_trace
         && (trace.len() < MAX_TRACE_STEPS_RESPONSE || phase == "resolve" || phase == "complete")
 }
@@ -215,7 +211,15 @@ pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> Sea
 
     if !found {
         if should_record_trace(request.options.include_trace, &trace, "complete") {
-            push_trace_step(&mut trace, trace_step, "complete", None, vec![], &visited, vec![]);
+            push_trace_step(
+                &mut trace,
+                trace_step,
+                "complete",
+                None,
+                vec![],
+                &visited,
+                vec![],
+            );
         }
         return SearchResult {
             found: false,
@@ -334,7 +338,8 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
             }
 
             if should_record_trace(request.options.include_trace, &trace, "discover") {
-                let mut frontier_after: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
+                let mut frontier_after: Vec<String> =
+                    heap.iter().map(|item| item.id.clone()).collect();
                 frontier_after.sort();
                 push_trace_step(
                     &mut trace,
@@ -361,7 +366,15 @@ pub(super) fn search_dijkstra(graph: &GraphState, request: &PathfinderRequest) -
 
     if !found {
         if should_record_trace(request.options.include_trace, &trace, "complete") {
-            push_trace_step(&mut trace, trace_step, "complete", None, vec![], &visited, vec![]);
+            push_trace_step(
+                &mut trace,
+                trace_step,
+                "complete",
+                None,
+                vec![],
+                &visited,
+                vec![],
+            );
         }
         return SearchResult {
             found: false,
@@ -494,7 +507,8 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
             }
 
             if should_record_trace(request.options.include_trace, &trace, "discover") {
-                let mut frontier_after: Vec<String> = heap.iter().map(|item| item.id.clone()).collect();
+                let mut frontier_after: Vec<String> =
+                    heap.iter().map(|item| item.id.clone()).collect();
                 frontier_after.sort();
                 push_trace_step(
                     &mut trace,
@@ -521,7 +535,15 @@ pub(super) fn search_astar(graph: &GraphState, request: &PathfinderRequest) -> S
 
     if !found {
         if should_record_trace(request.options.include_trace, &trace, "complete") {
-            push_trace_step(&mut trace, trace_step, "complete", None, vec![], &visited, vec![]);
+            push_trace_step(
+                &mut trace,
+                trace_step,
+                "complete",
+                None,
+                vec![],
+                &visited,
+                vec![],
+            );
         }
         return SearchResult {
             found: false,
@@ -1070,16 +1092,20 @@ mod tests {
 
     #[test]
     fn astar_and_dijkstra_report_no_path_consistently() {
-        let graph = graph_with_edges(&[
-            ("source", "a", "ally", 1, 1),
-            ("target", "b", "ally", 1, 1),
-        ]);
+        let graph =
+            graph_with_edges(&[("source", "a", "ally", 1, 1), ("target", "b", "ally", 1, 1)]);
 
         assert_astar_matches_dijkstra(
             &graph,
             &request("source", "target", "astar", "social-path", false),
         );
-        assert!(!search_astar(&graph, &request("source", "target", "astar", "social-path", false)).found);
+        assert!(
+            !search_astar(
+                &graph,
+                &request("source", "target", "astar", "social-path", false)
+            )
+            .found
+        );
     }
 
     #[test]

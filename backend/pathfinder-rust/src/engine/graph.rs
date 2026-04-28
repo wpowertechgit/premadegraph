@@ -1004,7 +1004,12 @@ fn component_landmark_candidates(
                     .get(right)
                     .map(|neighbors| neighbors.len())
                     .unwrap_or(0)
-                    .cmp(&adjacency.get(left).map(|neighbors| neighbors.len()).unwrap_or(0))
+                    .cmp(
+                        &adjacency
+                            .get(left)
+                            .map(|neighbors| neighbors.len())
+                            .unwrap_or(0),
+                    )
             })
             .then_with(|| left.cmp(right))
     });
@@ -1125,10 +1130,7 @@ fn build_min_costs(adjacency: &HashMap<String, Vec<Neighbor>>) -> HashMap<ModeKe
     min_costs
 }
 
-pub(super) fn neighbors_for<'a>(
-    graph: &'a GraphState,
-    node_id: &str,
-) -> &'a [Neighbor] {
+pub(super) fn neighbors_for<'a>(graph: &'a GraphState, node_id: &str) -> &'a [Neighbor] {
     graph
         .adjacency
         .get(node_id)
@@ -1187,10 +1189,7 @@ fn node_strength(graph: &GraphState, node_id: &str) -> u32 {
     node_strength_from_adjacency(&graph.adjacency, node_id)
 }
 
-fn node_strength_from_adjacency(
-    adjacency: &HashMap<String, Vec<Neighbor>>,
-    node_id: &str,
-) -> u32 {
+fn node_strength_from_adjacency(adjacency: &HashMap<String, Vec<Neighbor>>, node_id: &str) -> u32 {
     adjacency
         .get(node_id)
         .map(|neighbors| {
@@ -1318,14 +1317,28 @@ pub(super) fn pathfinder_snapshot(
             let mut node = graph.node_map.get(node_id)?.clone();
             if node.cluster_id.is_none() && path_nodes.len() > 2 {
                 if let Some(index) = path_index_map.get(node_id).copied() {
-                    node.x = interpolated_path_x(source_position.0, target_position.0, index, path_nodes.len());
-                    node.y = interpolated_path_y(source_position.1, target_position.1, index, path_nodes.len());
+                    node.x = interpolated_path_x(
+                        source_position.0,
+                        target_position.0,
+                        index,
+                        path_nodes.len(),
+                    );
+                    node.y = interpolated_path_y(
+                        source_position.1,
+                        target_position.1,
+                        index,
+                        path_nodes.len(),
+                    );
                 }
             }
             Some(node)
         })
         .collect();
-    nodes.sort_by(|left, right| left.label.cmp(&right.label).then_with(|| left.id.cmp(&right.id)));
+    nodes.sort_by(|left, right| {
+        left.label
+            .cmp(&right.label)
+            .then_with(|| left.id.cmp(&right.id))
+    });
 
     let mut edges: Vec<GraphEdge> = graph
         .dataset
@@ -1338,7 +1351,10 @@ pub(super) fn pathfinder_snapshot(
             let edge_key_value = edge_key(&edge.from, &edge.to);
             let same_cluster =
                 graph.cluster_membership.get(&edge.from) == graph.cluster_membership.get(&edge.to);
-            if !path_edge_keys.is_empty() && !same_cluster && !path_edge_keys.contains(&edge_key_value) {
+            if !path_edge_keys.is_empty()
+                && !same_cluster
+                && !path_edge_keys.contains(&edge_key_value)
+            {
                 return None;
             }
             let relation = graph.pair_relations.get(&edge_key(&edge.from, &edge.to))?;

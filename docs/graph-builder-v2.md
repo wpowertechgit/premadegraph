@@ -2,7 +2,7 @@
 
 ## Summary
 
-Graph Builder V2 replaces the current Python/PyVis population graph workflow with a Rust-first, dataset-aware graph artifact pipeline.
+Graph Builder V2 replaces the current Python/PyVis associative population graph workflow with a Rust-first, dataset-aware graph artifact pipeline (that is exposed on the /graph page).
 
 The current endpoint still runs:
 
@@ -138,7 +138,9 @@ Reason:
 
 Recommended first implementation:
 
-- deterministic connected components over repeated ally ties
+- deterministic repeated-ally components as the raw connectivity layer
+- split oversized connected components into bounded local ally groups for visual/research cluster reporting
+- keep cross-group ally links visible as bridge relationships instead of using them to merge groups
 - then evaluate Louvain/Leiden-style community detection later if needed
 
 Cluster outputs should include:
@@ -153,6 +155,8 @@ Cluster outputs should include:
 - enemy/cross-cluster edge count
 - deterministic layout anchor
 
+Visual ally groups should be capped at roughly 20 players. This prevents long transitive teammate chains from being displayed as a single implausible premade cluster while preserving bridge players and bridge edges as meaningful cross-group structure.
+
 Country-based clustering should not be part of V2.
 
 ## Rendering Strategy
@@ -163,6 +167,7 @@ Graph Builder V2 should export cached binary artifacts, similar to the existing 
 
 ```txt
 manifest.json
+summary.md
 node_meta.json
 node_positions.f32
 node_metrics.u32
@@ -173,18 +178,43 @@ cluster_meta.json
 
 The frontend should render with WebGL/Three.js.
 
+`summary.md` is generated beside the binary artifacts as a machine-readable research context file. It records dataset id, dataset scale, construction semantics, metric coverage, node/edge/cluster feature candidates, top bridge-orbit clusters, and suggested downstream analysis questions for machine-learning-oriented work such as assortativity, signed balance, centrality comparison, and cluster embeddings. It must frame orbit fields as visual heuristics, not ground-truth labels.
+
+Each graph generation also writes an immutable archive copy named `summary_<datasetId>_<generatedAtUnixMs>.md`. The plain `summary.md` file is the latest summary for API/UI access, while the archived summary files preserve previous runs so AI/ML analysis outputs are not silently replaced after rebuilds.
+
+The summary should also include explicit instructions for a later AI or ML assistant:
+
+- read the artifact identity and graph scale first
+- treat artifact files as canonical data and the Markdown as interpretation context
+- look into assortativity, signed balance, bridge centrality, edge support, metric coverage, and cluster-level feature distributions
+- compare ally-only, enemy-only, battle-path, internal-cluster, and cross-cluster bridge projections explicitly
+- report missing metric coverage before modeling `opscore` or `feedscore`
+- avoid identity leakage from player ids/names
+- avoid causal or psychological claims unless a separate experiment supports them
+
 The old gravity feeling should be preserved as interaction polish, not as the source of truth for the layout.
 
 Recommended approach:
 
 - Rust computes stable base positions
-- Rust layout keeps visible gaps between clusters so communities do not collapse into one unreadable mass
+- Rust layout places bounded ally groups on bridge-driven orbits so central broker groups sit closer to the invisible center while weakly connected groups remain farther out
 - browser renders nodes and edges with typed arrays
 - browser supports camera movement, hover, click, search, and filtering
 - browser applies subtle local physics around the fixed layout to keep the graph feeling alive
 - browser lets users drag individual nodes like the legacy PyVis view
 - dragged nodes should remain interactive overlays on top of the stable Rust layout, not persisted research coordinates
 - cluster highlight styling must show best `opscore`, worst `feedscore`, and the rare case where one player is both
+- bridge-first styling must keep cross-group ally links visible while making dense internal and enemy edge layers secondary
+- bounded ally groups should render as visible cluster objects, not just loose nodes:
+  - translucent cluster fill
+  - thick colored outline
+  - thick internal unity strokes between members
+  - member-to-member ally links stay available inside each cluster even when cross-cluster bridge links are disabled
+  - node colors drawn above all edge and cluster layers
+- pathfinder selection must be optional in the graph view:
+  - no default source/target auto-selection
+  - users can clear selected pathfinder players
+  - users can switch to a cluster-only view that hides cross-cluster bridge and enemy layers while preserving each cluster's internal member links
 - no browser-side global graph layout for the full dataset
 
 The physics model should be intentionally restrained:
@@ -206,6 +236,17 @@ The frontend should expose enemy edges as a toggle:
 - toggle can reveal enemy edges
 - relation bit is stored in `edge_props`
 - toggling should not require rebuilding the graph
+
+The default visual hierarchy should be:
+
+1. cluster fill and outline
+2. internal cluster unity strokes
+3. internal ally member links
+4. optional cross-cluster ally bridge edges
+5. optional enemy edges
+6. player nodes and selected path overlay
+
+This ordering prevents the graph from becoming a dense line cloud where clusters and nodes disappear underneath edge overdraw.
 
 Suggested edge encoding:
 
@@ -237,7 +278,7 @@ Path modes remain:
 - `social-path`: ally-supported traversal only
 - `battle-path`: ally and enemy traversal
 
-The overlay should reuse the existing Rust endpoint behavior rather than creating a separate pathfinding graph.
+The overlay should reuse the existing Rust endpoint behavior rather than creating a separate pathfinding graph. Likewise we use currently in our current model, e.g. GraphPage.tsx
 
 ## Proposed API Surface
 
@@ -247,6 +288,7 @@ Example:
 
 ```txt
 GET /api/pathfinder-rust/graph-v2/manifest
+GET /api/pathfinder-rust/graph-v2/summary
 GET /api/pathfinder-rust/graph-v2/node-meta
 GET /api/pathfinder-rust/graph-v2/node-positions
 GET /api/pathfinder-rust/graph-v2/node-metrics
@@ -256,7 +298,31 @@ GET /api/pathfinder-rust/graph-v2/cluster-meta
 POST /api/pathfinder-rust/graph-v2/rebuild
 ```
 
-The rebuild endpoint should be explicit. Normal page loads should use cached artifacts.
+These active-dataset endpoints are compatibility aliases. The preferred architecture is dataset-scoped serving:
+
+```txt
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/manifest
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/summary
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/node-meta
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/node-positions
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/node-metrics
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/edge-pairs
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/edge-props
+GET /api/pathfinder-rust/datasets/:datasetId/graph-v2/cluster-meta
+POST /api/pathfinder-rust/datasets/:datasetId/graph-v2/rebuild
+```
+
+Graph V2 artifacts must be generated and served from the requested dataset's own cache directory:
+
+```txt
+backend/data/cache/<datasetId>/graph-v2/
+```
+
+The active dataset should not be treated as the canonical Graph V2 storage boundary. It is only a UI convenience. Dataset-scoped endpoints allow multiple dataset outputs to coexist and be compared without switching global state or overwriting another dataset's artifacts.
+
+Datasets with no usable refined player table should still receive a valid empty Graph V2 summary. In that case `nodeCount = 0`, `edgeCount = 0`, and `clusterCount = 0` mean the dataset is not ready for graph-level conclusions yet. Analysis agents should treat those summaries as readiness markers, not failed exports.
+
+The rebuild endpoint should be explicit. Normal page loads should use cached artifacts for the requested dataset.
 
 ## Cache Rules
 
@@ -270,9 +336,19 @@ Graph artifacts should be regenerated when any of these change:
 - clustering algorithm version
 - layout version
 
+The backend must reject stale Graph V2 cache manifests. A cache is valid only when the manifest dataset id matches the active dataset and the manifest versions match the current expected versions:
+
+- `graph-builder-v2.2`
+- `bounded-ally-groups-v2`
+- `bridge-orbit-layout-v1`
+
+This prevents the old `ally-components-v1` / `cluster-grid-spiral-v1` artifact from being served after rebuilds. That old artifact can create fake mega-clusters such as a 2,983-player ally component, which violates the current bounded-group rule.
+
 The manifest should record:
 
 - dataset id
+- latest summary file
+- archived summary file
 - match count
 - player count
 - node count
@@ -285,6 +361,7 @@ The manifest should record:
 - layout version
 - generation time
 - artifact file sizes
+- summary markdown file size
 
 ## Migration Plan
 
