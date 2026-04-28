@@ -1,7 +1,8 @@
-\documentclass[a4paper,12pt]{report}
+﻿\documentclass[a4paper,12pt]{report}
 
 \usepackage{fontspec}
-\usepackage[hungarian]{babel}
+\usepackage{polyglossia}
+\setmainlanguage{hungarian}
 \usepackage[a4paper,margin=2.4cm]{geometry}
 \usepackage{graphicx}
 \usepackage{float}
@@ -43,6 +44,15 @@
 \includegraphics[width=0.92\textwidth]{#2}
 \caption{#1}
 \end{figure}
+}
+
+\newcommand{\placeholder}[2]{%
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{2.2cm}%
+\textbf{[PLACEHOLDER]}\par\vspace{0.4em}{\small #1}\vspace{2.2cm}}}%
+\caption{#2}
+\end{figure}%
 }
 
 \begin{document}
@@ -176,7 +186,7 @@ A projekt mérete könnyen csábíthatna arra, hogy minden meglévő ötletet k�
 \begin{itemize}
     \item Amit a kódbázisban jelenleg ténylegesen megvalósultnak és ellenőrizhetőnek találtam, azt kész állapotként írom le.
     \item Amit a repository megőriz korábbi kísérleti ágként, de a jelenlegi adatsnapshotban nincs érdemi kimenete, azt korábbi vagy kiegészítő modulként kezelem.
-    \item Amit az \texttt{AGENTS.md} és a fejlesztési dokumentáció csak jövőbeli célként fogalmaz meg, azt nem nevezem kész feature-nek.
+    \item Amit a fejlesztési dokumentáció csak jövőbeli célként fogalmaz meg, azt nem nevezem kész feature-nek.
 \end{itemize}
 
 Ennek a szabálynak különösen nagy jelentősége van a következő területeken:
@@ -184,7 +194,7 @@ Ennek a szabálynak különösen nagy jelentősége van a következő területek
 \begin{itemize}
     \item a klaszterekhez kötött ország- és régióelemzés kódja megvan, de a jelenlegi ellenőrzött adatbázis-pillanatképben nem tartalmaz kitöltött országcímkéket;
     \item a több-adatkészletes architektúra implementált, de a történetileg gazdag, régi \texttt{playersrefined.db} állomány migrációja a mostani repository-állapotban még nem teljesen zárult le;
-    \item a párhuzamos Brandes-központiság, a temporális stabilitási mutatók, a kohézió--teljesítmény kapcsolat és az adatvezérelt \texttt{opscore}-kalibráció jelenleg jövőbeli munka.
+    \item a már implementált Brandes-központiság teljes valós adatkészletes benchmarkolása és az erősebb permutációs nullmodellek jelenleg további kutatási irány.
 \end{itemize}
 
 \section{A dolgozat szerkezete}
@@ -207,7 +217,7 @@ A jelen projektben a közösségfogalom nem öncélú. Azért fontos, mert a tö
 
 \section{Közösségdetektálás és modularitás}
 
-A Python oldali klaszterezés jelenleg a NetworkX \texttt{greedy\_modularity\_communities} eljárását használja, amely a Clauset--Newman--Moore féle mohó modularitásmaximalizálási megközelítésre épül \cite{clauset2004,networkx_greedy}. Ez a választás tudatos kompromisszum: nem a leglátványosabb, hanem a jelenlegi adatkészlet és pipeline mellett a legegyszerűbben magyarázható és stabilan reprodukálható megoldás.
+A Python oldali populációs klaszterezés jelenleg a NetworkX \texttt{greedy\_modularity\_communities} eljárását használja, amely a Clauset--Newman--Moore féle mohó modularitásmaximalizálási megközelítésre épül \cite{clauset2004,networkx_greedy}. Ez a választás tudatos kompromisszum: nem a leglátványosabb, hanem a jelenlegi adatkészlet és pipeline mellett a legegyszerűbben magyarázható és stabilan reprodukálható megoldás. Fontos megjegyezni, hogy a futásidejű gráfállapotot -- amelyen az útvonalkeresés és az analitikák futnak -- a Rust motor önállóan, a meccs-JSON fájlokból és az SQLite-adatbázisból építi fel; a Python pipeline szerepe tehát elsősorban a populációs közösségek perzisztálása, nem a teljes gráfreprezentáció előállítása.
 
 A dolgozatban ezért nem azt állítom, hogy ez az egyetlen vagy minden helyzetben legjobb közösségdetektáló eljárás, hanem azt, hogy a jelenlegi rendszerben ez adja a legvédhetőbb kiindulópontot a közösségek strukturált tárolására és vizsgálatára.
 
@@ -336,6 +346,8 @@ A tipikus futás így írható le:
 
 Ez a részlet azért fontos, mert a premade-fókusz nem csak a későbbi gráfelemzés szintjén jelenik meg, hanem már a mintavételi mechanizmusban is. A rendszer tehát nem utólag próbálja kiszűrni a visszatérő kapcsolatok jelentőségét, hanem a gyűjtési stratégiát is erre hangolja.
 
+\placeholder{Collector állapotgép --- rate limit kezelés, checkpointing, seed-terjeszkedés és queue-szűrés}{A collector paraméterezhető állapotgépének folyamatábrája}
+
 \section{Gyűjtési fókusz és queue-választás}
 
 A rendszer nem a Riot teljes játékuniverzumát próbálja egyetlen adatfolyamba összesöpörni, hanem tudatosan olyan queue-típusokból építkezik, amelyekben az ismétlődő kapcsolatok és a premade-jelleg reálisabban megjelenhet. Ez az oka annak, hogy a repository dokumentációja és gyűjtőszkriptjei külön foglalkoznak az EUNE és a Master/SoloQ jellegű mintákkal, illetve a gyors tesztadatsorokkal.
@@ -429,6 +441,62 @@ Eseményes stdout log & Backend- és frontend-oldali állapotkövetés támogat�
 
 Ezek a döntések nem puszta üzemeltetési kényelmi funkciók. A reprodukálható számítógépes kutatás egyik alapelve, hogy az eredményekhez vezető lépések nyomon követhetők és lehetőleg automatizálhatók legyenek \cite{sandve2013}. A collector parametrizálhatósága, eseményes logolása és idempotens mentési logikája pontosan ezt a célt szolgálja.
 
+\section{A flexset és a soloq gyűjtési stratégiájának összehasonlítása}
+
+A két kutatási dataset nem véletlenszerűen jött létre, hanem eltérő gyűjtési stratégiák eredménye. Ez a különbség az analitikai eredmények értelmezéséhez is nélkülözhetetlen.
+
+\subsection{Flexset: premade-fókuszú, apex-tier Flex Queue}
+
+A \texttt{flexset} dataset gyűjtési konfigurációja a következő főbb stratégiai döntéseken alapul:
+
+\begin{itemize}
+    \item \textbf{Queue-szűrés}: kizárólag 440-es queue ID-jű (Ranked Flex) meccsek;
+    \item \textbf{Seed-populáció}: EUNE Master+ ranglista-pozíciójú játékosok;
+    \item \textbf{Premade-probe}: a collector egy rövid meccslista-minta alapján ellenőrzi, hogy a jelölt játékos rendelkezik-e elegendő ismétlődő csapattársi mintázattal. Ha igen, a teljes meccsgyűjtés megkezdődik;
+    \item \textbf{Minimális premade ismétlések}: a \texttt{minimumPremadeRepeats} paraméter azokat a seedelési jelölteket vonja be, amelyeknél az ismétlődő kapcsolatok valószínűsége meghaladja a küszöböt;
+    \item \textbf{Seed-terjeszkedés}: az egyes játékosok feldolgozásakor a rendszer a csapattársaik azonosítóit is felveszi a gyűjtési sorba.
+\end{itemize}
+
+Ez a stratégia egyfajta \emph{premade-központú snowball sampling}: a már gyűjtött játékosok szomszédain keresztül bővül a mintakör. Az eredmény egy erősen összefüggő, visszatérő kapcsolatokban gazdag szociális háló.
+
+\subsection{Soloq: teljesítmény-alapvonal, kontroll-adatkészlet}
+
+A \texttt{soloq} dataset gyűjtési konfigurációja szándékosan más fókusszal rendelkezik:
+
+\begin{itemize}
+    \item \textbf{Queue-szűrés}: kizárólag 420-as queue ID-jű (Ranked Solo/Duo) meccsek;
+    \item \textbf{Seed-populáció}: EUNE Master$+$ Solo/Duo Queue ranglistán szereplő játékosok --- ez \emph{nem azonos} a flexset seed-populációjával, amely a Flex Queue ranglistájára épül; a két ranglista eltérő mechanikán alapul, és eltérő játékosbázist hoz létre;
+    \item \textbf{Premade-probe}: itt a probe-logika \emph{nem} szűr premade-jelenlét alapján, hanem elsősorban teljesítményadat-elérhetőség alapján;
+    \item \textbf{Kisebb korpusz}: a konfigurált korlátok 2000 meccs körül zárnak le (vs. flexset 4980).
+\end{itemize}
+
+A soloq gyűjtés tehát \emph{nem premade-ra optimalizált}: a Solo/Duo Queue nem ösztönzi az 5-fős premade csapatokat, és a kollekciós stratégia sem keresi aktívan a visszatérő szövetségesi mintákat. Ez teszi a soloq-ot alkalmas kontrollalappá.
+
+\begin{table}[H]
+\centering
+\caption{A két dataset gyűjtési stratégiájának összehasonlítása}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.2cm} X X}
+\toprule
+\textbf{Dimenzió} & \textbf{flexset} & \textbf{soloq} \\
+\midrule
+Queue ID & 440 (Flex) & 420 (Solo/Duo) \\
+Premade-probe & Igen, ismétlések alapján & Nem \\
+Seed-terjeszkedés & Csapattársak alapján & Listalekéréssel \\
+Gyűjtési cél & Szociális struktúra & Teljesítmény-alapvonal \\
+Corpus mérete & 4980 meccs & 2000 meccs \\
+Szerep a projektben & Fő kutatási adatkészlet & Kontroll-adatkészlet \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Ez a kettős stratégia az egyik legfontosabb módszertani döntése a projektnek. Azzal, hogy a projekt explicit módon gyűjtötte és felcímkézte a két eltérő karakterű datasetet, lehetővé tette azt a kontrolláltabb összehasonlítást, amelynek eredményei a jelen dolgozat empirikus fejezeteit adják.
+
+\subsection{Megállási feltételek és reprodukálhatóság}
+
+Mindkét dataset gyűjtése a következő megállási feltételek valamelyikén áll le: elérte a konfigurált maximális meccsszámot; elérte a konfigurált maximális iterációszámot; a gyűjtési sor kiürült; vagy manuálisan le lett állítva.
+
+A nyers meccs-JSON fájlok fájlrendszeren perzisztálódnak. Az idempotens létező-fájl-ellenőrzés garantálja, hogy már letöltött meccsek nem kerülnek újra letöltésre, ami lehetővé teszi a fokozatos, megszakítható gyűjtést.
+
 \section{Adatminőség, torzítás és óvatos interpretáció}
 
 A Riot API formálisan pontos, de a dolgozat szempontjából az adat így sem „semleges”. A mintavételt erősen befolyásolja:
@@ -504,7 +572,7 @@ A korai változat legfontosabb korlátai a következők voltak:
 
 Ezek a hiányok nem kudarcot jeleztek, hanem természetes érési pontokat. A jelenlegi rendszer legjobban akkor érthető, ha nem egyetlen pillanatfelvételként, hanem ilyen fokozatos evolúció eredményeként nézzük.
 
-Az \texttt{architecture-decision} szemlélettel visszanézve: a projekt korai szakaszának legtermészetesebb csapdája az \emph{akkumulatív script-architectúra} lett volna, amelyben minden új feature egy újabb script formájában kerül be, és az egész rendszer globális állapottól függ. Ez a minta sok hasonló méretű adat-kutatási projektben megfigyelhető. Azzal, hogy a projekt tudatosan bevezette a dataset-absztrakciót, a Rust-szintű analitikai elválasztást és a perzisztens klasztermodellt, elkerülte ezt a csapdát.
+Visszatekintve a projekt korai szakaszának legtermészetesebb csapdája az \emph{akkumulatív script-architectúra} lett volna, amelyben minden új feature egy újabb script formájában kerül be, és az egész rendszer globális állapottól függ. Ez a minta sok hasonló méretű adat-kutatási projektben megfigyelhető. Azzal, hogy a projekt tudatosan bevezette a dataset-absztrakciót, a Rust-szintű analitikai elválasztást és a perzisztens klasztermodellt, elkerülte ezt a csapdát.
 
 Különösen fontos fordulópontot jelentett az a felismerés, hogy \emph{a kutatási analitikának nem szabad a frontend-állapottól függenie}. Ha az asszortativitás kiszámítása frontend-kérésre, a böngészőben lévő adatokból történne, akkor egyrészt nem lenne reprodukálható, másrészt nagyon érzékeny lenne a felhasználói interakcióra. A Rust-oldali, parancssori futtathatóság ezt a problémát gyökeresen oldja meg.
 
@@ -512,7 +580,9 @@ Különösen fontos fordulópontot jelentett az a felismerés, hogy \emph{a kuta
 
 Szakdolgozatírás közben könnyű lenne azt a hibát elkövetni, hogy a projekt korábbi állapotát egyszerűen ``lecserélem'' a jelenlegi, erősebb verzióra. Ezt tudatosan nem teszem. A korai pipeline, a \texttt{conclude.py}-szerű ág és a régi klaszterértelmezések azért maradnak a dolgozatban, mert ezek adják meg a fejlődés irányát. A mostani rendszer nem légüres térben született, hanem ezekből nőtt ki.
 
-\diagramfigure{Tevékenységdiagram a korai adatgyűjtő és gráfépítő pipeline-hoz}{activity diagram.pdf}
+A country-alapú ágat (a \texttt{assign\_countries.py} és a \texttt{conclude.py} modulokat) jelenleg elavultnak tekintem: az ország-hozzárendelés megbízhatósága nem elegendő ahhoz, hogy a projekt fő állításait erre épüljenek, és a kód aktív karbantartás nélkül is a repositoryban marad mint történeti dokumentum. Ugyanakkor az a gondolat, hogy a klasztereket értelmezési egységként kezeljük --- és ne csak vizuális exportként ---, ebből az ágból nőtt ki. Ebben az értelemben az ott szerzett tapasztalat a jelenlegi klasztermodel egyik alapköve.
+
+\diagramfigure{A korai Python-alapú adatgyűjtő és gráfépítő pipeline adatáramlása}{old python graph dataflow diagram.pdf}
 
 \chapter{A rendszerarchitektúra evolúciója}
 
@@ -540,7 +610,9 @@ Ezeket a projekt az alábbi rétegek között osztja szét:
     \item \textbf{React + Vite}: interaktív frontend és vizuális prezentáció.
 \end{itemize}
 
-\diagramfigure{Komponensdiagram a jelenlegi rendszerhez}{component diagram.pdf}
+Az alábbi komponensdiagram a teljes rendszer magas szintű szerkezetét mutatja be: a Python adatgyűjtő és gráfépítő worker-eket, a Node.js/Express API réteget, a Rust analitikai motort, a React/Vite frontendet és a C\# ASP.NET Core adatbázis-böngészőt, valamint az ezeket összekötő kommunikációs csatornákat és tárolási egységeket. A diagram jól mutatja, hogy a frontend--Rust Pathfinder összeköttetés a Node.js API-n keresztül fut: a frontend közvetlenül nem hívja a Rust motort, hanem HTTP-végpontokon keresztül kommunikál a Node rétegrel, amely a Rust folyamatot stdin/stdout csatornán keresztül vezérli.
+
+\diagramfigure{A teljes rendszer komponensdiagramja --- Python worker-ek, Node.js API, Rust analitikai motor, React frontend és C\# adatbázis-böngésző}{full system diagram.pdf}
 
 \section{Miért nem egyetlen technológia?}
 
@@ -560,7 +632,7 @@ A C\# / ASP.NET Core adatbázis-böngésző tudatosan különálló eszközként
 
 \subsection{Elvetett architekturális alternatívák}
 
-Az \texttt{architecture-decision} szemlélet szerint nem csak a végső döntést, hanem az elutasított alternatívákat is érdemes dokumentálni. A projekt fejlődése során legalább négy természetes irány merülhetett volna fel:
+A végső döntés mellett az elutasított alternatívákat is érdemes dokumentálni. A projekt fejlődése során legalább négy természetes irány merülhetett volna fel:
 
 \begin{table}[H]
 \centering
@@ -603,7 +675,7 @@ Az architektúra fejlődését három, viszonylag jól elkülöníthető fázisb
     \item \textbf{Kutatási platform-fázis}: a Rust analitika, a multi-dataset modell és a külön research oldalak megjelenésével a projekt már nem csak vizualizációs eszköz, hanem kísérleti környezet lett.
 \end{enumerate}
 
-Az \texttt{architecture-decision} szemlélet szerint minden fázisban más minőségi attribútum került előtérbe. Először a fejlesztési sebesség, utána a reprodukálhatóság, végül a teljesítmény és az elemzési mélység. Ez segít megérteni, miért nem ``inkonzisztencia'' a több réteg, hanem a rendszer természetes evolúciója.
+Minden fázisban más minőségi attribútum került előtérbe: először a fejlesztési sebesség, utána a reprodukálhatóság, végül a teljesítmény és az elemzési mélység. Ez segít megérteni, miért nem ``inkonzisztencia'' a több réteg, hanem a rendszer természetes evolúciója.
 
 \section{Több-adatkészletes architektúra}
 
@@ -649,6 +721,8 @@ A dataset a jelenlegi rendszerben nem statikus mappát, hanem együtt mozgó ál
 
 Ez a bontás a dolgozat szempontjából azért erős, mert világos köztes állapotokat ad. Egy signed-balance futtatásnak nem kell újra elindítania a Riot API-gyűjtést, és egy klaszterezési változtatásnak sem kell a teljes pipeline-t újraépítenie. A dataset tehát a reprodukálható munkafolyamat egységeként is értelmezhető.
 
+\placeholder{Dataset életciklus: gyűjtés → nyers DB → finomított DB → gráf-cache → analitikai eredmény}{Egy dataset teljes életciklusának diagramja a Riot API-tól az analitikai kimenetig}
+
 \section{A jelenlegi adatállapot}
 
 Az aktív adatállapotot 2026. április 28-án közvetlenül a repository aktuális állapotából ellenőriztem. Az aktív dataset a \texttt{soloq}. Az ellenőrzött fő adatállományok és adatbázisok adatai:
@@ -669,11 +743,11 @@ Az aktív adatállapotot 2026. április 28-án közvetlenül a repository aktuá
     \item finomított adatbázis (\texttt{playersrefined.db}): \textbf{6768} játékos, \textbf{140} klaszter, \textbf{1538} klasztertag.
 \end{itemize}
 
+Fontos megjegyezni, hogy a soloq dataset klaszterei jellemzően \emph{duo párokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül. Ez strukturálisan különbözik a flexset klasztereitől, ahol akár ötfős premade csapat is kialakulhat rendszeresen ismétlődő együttsként.
+
 Ez a pont fontos: a jelen dolgozat nem hipotetikus rendszert ír le, hanem egy olyan állapotot, amelyben a pipeline már nem csak tervekből áll, hanem két, egymással összehasonlítható, eltérő queue-szemantikájú, valós adatokkal feltöltött és ténylegesen lefuttatott kutatási korpusszal rendelkezik.
 
 A meccsszámban megfigyelhető egy-fájlos eltérés (4981 fájl vs. 4980 matchCount a Graph V2 összegzőben) metodikai megjegyzést igényel: ez feltehetően egy olyan meccsfájl, amelyet a gyűjtő letöltött, de a Graph V2 pipeline valamilyen validációs szűrőn kizárt. Ez nem kritikus eltérés, de jól mutatja, hogy a pipeline nem pusztán fájlszámlálás alapján dolgozik.
-
-\diagramfigure{Adatáramlási diagram a gyűjtéstől a frontendig}{dataflow diagram.pdf}
 
 \section{Perzisztencia és relációs modell}
 
@@ -687,7 +761,11 @@ A projekt egyik legfontosabb érése az volt, hogy a klaszterek kikerültek a �
 
 A \texttt{players} tábla nemcsak a név- és országmezőket, hanem a normalizált \texttt{opscore}, \texttt{feedscore}, szerepkör, meccsszám és artifact-szintű részeredményeket is tárolja. A \texttt{clusters} és \texttt{cluster\_members} páros pedig lehetővé teszi, hogy ugyanazon játékoshoz többféle klasztertípus (\texttt{python\_population}, \texttt{rust\_pathfinding}) is kötődjön.
 
-\diagramfigure{Relációs modell a klaszter- és játékosperzisztenciához}{relational model diagram.pdf}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{relational model diagram.pdf}
+\caption{Relációs modell a klaszter- és játékosperzisztenciához (\texttt{players}, \texttt{clusters}, \texttt{cluster\_members})}
+\end{figure}
 
 \chapter{Több-adatkészletes architektúra}
 
@@ -695,7 +773,7 @@ A \texttt{players} tábla nemcsak a név- és országmezőket, hanem a normaliz�
 
 Az egyetlen adatbázisos modell korai prototípushoz még elegendő volt, de amint a projekt egyszerre kezdett demo-, smoke-test- és kutatási célokat szolgálni, világossá vált, hogy a különböző minták szétválasztása nélkül a rendszer nehezen reprodukálható. Ugyanaz a frontend, ugyanaz a Rust futtatókörnyezet és ugyanaz a Python pipeline más eredményt adhat, ha eltérő bemeneti korpuszon fut. Ezt a különbséget nem rejtett konfigurációs fájlokban, hanem explicit dataset-regiszterben érdemes kezelni.
 
-Az \texttt{architecture-decision} szemlélet szerint a dataset-regiszter bevezetésének szükségességét konkrét igényváltozás indokolta:
+A dataset-regiszter bevezetésének szükségességét konkrét igényváltozás indokolta:
 
 \begin{itemize}
     \item \textbf{Smoke-teszt igény}: a fejlesztői pipeline-t kis adathalmazzal kell tudni validálni, anélkül hogy az éles adatbázist módosítani kellene;
@@ -738,15 +816,15 @@ A négy dataset jelenléte nem véletlen felhalmozódás, hanem tudatos kutatás
 \toprule
 \textbf{Dataset ID} & \textbf{Szerepkör} & \textbf{Jellemzők} \\
 \midrule
-\texttt{default} & Alap/migrált korpusz & Vegyes queue-eloszlás, heterogén tartalom \\
-\texttt{smoke-test-dataset} & Pipeline-teszt & Átmeneti, infrastruktúra-validálásra \\
-\texttt{flexset} & Fő kutatási dataset & EUNE Master$+$ Flex, premade-fókusz, signed-graph vizsgálat \\
-\texttt{soloq} & Kontroll- és baseline-dataset & EUNE Master$+$ Solo/Duo, teljesítmény-alapvonal \\
+\texttt{default} & Alap/migrált & Vegyes queue, heterogén tartalom \\
+\texttt{smoke-test} & Pipeline-teszt & Átmeneti, infrastruktúra-validálásra \\
+\texttt{flexset} & Fő kutatási dataset & EUNE Master$+$ Flex, premade-fókusz \\
+\texttt{soloq} & Kontroll/baseline & EUNE Master$+$ Solo/Duo, teljesítmény-alap \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-A \texttt{flexset} esetében a regiszter metaadata tartalmazza a gyűjtési stratégia dokumentumát és a collector konfigurációs fájl hivatkozását (\texttt{apex-flex-collector.json}). A \texttt{soloq} hasonlóan strukturált: a \texttt{master-soloq-eune-collector.json} konfigurációval és \texttt{master-soloq-eune-collection-strategy.md} dokumentummal rendelkezik. Ez a párhuzamos konfiguráció kifejezetten mutatja, hogy a két dataset nem eseti gyűjtés, hanem tudatosan eltérő stratégiával felépített, összehasonlítható korpusz.
+A \texttt{flexset} esetében a regiszter metaadata tartalmazza a gyűjtési stratégia dokumentumát és a collector konfigurációs fájl hivatkozását (\texttt{apex\allowbreak-flex\allowbreak-collector.json}). A \texttt{soloq} hasonlóan strukturált: külön collector konfigurációs fájllal és gyűjtési stratégia-dokumentummal rendelkezik. Ez a párhuzamos konfiguráció kifejezetten mutatja, hogy a két dataset nem eseti gyűjtés, hanem tudatosan eltérő stratégiával felépített, összehasonlítható korpusz.
 
 \begin{table}[H]
 \centering
@@ -791,6 +869,8 @@ Ezt a dolgozatban nem hibaként, hanem átmeneti evolúciós állapotként kezel
 A projekt mérete és célja szempontjából az SQLite továbbra is kifejezetten jó kompromisszum. Nem igényel külön adatbázisszerver-felügyeletet, könnyen verziózható a séma, gyors a lokális fejlesztésben, és a demo közben sincs szükség külön infrastruktúrára. Ennél is fontosabb, hogy a perzisztens modell egyszerűen ellenőrizhető: a játékos-, klaszter- és tagsági sorok közvetlenül lekérdezhetők.
 
 Egy szakdolgozatban ez külön előny. Nem csak a frontend JSON-kimeneteit lehet megmutatni, hanem az alapul szolgáló relációs tárolást is.
+
+\placeholder{SQLite ER-diagram: players, clusters, cluster\_members, pathfinder\_replays táblák és kapcsolataik}{A fő SQLite adatbázis egyedkapcsolati diagramja}
 
 \section{A \texttt{players} tábla mint gazdagított játékosprofil}
 
@@ -883,6 +963,36 @@ A két szám közötti különbség metodikailag fontos. A \texttt{clusters} tá
 
 Ez önmagában is fontos rendszerszintű eredmény, mert mutatja, hogy a többdataset-architektúra valódi különbséget fog meg, nem csupán méretbeli eltérést.
 
+\section{A két klasztercsalád részletes összehasonlítása}
+
+A rendszerben két klasztercsalád él párhuzamosan, amelyek különböző módszerrel és célra épülnek:
+
+\subsection{python\_population}
+
+A \texttt{python\_population} típusú klaszterek a Python gráfépítési pipeline kimenetei. Ezeket a \texttt{backend/build\_graph.py} és a Louvain-moduláris közösségdetektálás hozza létre a nyers meccsadatok alapján. Főbb jellemzők:
+
+\begin{itemize}
+    \item a klaszterméret nincs kemény korláthoz kötve (a moduláris detektálás saját maga dönt a méretekről);
+    \item az algoritmus a globális moduláris optimalizáció szempontjából határozza meg a csoportokat;
+    \item a flexset dataseten például közepes méretű, $\sim$10--15 fős klaszterek is keletkezhetnek, ha a moduláris struktúra azt indokolja;
+    \item a Python klaszterek inkább \emph{közösségdetektálási} perspektívát tükröznek.
+\end{itemize}
+
+\subsection{rust\_pathfinding}
+
+A \texttt{rust\_pathfinding} típusú klaszterek a Rust motor futásidejű klaszterezési logikájából jönnek. Az implementáció az ally-kapcsolatokon alapuló erős-összefüggési szegmensekre bontja a gráfot, kemény méretkorláttal (maximum 20 tag). Főbb jellemzők:
+
+\begin{itemize}
+    \item a 20 tagos korlát garantálja a klaszterek áttekinthetőségét a frontend vizualizációban;
+    \item az oversized összefüggő komponensek determinisztikusan kerülnek szétvágásra;
+    \item a Rust klaszterek főként \emph{pathfinding és vizualizációs} célra optimalizáltak;
+    \item az \texttt{orbitScore} és \texttt{orbitRadius} értékek kizárólag a Rust klaszterekre értelmezhetők.
+\end{itemize}
+
+\subsection{A két csomád koegzisztenciájának módszertani értéke}
+
+A két klasztercsalád nem egymást helyettesíti, hanem egymást kiegészíti. A Python klaszterek adnak egy moduláris alapú közösségstruktúrát; a Rust klaszterek ennek futásidejű, vizualizáció-kompatibilis változatát. Az a tény, hogy mindkét klaszter-nézet egyszerre létezik az adatbázisban, lehetővé teszi, hogy például az asszortativitási bontásoknál explicit módon megkérdezhetjük: a Python-közösségek belső éleire vagy a Rust-vizualizációs csoportok belső éleire mért asszortativitás-e erősebb?
+
 \section{Miért fontos a perzisztencia a kutatási fejezetekhez?}
 
 A strukturális egyensúly és az asszortativitás számításai látszólag a Rust oldalon történnek, de valójában a korábban kialakított perzisztens modell nélkül sokkal nehezebben lennének értelmezhetők. A klaszterekhez kötött bontások, a játékosprofilokhoz rendelt score-ok és a későbbi exportok mind arra támaszkodnak, hogy a játékos és a közösségi kontextus ugyanabban a perzisztens rendszerben elérhető.
@@ -921,6 +1031,8 @@ A nyers adatok összefűzésének kulcsa a \texttt{puuid} alapú normalizálás.
 Ez adja a rendszer egyik központi alapját, mert minden későbbi gráfanalitika erre a normalizált játékosprofilra támaszkodik.
 
 \section{A jelenleg implementált pontozási rendszer}
+
+\placeholder{Score pipeline: nyers meccsstatisztikák → szerepkör-szorzók → percentilis-normalizálás → opscore/feedscore}{A pontozási pipeline logikai lépései a nyers adatoktól a normalizált végső metrikáig}
 
 A projektben használt \texttt{opscore} és \texttt{feedscore} nem dobozból kivett, külső szolgáltatásból átvett mutatók, hanem a rendszerben megvalósított, explicit képletekre épülő pontszámok. A pontozás célja nem az, hogy „megmondja az igazságot”, hanem az, hogy a nyers meccsadatokat egy összehasonlítható, szerepkörérzékeny skálára emelje.
 
@@ -1104,16 +1216,7 @@ Az artifact-szintű modell ezért nem csak pontosságnövelés volt, hanem szerk
 
 \section{Mit nem tud a jelenlegi pontozás?}
 
-A pontozórendszer erősen gyakorlatias, de nem állítok róla többet annál, mint amit ténylegesen tud. Jelenleg \textbf{nincs} benne:
-
-\begin{itemize}
-    \item időbeli lecsengés,
-    \item stabilitási bónusz,
-    \item streak-felismerés,
-    \item gépi tanulásos súlytanulás.
-\end{itemize}
-
-Ezek fontos jövőbeli irányok lehetnek, de a dolgozatban csak azt tekintem késznek, ami a kódbázisban már ténylegesen megvalósult.
+A pontozórendszer erősen gyakorlatias, de nem állítok róla többet annál, mint amit ténylegesen tud. Jelenleg \textbf{nincs} benne gépi tanulásos súlytanulás: a kézi tervezésű szorzók megbízhatóak és átláthatóak, de nem statisztikailag kalibráltak. Ez egy potenciális jövőbeli fejlesztési irány, de a dolgozatban csak azt tekintem késznek, ami a kódbázisban már ténylegesen megvalósult.
 
 \section{Kiegészítő ország-alapú elemzés}
 
@@ -1180,7 +1283,7 @@ A jelenlegi rendszerben a klaszterek önálló, lekérdezhető adatbázis-objekt
     \item a későbbi analitikai kiterjesztésekhez már rendelkezésre áll a közösséginformáció.
 \end{itemize}
 
-\diagramfigure{Osztály- és tárolási nézet a gráf- és klaszterobjektumokhoz}{class diagram.pdf}
+\diagramfigure{A Pathfinder osztálydiagramja --- a gráf- és klaszterobjektumok tárolási modellje}{path finder class diagram.pdf}
 
 \section{Két klasztercsalád együttélése}
 
@@ -1243,6 +1346,8 @@ Azért tartom fontosnak, hogy ez a modul ne tűnjön el egyetlen félmondatban, 
 
 Ebből a szempontból a modul megőrzése a dolgozatban nem teher, hanem hitelességi előny: látszik belőle, hogy a projekt történetileg valóban fejlődött, és nem utólag lett egyetlen steril narratívára visszavágva.
 
+\diagramfigure{A korai ország-klaszter pipeline szekvenciadiagramja --- a frontend, a backend és a Python worker közötti folyamat az ország-hozzárendelési kísérletben}{old graph sequence diagram.pdf}
+
 \chapter{Rust futtatókörnyezet és útvonalkeresés}
 
 \section{Miért került a futásidejű réteg Rustba?}
@@ -1274,6 +1379,8 @@ A \texttt{backend/pathfinder-rust/src/engine/graph.rs} alapján a \texttt{GraphS
 \subsection{A gráfállapot felépítési sorrendje}
 
 A \texttt{build\_graph\_state()} rutin sorrendje önmagában is fontos architekturális állítás. A motor előbb feloldja az aktív dataset útvonalait, betölti a játékosprofilokat, felépíti az élstruktúrát, létrehozza vagy frissíti a Rust oldali klasztereket, majd ezután készíti elő a gyorsító struktúrákat, például a landmark- és minimumköltség-táblákat. Vagyis a teljesítményoptimalizálás nem egy üres, steril gráf fölött történik, hanem egy már szemantikailag gazdag állapoton.
+
+\diagramfigure{A Rust Pathfinder keresési tevékenységdiagramja --- a négy algoritmus döntési pontjai és visszaterjesztési lépései}{rust pathfinder activity diagram.pdf}
 
 \section{Támogatott útvonalkereső algoritmusok}
 
@@ -1329,9 +1436,41 @@ A rendszer A* implementációja tudatosan úgy lett kialakítva, hogy ne vizuál
 
 A végső heurisztika ezek maximuma. A térbeli layout-távolság legfeljebb tie-break jelleggel jelenik meg, nem hordozza a helyességi garanciát. Ez a döntés különösen fontos szakdolgozati szempontból, mert így az A* gyorsítás nem megy a korrekt eredmény rovására.
 
-Ez azért lényeges, mert a képernyőn látható közelség és a gráfbeli költség nem ugyanaz a fogalom. Két játékos vizuálisan kerülhet egymáshoz közel úgy is, hogy a kapcsolathálóban nagy költségű út választja el őket. Ha a rendszer a layoutot valódi heurisztikaként használná, az könnyen inadmisszibilissé tenné a keresést. A jelen megoldás ezt tudatosan kerüli el.
+\subsection{A landmark-alapú ALT heurisztika}
+
+Az ALT (A* + Landmarks + Triangle inequality) heurisztika \cite{goldberg2005} a következő elvből indul ki. Ha $L$ egy landmark-csomópont és $d(u, L)$ az $u$ csomópontból $L$-be vezető legrövidebb út ismert távolsága, akkor a háromszög-egyenlőtlenség alapján:
+
+\begin{equation}
+d(u, t) \geq |d(L, t) - d(L, u)| \quad \text{minden } L \text{ landmarkra}
+\end{equation}
+
+Ha több landmark is rendelkezésre áll, a legjobb (legmagasabb) alsó becslés választandó. A rendszer az összes konfigurált landmark-ra kiszámolja ezt a korlátot, és a maximumukat adja az A* heurisztikaként.
+
+A landmark-távolságok (\texttt{landmark\_distances}) a \texttt{GraphState} felépítésekor előre kiszámítódnak minden \texttt{ModeKey} (SocialUnweighted, SocialWeighted, BattleUnweighted, BattleWeighted) kombinációra Dijkstra-futtatással. Ez egyszeri előfeldolgozási lépés, amelynek eredménye az összes keresési kérésre újrafelhasználható.
+
+\subsection{A landmark-kiválasztás stratégiája}
+
+A \texttt{choose\_landmarks()} függvény a kiindulási landmark-halmazt a következő prioritással állítja össze:
+
+\begin{enumerate}
+    \item hybrid cluster bridge-csomópontok: ezek bridgeként és klasztertagként is részt vesznek, ezért nagy valószínűséggel sok legrövidebb úton vannak rajta;
+    \item klaszterközéppontok;
+    \item végül egyéb, nagy fokszámú csomópontok, ha az előzők száma nem elég.
+\end{enumerate}
+
+Ez a stratégia garantálja, hogy a landmarkok a gráf szemantikailag fontos helyein legyenek, nem véletlenszerűen. Minél jobb helyen van egy landmark, annál jobb (magasabb) alsó becslést ad.
+
+\subsection{Klaszterugrás-alapú becslés és tie-break}
+
+A klaszterugrás-alapú alsó becslés (\texttt{cluster\_hops}) a forrás és cél klaszter közötti minimális klaszterugrásokon alapul. Ez egy külön Dijkstra-futtatás a klaszter-szintű gráfon (ahol a csomópontok klaszterek, az élek klaszterközi kapcsolatok), és az eredmény az inter-klaszter távolság. Bármely $u \to t$ útvonalnak legalább annyit kell haladni klasztereken keresztül, mint az inter-klaszter legrövidebb út, így ez admisszibilis alsó becslés.
+
+A tie-break (\texttt{tie\_break\_distance}) az egyenlő becsült összköltségű csomópontok között a klaszterközpont-távolság alapján bont döntetlen, elkerülve a determinisztikusan rossz sorrendeket.
+
+Ez azért lényeges, mert a képernyőn látható közelség és a gráfbeli költség nem ugyanaz a fogalom. Ha a rendszer a layoutot valódi heurisztikaként használná, az könnyen inadmisszibilissé tenné a keresést. A jelen megoldás ezt tudatosan kerüli el.
 
 \section{Backend API és orchestráció}
+
+\placeholder{Rust analitikai parancsfolyam --- Node backend Rust CLI-hívásai stdin/stdout csatornán és JSON válaszok}{A Node.js backend és a Rust CLI közötti parancsvezérelt kommunikáció sémája}
 
 A Node/Express réteg a Rust számára nem konkurens implementáció, hanem vezérlő és integrációs héj. A fontosabb végpontok:
 
@@ -1351,8 +1490,6 @@ A Node/Express réteg a Rust számára nem konkurens implementáció, hanem vez�
 Ez a struktúra azért szerencsés, mert a frontend így stabil JSON-szerződéseken keresztül kommunikálhat a háttérréteggel, anélkül hogy tudnia kellene a belső gráfreprezentáció minden részletét.
 
 A szerződésesség itt gyakorlati hasznot is hoz. A backend kezeli a datasetváltást, szükség esetén üríti a régi runtime-állapotot, átadja az aktuális útvonalakat a Rust motornak, és a frontend felé már csak a fogyasztható választ adja tovább. Ez csökkenti annak esélyét, hogy a frontend és a motor eltérő adatállapotra gondoljon ugyanabban a pillanatban.
-
-\diagramfigure{Szekvenciadiagram a frontend--backend--Rust kérésekhez}{sequence diagram.pdf}
 
 \section{Strukturális egyensúly mint megvalósított analitika}
 
@@ -1444,6 +1581,8 @@ A* & jól kialakított alsó becsléssel & A projektben egzakt marad, nem csak v
 
 A dolgozatban az összehasonlítás fő célja nem az, hogy ``győztest'' hirdessek, hanem az, hogy megmutassam: a rendszer képes ugyanazon gráfmodellt több algoritmikus nézőpontból kezelni, és a különbségek ellenőrizhetően visszakövethetők.
 
+\diagramfigure{A Pathfinder Lab és a frontend komponensstruktúrája --- a keresési kérelmek útja a React nézettől a Rust motorig}{path finder and frontend component diagram.pdf}
+
 \section{Kézi vezérlés, replay és magyarázhatóság}
 
 A Pathfinder Lab egyik erőssége az, hogy a kimenetet nem feketedoboz-szerűen adja vissza. A replay panel és a vizuális léptetés lehetővé teszi, hogy a felhasználó:
@@ -1458,11 +1597,63 @@ Ez a döntés oktatási és védhetőségi szempontból is hasznos. A rendszer n
 
 A \texttt{search.rs} alapján a replay mögött strukturált trace-adat áll. A motor minden releváns lépéshez képes rögzíteni az aktív csomópontot, a frontier rövidített állapotát, a meglátogatott csúcsok halmazát és a kiemelt éleket. Ezáltal a BFS, Dijkstra, kétirányú keresés és A* nem csak végső útvonal-hosszal hasonlítható össze, hanem a bejárási stratégia szintjén is. A magyarázhatóság tehát nem utólagos vizuális díszítés, hanem a keresőmotor válaszformátumának része.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{mock-test-pathfinder-end.png}
-    \caption{Összehasonlító állapot a Pathfinder Lab egyik tesztjellegű futtatásából}
-\end{figure}
+\placeholder{Pathfinder Lab tesztfuttatás --- összehasonlító állapot két algoritmus útvonal-eredményével}{Pathfinder Lab: összehasonlító állapot a tesztelési futtatásból}
+
+\section{Az algoritmusok részletes leírása}
+
+\subsection{Szélességi keresés (BFS)}
+
+A BFS az egyszerűbb esetekben természetes baseline: súlyozatlan módban garantáltan a minimális lépésszámú útvonalat adja, és a bejárás sorrendje teljesen meghatározott. A \texttt{search\_bfs()} implementáció egy FIFO-sort (\texttt{VecDeque}) tart fenn. Az algoritmus leáll, amint a célcsomópont először felbukkan a szomszédsági listán, ezáltal elkerülve felesleges kiterjesztést.
+
+A trace-rögzítés szempontjából a BFS egyszerű, de informatív: minden ``expand'' és ``discover'' lépés rögzíthető, és az utólagos replay során jól látható, hogyan terjed ki a keresési határ egyenletesen minden irányban.
+
+\subsection{Dijkstra-algoritmus}
+
+A Dijkstra-algoritmus \cite{dijkstra1959} binomiális kupac helyett bináris kupacot (\texttt{BinaryHeap}) használ, mert a Rust standard könyvtárban ez a beépített prioritásos sor. A \texttt{QueueState} struktúra lexikografikusan rendez: először az alacsonyabb \texttt{cost}, másodlagosan az alacsonyabb lexikográfiai csomópont-id szerint. Ez garantálja, hogy azonos súlyú utak esetén determinisztikusan mindig ugyanazt az útvonalat kapjuk.
+
+A \texttt{traversal\_cost()} a kérésben megadott módnak megfelelően számít:
+
+\begin{equation}
+c(u,v) = \begin{cases}
+1000 & \text{ha súlyozatlan mód} \\
+\left\lceil 1000 / \max(1, w(u,v)) \right\rceil & \text{ha súlyozott mód}
+\end{cases}
+\end{equation}
+
+A kapcsolaterősség ($w(u,v)$) social-path módban az \texttt{allyWeight}, battle-path módban a \texttt{total\_matches} érték. Az egységteszt (\texttt{dijkstra\_uses\_weighted\_costs\_to\_prefer\_stronger\_route}) ellenőrzi, hogy a súlyozott mód valóban a közvetett, de erős útvonalat preferálja a gyenge közvetlen éllel szemben.
+
+\subsection{Kétirányú keresés}
+
+A kétirányú BFS a forrásból és a célból párhuzamosan terjeszt ki egy-egy keresési frontot, és megáll, amint a két front találkozik. Az implementáció (\texttt{search\_bidirectional()}) felváltva bővíti a forrás-oldali és a cél-oldali sort (\texttt{expand\_frontier()}). A találkozási csomópont (\texttt{meeting\_node}) meghatározásakor az út az összefűzött forrás- és cél-részútvonalakból áll össze.
+
+A kétirányú keresés elméleti előnye: sűrű vagy nagy gráfokban a meglátogatott csomópontok száma közelítőleg $O(\sqrt{n})$ lehet az egyirányú $O(n)$-hez képest, ha a gráf véletlenszerű. A project gráfján, ahol a komponensek erősen klaszteresek, a tényleges gyorsulás méréssel ellenőrizhető.
+
+\subsection{A* keresés és heurisztika}
+
+Az A* \cite{hart1968} algoritmus a Dijkstra-algoritmust terjeszti ki célirányos heurisztikával. Az \texttt{AStarState} struktúra a \texttt{path\_cost} (eddigi tényleges útvonalköltség) és a \texttt{heuristic\_cost} (célhoz vett alsó becslés) összegével rendez. A tie-breaking (\texttt{tie\_break\_distance}) egy másodlagos szempontot nyújt az azonos becsült összköltségű csomópontok közt.
+
+A heurisztika (\texttt{heuristic\_lower\_bound()}) a \texttt{GraphState}-ben előre kiszámított \texttt{landmark\_distances} táblából és \texttt{cluster\_hops} adatból kombinál alsó becsléses értéket. Ez garantálja az elfogadhatóságot (admissibility): a heurisztika soha nem becsüli túl a valódi hátramaradó útvonalköltsége, ezért az A* helyes legrövidebb-utat ad.
+
+Az egységtesztek minden releváns esetben igazolják, hogy az A* eredménye egyezik a Dijkstra-eredménnyel (\texttt{assert\_astar\_matches\_dijkstra}). Ez azt jelenti, hogy az A* nem vizuális gyorsítás, hanem valóban egzakt: csak a keresési sorrend más, az eredmény garantáltan azonos. Tesztelt esetek: súlyozatlan social-path, súlyozott social-path, battle-path, vegyes topológia, döntetlen-nehéz gráf, összekötetlen gráf, forrás==cél eset.
+
+\section{A gráfmód és a súlyozás együttes hatása}
+
+A négy algoritmus két gráfmóddal és két súlyozási beállítással kombinálható. Ez $4 \times 2 \times 2 = 16$ lehetséges futtatási konfigurációt jelent, és mindegyik indokolt lehet más kutatási kérdésnél. A Pathfinder Lab ezt a dimenziót az interfészen keresztül elérhetővé teszi: a felhasználó láthatja, hogyan változik az útvonal és a bejárási stratégia, ha gráfmódot, súlyozást vagy algoritmust vált.
+
+\begin{table}[H]
+\centering
+\caption{A négy algoritmus összehasonlítása a legfontosabb dimenziók mentén}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3cm} >{\raggedright\arraybackslash}p{2.5cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Algoritmus} & \textbf{Optimális?} & \textbf{Memória} & \textbf{Fő erősség a projektben} \\
+\midrule
+BFS & Igen (súlyozatlan) & $O(n)$ & Egyszerű baseline, jól magyarázható replay \\
+Dijkstra & Igen (súlyozott) & $O(n + m)$ & Referencia-algoritmus, lexikografikus döntetlen-kezelés \\
+Kétirányú & Igen (súlyozatlan) & $O(n)$ & Potenciális gyorsulás klaszteres gráfon \\
+A* & Igen (heurisztika elfogadható) & $O(n)$ & Célirányos bejárás, egzakt eredmény \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \section{Miért fontos ez túl a UI-n?}
 
@@ -1564,23 +1755,9 @@ A \texttt{server.js} és a bird's-eye exportútvonalak alapján a 3D nézet mög
 
 Ez a bontás rendszerszinten jól indokolható. A nagy tömegű numerikus adat bináris marad, ami gyorsabb böngészőoldali feldolgozást tesz lehetővé, miközben az emberileg olvasható metaadat külön JSON-rétegben marad. A frontend tehát megjelenít, nem pedig újraszámol.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.92\textwidth]{birds-eye-current-state.png}
-    \caption{A teljes hálózat 3D madártávlati nézete az előre generált Rust-artifaktumokra építve}
-\end{figure}
+\placeholder{Graph V2 / 3D Bird's-Eye Sphere nézet --- a teljes hálózat klaszterek szerinti színezéssel és pontszerű csomópontokkal}{A teljes hálózat 3D madártávlati nézete az előre generált Rust-artifaktumokra építve}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.82\textwidth]{birds-eye-cluster-view.png}
-    \caption{Sűrűbb klaszterfoltok és a térbeli elkülönítés a globális nézetben}
-\end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.78\textwidth]{birds-eye-individiual-web.png}
-    \caption{Lokálisabb hálózati részlet a bird's-eye nézeten belül}
-\end{figure}
+\placeholder{Klaszter-kiemelés a 3D nézeten --- sűrűbb klaszterfoltok és a térbeli elkülönítés}{Sűrűbb klaszterfoltok és a térbeli elkülönítés a globális nézetben}
 
 \section{Pathfinder Lab}
 
@@ -1594,11 +1771,7 @@ A Pathfinder Lab az a felület, ahol a gráf nem elsősorban látványelemként,
     \item többféle útvonalmód közötti váltást.
 \end{itemize}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.92\textwidth]{pathfinder-replay-panel.png}
-    \caption{Útvonalkeresési és visszajátszási felület a Pathfinder Lab oldalon}
-\end{figure}
+\placeholder{Pathfinder Lab --- BFS/Dijkstra/A* összehasonlítás és replay interfész a léptetési panellel}{Pathfinder Lab: algoritmus-összehasonlítás és visszajátszási felület}
 
 \section{Signed Balance és Assortativity oldalak}
 
@@ -1612,17 +1785,113 @@ A két kutatás-orientált oldal közös tulajdonsága, hogy nem elégednek meg 
 
 Ez különösen fontos, mert az ilyen típusú analitika könnyen félreértelmezhető. A felület ezért szándékosan tartalmaz interpretációs szövegeket és magyarázó elemeket is.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.92\textwidth]{sign-page.png}
-    \caption{A strukturális egyensúly-elemző oldal a jelenlegi frontendben}
-\end{figure}
+\placeholder{Strukturális egyensúly oldal --- aktuális frontend screenshot}{A strukturális egyensúly-elemző oldal a jelenlegi frontendben}
 
-\section{Diagramok és belső fejlesztői dokumentáció}
+\section{Betweenness Centrality oldal}
 
-A repository dokumentációs csomagja több vektorgrafikus rendszerábrát is tartalmaz (\texttt{activity diagram.pdf}, \texttt{system statemachine research pipeline.pdf}, \texttt{uml simplified vector\_2.pdf}). Ezekből nem mindegyik került végleges, beégetett képként a dolgozat törzsébe, de fejlesztés közben fontos szerepük volt abban, hogy a rendszer ne essen szét egymásra rakódó feature-ök halmazára.
+A \texttt{BetweennessCentralityPage} a projekt egyik legkomplexebb analitikai nézetje. A felület nem pusztán indítja a Brandes-algoritmust, hanem eredményinterpretációs panelekkel, timing-összehasonlítással és döntési dokumentációval egészíti ki az analitikai kimenetet.
 
-\diagramfigure{Állapotgép a kutatási pipeline fő lépéseihez}{system statemachine research pipeline.pdf}
+A oldal négy fő részből áll:
+
+\begin{itemize}
+    \item \textbf{Konfigurációs fejléc}: gráfmód (\texttt{battle-path} / \texttt{social-path}), él-súlyozás, minimum edge support és top-N korlát megadása; négy előre definiált preset (Strong 20, Medium 10, Wide 5, Full 1) gyors paraméterváltáshoz;
+    \item \textbf{Projekcióolvasat}: a felület automatikusan értelmezi a megtartott él arányát --- ha az arány 1\% alá esik, ``erős kötésű broker elemzés''; 10\% felett ``teljes gráf közelítő elemzés'';
+    \item \textbf{Párhuzamossági összehasonlító}: ha a serial baseline futás engedélyezett, a felület megmutatja a serial és parallel futásidőt, a sebességarány-értékelést és a serial--parallel maximális abszolút eltérést (nulla kell legyen, ha a párhuzamosítás determinisztikus);
+    \item \textbf{Broker-rangsor}: az első 6 csúcs kártyás nézete (rank, label, klasztercsoport, degree, strength, raw és normalizált BC), majd teljes táblázat.
+\end{itemize}
+
+A ``Dokumentált döntések'' panel (algorithm, parallelization, edge support rule, edge cost rule, normalization rule, graph scope) közvetlenül a Rust motor válaszából érkezik: a frontend nem rekonstruálja, hanem visszatükrözi az analitika által rögzített módszertani döntéseket. Ez azt jelenti, hogy a felületen megjelenő szöveges leírások mindig konzisztensek a tényleges futtatással.
+
+Ez a nézet kulcsszerepet játszik a szakdolgozati bemutathatóság szempontjából: nem feketedoboz-eredményt ad vissza, hanem a futás körülményeivel, korlátaival és időbeli teljesítményével együtt prezentálja az eredményt.
+
+\section{Player Detail oldal}
+
+A \texttt{PlayerDetailPage} egy játékos-centrikus nézet, amely a kollektív analitikáktól eltérően egyetlen játékos profiljára fókuszál. Az oldal URL-paraméterrel (\texttt{?puuid=...}) adresszálható, így a Pathfinder Lab más nézeteiből közvetlenül lehet linkelni egy-egy csomópontra.
+
+A nézet két fő részből áll: a játékoskereső mezőből (\texttt{PlayerLookupField}) és a \texttt{PlayerPerformanceCard} komponensből. Ez utóbbi összesíti az adott játékos pontszámait (opscore, feedscore), meccsadatait, szerepkör-eloszlását és klasztertagságát egy lapozás nélküli, pásztázható kártyanézetben.
+
+Az oldal létjogosultsága a rendszerben az, hogy az aggregált elemzések (betweenness centralitás, asszortativitás, signed balance) sokszor néhány konkrét csomópontra irányítják a figyelmet. A Player Detail oldal lehetővé teszi, hogy ezek a csomópontok azonnal kontextusban is megvizsgálhatók legyenek, anélkül hogy az elemzőnek a nyers adatbázishoz kellene visszanyúlni.
+
+\section{A Graph V2 artifaktum-pipeline részletei}
+\label{sec:graph_v2_artifact}
+
+A Graph V2 pipeline nem egyetlen monolitikus JSON-fájlt hoz létre, hanem egy gondosan megtervezett, kétféle formátumú (bináris és JSON) artifaktum-csomagot, amelyből a frontend oldalak és az analitikai motorok is hatékonyan tudnak táplálkozni.
+
+\subsection{Az artifact-csomag összetétele}
+
+A Graph V2 pipeline a \texttt{backend/data/cache/\{datasetId\}/graph-v2/} könyvtárba generálja a következő fájlokat:
+
+\begin{itemize}
+    \item \textbf{manifest.json}: metaadat és méretinformáció --- meccszám, csúcsszám, élszám, generálási időbélyeg, verzió;
+    \item \textbf{node\_meta.json}: csomópont-azonosítók és metaadatok --- puuid, label, klaszterazonosító, pozíció (x, y), hídjelölő státusz;
+    \item \textbf{node\_metrics.u32}: bináris, packed uint32 formátum --- minden csomóponthoz sorrendben tárolja az opscore és feedscore értékeket egész skálán;
+    \item \textbf{edge\_pairs.u32}: bináris élpárok --- minden él két csomópont-indexeként tárolva;
+    \item \textbf{edge\_props.u32}: bináris éltulajdonságok --- allyWeight, enemyWeight, totalMatches minden élhez;
+    \item \textbf{cluster\_meta.json}: klaszterszintű metaadatok --- clusterID, memberCount, crossAllySupport, connectedAllyClusterCount, internalAllyEdges, orbitScore, orbitRadius, representative.
+\end{itemize}
+
+\placeholder{Graph V2 artifact-csomag elrendezése: manifest.json, node\_meta.json, edge\_pairs.u32, edge\_props.u32, node\_metrics.u32, cluster\_meta.json}{A Graph V2 pipeline bináris és JSON artifact-fájljainak szerkezete}
+
+A bináris formátumok (\texttt{.u32}) célja a betöltési teljesítmény: a frontend nem kénytelen JSON-parszolást végezni a csúcs- és élmutatókon; a bináris buffer közvetlenül beolvasható a WebGL renderelési pipeline-ba. Ez különösen a 5741 csúcsot és 18548 élt tartalmazó flexset esetén kritikus.
+
+\subsection{A summary.md mint gépi és emberi kontextus}
+
+Minden Graph V2 generálás után a pipeline létrehozza a \texttt{summary.md} fájlt, amely:
+
+\begin{itemize}
+    \item tartalmazza az összes kulcsmutatót (meccszám, csúcsszám, élszám, arányok, átlagos élsúly);
+    \item dokumentálja a konstrukciós szemantikát (support-küszöb, tie-policy, klaszterméret-korlát);
+    \item ML-szempontú feature-térképet biztosít a csomópont-, él- és klaszterszintű elemzési jelöltekhez;
+    \item listázza a top bridge-orbit klasztereket;
+    \item tartalmaz interpretációs korlátokat és javasolt elemzési irányokat.
+\end{itemize}
+
+Ennek a fájlnak kettős szerepe van: egyrészt fejlesztői ellenőrzőpontként működik (újragenerálásnál gyorsan ellenőrizhető, hogy a számok konzisztensek-e), másrészt gépi kontextusként is felhasználható --- pontosan az a célba vett felhasználási mód, amelynek keretében a jelen dolgozat analitikai fejezetei is készültek.
+
+\subsection{Verziókezelés és cache-érvénytelenítés}
+
+A \texttt{graphBuilderVersion} mező (\texttt{graph-builder-v2.2}) explicit jelölője az artifaktum-csomag kompatibilitásának. Ha az algoritmus vagy a séma változik, a verzió frissítése egyértelműen jelzi, hogy a korábban generált artifact-csomagok nem felelnek meg az új elvárásoknak, és újra kell generálni azokat.
+
+A \texttt{generatedAtUnixMs} Unix-időbélyeg lehetővé teszi a dataset-változás utáni automatikus érvénytelenítés detektálását: ha a meccs-JSON fájlok újabbak, mint a generálási időbélyeg, a rendszer tudja, hogy az artifact elavult.
+
+\section{A backend API-szerződés}
+
+A Rust motor és a frontend közötti kommunikáció a Node.js Express szerver (\texttt{backend/server.js}) által közvetített HTTP-végpontokon keresztül zajlik. A szerver nem saját maga végzi a számításokat, hanem a Rust folyamat stdin/stdout csatornáján továbbítja a kéréseket.
+
+\subsection{Az aktuális főbb végpontok}
+
+\begin{table}[H]
+\centering
+\caption{A backend API főbb végpontjai és szerepük}
+\small
+\begin{tabularx}{\textwidth}{>{\ttfamily\raggedright\arraybackslash}p{5.5cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Végpont} & \textbf{Funkció} \\
+\midrule
+POST /api/pathfinder & Útvonalkeresési kérés (BFS/Dijkstra/A*/kétirányú) \\
+POST /api/signed-balance & Strukturális egyensúly-elemzés \\
+POST /api/assortativity & Asszortativitás számítás \\
+POST /api/betweenness-centrality & Brandes-betweenness futtatás \\
+POST /api/balance-sweep & Kötegelt sweep több paraméterrel \\
+POST /api/assortativity-significance & Permutációs szignifikanciateszt \\
+GET /api/graph-snapshot & Futásidejű gráfállapot-összefoglalás \\
+GET /api/engine-spec & A Rust motor specifikációjának lekérése \\
+GET /api/datasets & Elérhető datasetek listája \\
+POST /api/switch-dataset & Dataset-váltás (Rust réteg újraindítással) \\
+\bottomrule
+\end{tabularx}
+\normalsize
+\end{table}
+
+\subsection{Dataset-propagáció}
+
+A dataset-váltás (\texttt{/api/switch-dataset}) nem csupán egy konfigurációs bit megváltoztatása. A Rust motor a dataset-specifikáció alapján teljes újraépítést végez: betölti az adott dataset meccs-JSON-jait, klasztereit és játékosprofilját, majd újraszámolja a landmark-távolságokat és a min-cost táblát. Ez az operáció jellemzően néhány másodpercig tart (a flexset esetén a futásidejű gráfépítés a teljes 4980 meccssel és 5741 csúccsal dolgozik).
+
+Ez a közvetlen következménye annak az architektúrális döntésnek, hogy a Rust motor \emph{stateful}: nem minden kérésre, hanem beinduláskor (vagy dataset-váltáskor) tölti be a gráfot. Ez teljesítményi szempontból hasznos --- nem kell minden egyes kérés előtt újraépíteni a gráfot ---, de azt is jelenti, hogy a gráfállapot egy adott dataset-pillanathoz van kötve.
+
+\subsection{A JSON-alapú kérés-válasz protokoll}
+
+A Rust motor stdin-ről olvas egy JSON-objektumot (a kérés), majd stdout-ra ír egy JSON-objektumot (a válasz). A Node.js szerveroldal ezt a kommunikációt aszinkron Promisként kezeli. Ez a prototokol-tervzés egyszerű és debuggolható: a Rust motor tesztelható önállóan is, CLI eszközként, anélkül hogy a HTTP-szerver futna. A Node.js kizárólag a hálózati integrációért és a dataset-kezelésért felel.
 
 \chapter{Előjeles gráfmodell és strukturális egyensúly}
 
@@ -1633,6 +1902,8 @@ A jelenlegi adatmodell egyik legérdekesebb következménye, hogy ugyanazon ját
 Ez a lépés azért fontos, mert a rendszer itt lép túl a hagyományos együtt-játszási hálón. Az él már nem pusztán ismétlődő kontaktus, hanem társas viszonytípus-projekció is.
 
 \section{Az előjeles projekció döntései}
+
+\placeholder{Előjeles él-projekció: ally\_weight > enemy\_weight → pozitív él, enemy dominancia → negatív él, döntetlen → kizárás}{Az előjeles projekció döntési logikájának sémája}
 
 A jelenlegi implementáció a következő szabályokkal dolgozik:
 
@@ -1662,11 +1933,95 @@ Fontos ugyanakkor kimondani a leegyszerűsítést is: két játékos kapcsolata 
 
 \section{Triádok osztályozása}
 
+\placeholder{A négy triádtípus: +++, +--, ++-, --- --- kiegyensúlyozott és kiegyensúlyozatlan kategóriákkal}{A Heider--Cartwright--Harary-féle négy triádtípus illusztrációja}
+
 A strukturális egyensúly háromcsúcsú, teljesen összekapcsolt részgráfokon értelmeződik. A klasszikus felosztás alapján a \texttt{+++} és a \texttt{+--} típus kiegyensúlyozott, míg a \texttt{++-} és a \texttt{---} típus kiegyensúlyozatlan. A jelenlegi modul ezt a logikát gépi úton enumerálja, majd nemcsak összesített arányt, hanem triádtípus-eloszlást és csomóponti részvételi mutatókat is visszaad.
 
 Ez azért fontos, mert a kimenet így nem egyetlen ``balance ratio'' számra zsugorodik. A dolgozatban különösen értékes, hogy látható, mely játékosok vesznek részt a ritkább, instabil triádokban.
 
 Algoritmikai oldalról a triádelemzés teljesen összekapcsolt hármasokra korlátozódik. A modul a szomszédsági metszetekből indul ki, vagyis nem az összes lehetséges háromcsúcsú kombinációt vizsgálja végig vakon, hanem csak azokat a jelölteket, ahol minden szükséges él ténylegesen jelen van és átmegy a support-szűrőn. Ez különösen fontos a védhetőség szempontjából: a rendszer nem feltételez hiányzó kapcsolatokat, hanem a megfigyelt signed maghálót elemzi.
+
+\section{Az előjeles pár-gráf felépítése --- részletes módszertan}
+
+\subsection{A forrásadat: meccs-JSON és a pár-relációk}
+
+Minden meccs-JSON fájl tartalmazza a tíz résztvevő \texttt{puuid} azonosítóját és csapatbeosztását (1-es és 2-es csapat). A pár-relációk felépítése a következő lépésekből áll:
+
+\begin{enumerate}
+    \item Minden meccsben kiszámolódik az összes lehetséges $\binom{10}{2} = 45$ játékospár.
+    \item Minden párhoz meghatározódik, hogy szövetségesi vagy ellenfél-pozícióban találkoztak-e.
+    \item A pár-reláció kulcsa: a két \texttt{puuid} lexikografikusan rendezve, \texttt{|} elválasztóval (\texttt{player\_a|player\_b}). Ez garantálja az egyediséget az irányítatlan párra.
+    \item A \texttt{PairRelation} struktúra akkumulálja a meccseket: \texttt{ally\_weight} nő, ha szövetségesi pozícióban találkoztak; \texttt{enemy\_weight} nő, ha ellenfélként; \texttt{total\_matches = ally\_weight + enemy\_weight}.
+\end{enumerate}
+
+A domináns reláció meghatározása a teljes meccshistória összegzésén alapul, nem egyetlen meccsen. Ez azt jelenti, hogy ha két játékos 7-szer szövetségesként és 3-szor ellenfelekként találkoztak, a domináns reláció \texttt{ally}, és az él \texttt{ally\_weight = 7}, \texttt{enemy\_weight = 3}, \texttt{total\_matches = 10}.
+
+\subsection{A látható gráf szűrési feltételei}
+
+A Graph V2 és a runtime futtatókörnyezet is alkalmaz minimális szűrési feltételeket. A látható gráfba csak azok az élek kerülnek, amelyekre:
+
+\begin{equation}
+\texttt{total\_matches} \geq 2
+\end{equation}
+
+Ez a küszöb kiszűri az egyszeri véletlenszerű találkozásokat, és csak az ismétlődő kapcsolatokra koncentrál. A küszöb értéke konfigurálható, de az alap mindig 2.
+
+Az előjeles projekcióhoz a signed-balance modul ezután egy második szűrőt alkalmaz, a \texttt{min\_edge\_support} paraméterrel (szintén alapértelmezetten 2). Ez azt jelenti, hogy az elemzett élek mindkét szűrőn átmennek: egyrészt legalább kétszeres ismétlődés, másrészt elegendő teljes meccsszám.
+
+\subsection{Döntetlen-kezelési politikák}
+
+Ha \texttt{ally\_weight == enemy\_weight > 0}, az él előjele nem egyértelmű. A rendszer három politikát támogat:
+
+\begin{table}[H]
+\centering
+\caption{Döntetlen-kezelési politikák és következményeik}
+\begin{tabular}{lll}
+\toprule
+\textbf{Politika} & \textbf{Kezelés} & \textbf{Hatás a triádkészletre} \\
+\midrule
+\texttt{exclude} & Az él kiesik & Kisebb, de tisztább triádkészlet \\
+\texttt{ally} & Az él pozitív lesz & Több triád, magasabb egyensúlyi arány várható \\
+\texttt{enemy} & Az él negatív lesz & Több triád, alacsonyabb egyensúlyi arány várható \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Az alapfuttatásban az \texttt{exclude} politika az óvatos választás: csak azokat az éleket engedi be az elemzésbe, amelyeknek egyértelmű domináns előjele van. Ezzel a 28091 triád mindegyike valóban domináns-előjelű kapcsolatokból áll, ami erősíti az interpretálhatóságot.
+
+\subsection{Triádenumerálás --- szomszédsági metszetekkel}
+
+A triád-keresés naiv megközelítése az összes $\binom{n}{3}$ hármas ellenőrzése lenne, ami $O(n^3)$ idejű. A \texttt{analyze\_projected\_graph()} ettől hatékonyabb megközelítést alkalmaz: szomszédsági metszeteket (neighborhood intersection) számol.
+
+Az algoritmus lépései:
+\begin{enumerate}
+    \item Az élhalmaz alapján felépül az adjacency \texttt{HashMap<String, BTreeSet<String>>}.
+    \item Az összes csomópontot lexikografikusan rendezi (\texttt{ordered\_nodes}).
+    \item Minden csomópontpárra (bal, közép) --- ahol \texttt{közép > bal} ---: kiszámítja a két szomszédsági halmaz metszetét. Ez adja a harmadik csomópontot (\texttt{right > közép}).
+    \item Minden ilyen (\texttt{bal}, \texttt{közép}, \texttt{jobb}) hármasra lekérdezi az éljeleket, és osztályozza a triádot.
+\end{enumerate}
+
+Ez az enumerálás pontosan annyiszor látja az összes teljesen összekapcsolt triádot, ahányszor azok léteznek --- sose kétszer. A deduplikálást a három csomópont lexikografikus rendezési feltétele garantálja.
+
+\subsection{A négy triádtípus és az egyensúlyi feltétel}
+
+A Heider--Cartwright--Harary strukturális egyensúly-elmélet \cite{heider1946, cartwright1956} alapján egy teljesen összekapcsolt, előjeles triád kiegyensúlyozott, ha a negatív élek száma páros (0 vagy 2). A négy triádtípus:
+
+\begin{table}[H]
+\centering
+\caption{Az előjeles triádtípusok osztályozása}
+\begin{tabular}{cccc}
+\toprule
+\textbf{Típus} & \textbf{Negatív élek} & \textbf{Kiegyensúlyozott?} & \textbf{Értelmezés} \\
+\midrule
+\texttt{+++} & 0 & Igen & Három egymás közt szövetséges \\
+\texttt{++-} & 1 & Nem & „Ellenségem ellensége barátom" séma sérül \\
+\texttt{+--} & 2 & Igen & Két szövetséges, egy közös ellenséggel \\
+\texttt{---} & 3 & Nem & Három kölcsönös ellenség \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A \texttt{TriadPattern::is\_balanced()} függvény ezt pontosan implementálja: a 0 vagy 2 negatív élű típusok (\texttt{+++} és \texttt{+--}) visszaadják \texttt{true}-t.
 
 \section{A tényleges futtatás eredménye --- flexset}
 
@@ -1786,6 +2141,71 @@ A projekt ezt két fontos kiterjesztéssel használja:
 
 A \texttt{backend/pathfinder-rust/src/engine/assortativity.rs} egyik lényeges technikai döntése, hogy az irányítatlan éleket mindkét endpoint-orientációval figyelembe veszi a Pearson-akkumulációban. Ez azért védhető, mert az élnek nincs természetes iránya, ugyanakkor a két végpont tulajdonságpárja szimmetrikusan járul hozzá a korrelációhoz. A modul emellett külön számlálja az alacsony támogatás, a hiányzó score és a túl rövid játékostörténet miatt kihagyott éleket is. Így az asszortativitási eredmény nem egy feketedoboz-korreláció, hanem egy jól dokumentált mintaképzési folyamat eredménye.
 
+\subsection{Él-végponti minta kiválasztása}
+
+A Pearson-korreláció az élek között számítódik. Az asszortativitási implementáció az alábbiak szerint készíti elő az $(x_i, y_i)$ párokat:
+
+\begin{enumerate}
+    \item Az összes él végigmegy az aktuális gráfmódnak megfelelő szűrőn (social-path vagy battle-path).
+    \item Minden élhez lekérdezésre kerül az egyik végpont score-ja (\texttt{opscore} vagy \texttt{feedscore}).
+    \item Lekérdezésre kerül a másik végpont ugyanolyan score-ja.
+    \item Ha bármelyik score hiányzik, vagy ha valamelyik játékos túl rövid játékostörténettel rendelkezik (\texttt{match\_count < minMatches}), az él kiesik.
+    \item A maradék élek score-párjai a $(x_i, y_i)$ sor-párokkal képezik az akkumulált vektorokat.
+\end{enumerate}
+
+Ez a szűrés olyan mintahalmazt eredményez, amely az erős kapcsolatok körül tömörödik: ha egy él alacsony támogatás miatt nem tekinthető az elemzésre alkalmasnak, az kiesik az asszortativitás-számításból is. Ez módszertanilag erős, mert az asszortativitás nem egy ``mindent figyelembe vevő'' globális mérőszám, hanem a releváns kapcsolathálózat szerkezeti tulajdonsága.
+
+\subsection{Gráfmód-specifikus él-súlyozás}
+
+Az \texttt{edge\_support()} függvény a gráfmód alapján különbözően súlyozza az éleket:
+
+\begin{equation}
+w(u,v) = \begin{cases}
+\texttt{ally\_weight} & \text{ha } \text{social-path} \\
+\texttt{total\_matches} & \text{ha } \text{battle-path}
+\end{cases}
+\end{equation}
+
+A social-path módban csak a szövetségesi kapcsolatok sugallják az él meglétét. A battle-path módban az összes ismétlődés (szövetséges és ellenséges) beszámít. Ez a különbség azt fejezi ki, hogy a két mód eltérő társas szerkezeti hipotéziseket tesztel:
+
+- \textbf{Social-path}: ``A szövetségesi hálózatban a hasonló teljesítmények csoportosulnak?''
+- \textbf{Battle-path}: ``Az összes ismétlődő kapcsolaton hasonló teljesítmények korrelálnak?''
+
+Az asszortativitás e két módban eltérő értékeket mutat, mert a korrelálni kívánt edge-halmazok geometriai szerkezetileg különböznek.
+
+\subsection{Klaszteren belüli és klaszterek közötti bontások}
+
+Az implementáció nem csak globális korrelációt számol. Az eredmény az alábbi bontásokat is tartalmazza:
+
+\begin{itemize}
+    \item \textbf{Within-cluster}: csak az ugyanabban a klaszterben lévő csomópont-párokat tartalmazó élek;
+    \item \textbf{Between-cluster}: az eltérő klaszterekbe tartozó végpontú élek;
+    \item \textbf{Strong-tie}: magas support értékű élek (>= küszöb);
+    \item \textbf{Weak-tie}: alacsony support értékű élek (< küszöb).
+\end{itemize}
+
+Ezek a bontások felvilágosítanak arról, hogy az asszortativitás a klaszteren belül vagy klaszterek között koncentrálódik-e. Ha a within-cluster érték magasabb, az azt jelzi, hogy az előre-klaszterezett csomópontok valóban hasonló score-ral rendelkeznek. Ha a between-cluster érték is magas, az azt mutatja, hogy az asszortativitás klaszter-független tulajdonság.
+
+\subsection{Missing value policy}
+
+A modul három lehetséges stratégiát támogat a hiányzó score-okkal szemben:
+
+\begin{table}[H]
+\centering
+\caption{Hiányzó score-kezelési politikák}
+\begin{tabular}{ll}
+\toprule
+\textbf{Politika} & \textbf{Hatás} \\
+\midrule
+\texttt{skip} & Az él kiesik az asszortativitás-számításból \\
+\texttt{zero} & Az él meglétét 0.0-val helyettesíti \\
+\texttt{mean} & Az él a dataset átlag-score-ját kapja \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Az alapértelmezett \texttt{skip} politika az óvatos választás: nem extrapolálunk hiányzó adatokra. Ezáltal az asszortativitás-érték az aktualista ``mit tudunk ténylegesen'' alapon számítódik, nem a feltételezéseken.
+
 \section{Asszortativitási eredmények --- flexset}
 
 A \texttt{flexset} dataseten elvégzett asszortativitási elemzés összesített eredményei:
@@ -1826,6 +2246,8 @@ A \texttt{soloq} dataseten ugyanolyan paraméterekkel:
 
 \section{Mit mondanak ezek a számok?}
 
+\placeholder{Asszortativitási együtthatók összehasonlítása --- opscore/feedscore, social-path/battle-path, flexset/soloq sávdiagram}{Az asszortativitási eredmények vizuális összehasonlítója a két dataseten és két gráfmódban}
+
 Mindkét datasetben egyértelműen pozitív asszortativitás jelenik meg az \texttt{opscore} mentén a \texttt{social-path} módban. Ez azt jelzi, hogy a szövetségesi kapcsolatokra épülő gráfban az összekapcsolt játékosok teljesítményprofilja nem véletlenszerűen keveredik.
 
 A \texttt{feedscore} viselkedése jóval érzékenyebb a gráfmódra. A \texttt{social-path} módban mindkét dataseten mérsékelt pozitív jel látható, de a \texttt{battle-path} módban szinte nullára esik (flexset: $-0.0108$, soloq: $-0.0366$), a soloq esetén negatívba fordul. Ez azt mutatja, hogy az ellenfélkapcsolatok bevonásával a halálokon alapuló hibamutató elveszíti a társas-kapcsolati hasonlósági szerkezetet.
@@ -1844,11 +2266,146 @@ Ha mindkét metrika minden gráfmódban azonos értéket adna, akkor a gráfdefi
 
 A kódbázisban az asszortativitáshoz randomizációs szignifikanciateszt is tartozik. Ez fontos fejlesztési irány, mert a leíró korrelációt nullmodellel is érdemes összevetni. A jelen dolgozatban azonban a fő eredményeket a közvetlenül ellenőrzött leíró és bontott futtatásokra alapozom. Így a szöveg őszinte marad: a szignifikanciakeret jelen van a rendszerben, de a hangsúly még nem a teljes permutációs kísérletsorozaton van.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{associative-graph.png}
-    \caption{Az asszortativitási oldal vizuális összefoglalója a jelenlegi frontendben}
-\end{figure}
+\chapter{Párhuzamos Brandes-féle betweenness centralitás}
+
+\section{Miért szükséges a betweenness centralitás ebben a kontextusban?}
+
+A bridge-orbit vizualizáció már a Graph V2 pipeline-ból is meghatároz egyes csomópontokat és klasztereket „hidaknak" az \texttt{orbitScore} és \texttt{orbitRadius} mezők alapján. Ezek a mezők azonban vizuális heurisztikák: a kereszt-klaszter szövetségesi támasz, az összekötött klasztercsoport-szám és a tagszám kombinációján alapulnak, de nem ellenőrzik, hogy a jelölt csomópontok valóban a legtöbb legrövidebb útvonal metszéspontján helyezkednek-e el. Az igazi Brandes-féle közöttiség centralitás (betweenness centrality) éppen ezt az ellenőrzést teszi lehetővé: megméri, hogy egy csomópont hány legrövidebb út mentén helyezkedik el a gráfban, és ezért nem becslésen, hanem teljes gráfbejáráson alapul.
+
+A projektben a betweenness centralitás a \texttt{backend/pathfinder-rust/src/engine/centrality.rs} modulban van implementálva. Az implementáció több fontos döntést tartalmaz, amelyek mindegyike önálló módszertani állítás.
+
+\section{Az algoritmus: Brandes 2001}
+
+A Brandes-algoritmus \cite{brandes2001} a hagyományos $O(n^3)$ komplexitású betweenness-számítást $O(nm)$-re csökkenti (irányítatlan gráfra, ahol $n$ a csomópontok és $m$ az élek száma). Az ötlet az, hogy a csomópontonkénti legrövidebb-út fákat nem kell külön-külön tárolni: a forráscsomópontból induló BFS/Dijkstra-futtatás eredményéből egy visszaterjesztési lépésben kiszámítható az összes közötti wt-részleges járulék.
+
+A Brandes-algoritmus lépései forráscsomópontonként:
+
+\begin{enumerate}
+    \item Dijkstra/BFS futtatás a forrásból: kiszámolja a $\sigma[s][v]$ értéket (legrövidebb utak száma $s$-től $v$-ig) és az $dist[s][v]$ távolságokat.
+    \item A feltehetős csomópontok fordított sorrendben kerülnek feldolgozásra (a stack-ból): minden $w$-re, amelynek előde $v$ a legrövidebb úton, a $\delta[s][v]$ függőségi mutató a következőképpen frissül:
+    \begin{equation}
+    \delta[s][v] \mathrel{+}= \frac{\sigma[s][v]}{\sigma[s][w]} \cdot (1 + \delta[s][w])
+    \end{equation}
+    \item A forrást kivéve minden csomóponthoz hozzáadódik a $\delta[s][v]$ érték a globális betweenness-számlálóhoz.
+\end{enumerate}
+
+Irányítatlan gráfra az összes forrás feldolgozása után az eredmény felezése szükséges, mert minden $(s, t)$ és $(t, s)$ pár kétszer volt megszámlálva. A normalizálás az $(n-1)(n-2)/2$ maximális útvonalszámra vetít. Az implementáció pontosan ezt a logikát követi a \texttt{source\_dependencies()} és a \texttt{finalize\_undirected\_scores()} függvényekben.
+
+\section{A súlyozott mód és a költségmodell}
+
+A centralitás-modulban a súlyozott módban az él költsége az \texttt{edge\_cost()} függvény alapján:
+
+\begin{equation}
+c(u,v) = \left\lceil \frac{10^6}{\max(1, w(u,v))} \right\rceil
+\end{equation}
+
+ahol $w(u,v)$ az adott gráfmódnak megfelelő kapcsolaterősség (\texttt{allyWeight} social-path módban, \texttt{total\_matches} battle-path módban). Az \texttt{1\_000\_000}-os skálázási konstans (\texttt{COST\_SCALE}) integeraritmetikai pontosságot biztosít: az egészre kerekített reciprok kis élsúlyoknál nagy, erős kapcsolatoknál kis költséget ad, és az egész aritmetika determinisztikus rendezési viselkedést biztosít a prioritásos sorban.
+
+Súlyozatlan módban az összes él ára \texttt{COST\_SCALE} = $10^6$, ami egyenértékű az eredeti, súlyozatlan Brandes-bejárással.
+
+Ez a kettős mód (súlyozott/súlyozatlan) közvetlenül összemérhető a Pathfinder-modulban alkalmazott \texttt{traversal\_cost()} képlettel, ahol a skálázási konstans 1000. A centralitás-modul pontosabb integer-aritmetikát használ a nagyobb összegek miatt.
+
+\section{Párhuzamos végrehajtás Rayonnal}
+
+A Rust \texttt{rayon} könyvtára automatikus munkalopásos (work-stealing) párhuzamosságot tesz lehetővé. A centralitás-modul ezt a következő stratégiával alkalmazza:
+
+\begin{enumerate}
+    \item A forráscsomópontok halmazát $k$ egyenlő méretű csomóponthalmazra osztja, ahol $k = \min(n, 4 \cdot \text{szálak száma})$.
+    \item Minden halmazt egy párhuzamos rayon-feladatban dolgoz fel: a lokális $\delta$ vektor független a többi résztől.
+    \item Az összegzés után a részeredmény-vektorok deterministikusan összeadódnak.
+    \item A párhuzamos eredményt a soros eredménnyel összevethető maximális abszolút eltérés (\texttt{max\_abs\_delta}) jellemzi.
+\end{enumerate}
+
+A determinizmus biztosítása kulcsfontosságú: a forráscsomópontok rendezése és a chunk-határok rögzítése garantálja, hogy azonos input esetén mindig ugyanaz a kimenet. A tesztcsomag (\texttt{parallel\_matches\_serial}) ezt explicit módon ellenőrzi.
+
+\placeholder{Brandes centralitás párhuzamos folyamatábrája --- forráscsomópont-szintű párhuzamosság Rayonnal és 1/strength élköltséggel}{A Brandes-algoritmus párhuzamos végrehajtásának sémája Rayon work-stealing párhuzamossággal}
+
+\begin{table}[H]
+\centering
+\caption{A betweenness centralitás-modul főbb konfigurációs dimenzióinak összefoglalója}
+\begin{tabular}{lll}
+\toprule
+\textbf{Dimenzió} & \textbf{Lehetséges értékek} & \textbf{Hatás} \\
+\midrule
+Gráfmód & social-path, battle-path & Melyik élhalmazon fut \\
+Súlyozás & igen / nem & \texttt{edge\_cost()} visszaadott értéke \\
+Párhuzamos & igen / nem & rayon vs. soros Brandes \\
+Soros baseline & igen / nem & Delta-ellenőrzés a kimenetben \\
+Min. élsúly & $\geq 1$ & Gyenge élek kizárása \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{A projection felépítése}
+
+A \texttt{build\_projection()} függvény a \texttt{GraphState} pair\_relations térképéből iterál. Az élek sorrend szerint rendezve kerülnek feldolgozásra, így a projekció determinisztikus. Kizárt élek:
+
+\begin{itemize}
+    \item nulla \texttt{support} értékűek az adott gráfmódban;
+    \item minimum élsúly alatt lévők (\texttt{skipped\_low\_support\_edges});
+    \item rossz formátumú kulcsok (\texttt{skipped\_invalid\_edges}).
+\end{itemize}
+
+A csomópontok $\alpha$-betű sorrendben indexelődnek (\texttt{BTreeSet}), és a szomszédsági lista minden csúcsnál szintén rendezett. Ez garantálja a determinizmust akkor is, ha a \texttt{HashMap}-ben tárolt pair\_relations bejárási sorrendje változó.
+
+\section{Normalizálás és eredményinterpretálás}
+
+A normalizált betweenness érték egy $[0, 1]$ intervallumba esik, ahol az 1.0 értékű csomópont minden lehetséges $s \to t$ legrövidebb úton rajta van. A maximálisan normalizált érték ritka: csak csillag-topológia centerének normalizált betweenness értéke pontosan 1.0.
+
+Az egységtesztek ezt a három alapesetet explicit ellenőrzik:
+
+\begin{enumerate}
+    \item \textbf{Lánc-topológia} (path graph): a belső csomópontok magasabb betweenness-t kapnak, mint a végpontok.
+    \item \textbf{Csillag-topológia} (star graph): a center normalizált értéke pontosan 1.0.
+    \item \textbf{Dumbbell-topológia}: a hidat képező csomópont rangsorolódik legelőre.
+    \item \textbf{Súlyozási teszt}: erős parellelút esetén a súlyozatlan mód a közvetlen élt preferálja, a súlyozott mód az erősebb közvetett utat.
+    \item \textbf{Soros-párhuzamos egyezés}: determinisztikus azonosság bizonyítva (\texttt{max\_abs\_delta == 0}).
+\end{enumerate}
+
+\section{Centralitás a bridge-orbit hipotézis tesztelésére}
+
+A bridge-orbit layout ($\S$\ref{sec:graph_v2_artifact}) az \texttt{orbitScore} és \texttt{orbitRadius} mezőkkel azonosítja a kiemelten összekötő klasztereket. Ezeket a heurisztikus pontszámokat egyelőre nem vetítettük össze Brandes-betweenness értékekkel, de a modul elkészültével ez a validálás elvégezhető.
+
+A várható hipotézis: a legmagasabb \texttt{crossAllySupport} és \texttt{connectedAllyClusterCount} értékű klaszterek átlagos Brandes-betweenness értéke szignifikánsan magasabb az alacsony orbit-score-úakénál. Ha ez teljesül, az megerősíti, hogy az orbit-heurisztika jó előszűrője a valódi topológiai hidat képező csomópontoknak. Ha nem teljesül, az a heurisztika korlátaira világít rá és pontosítja a vizualizáció értelmezési keretét.
+
+Ez a jövőbeli vizsgálat pontosan az a fajta módszertanilag indokolt bővítés, amelyről a \texttt{research-workflow} szemlélet szól: a meglévő adatból egy explicit, megcáfolható hipotézis tesztelhető, és az eredmény akár megerősíti, akár megcáfolja a korábbi vizuális heurisztikát.
+
+\section{Kísérletfuttató infrastruktúra és nullmodellek}
+
+A Rust motor nem csak egyedi analitikai kéréseket tud kiszolgálni, hanem strukturált kísérleteket is tud futtatni a \texttt{backend/pathfinder-rust/src/engine/experiments.rs} modulon keresztül.
+
+\subsection{Balance-sweep}
+
+A \texttt{SignedBalanceSweepRequest} egy kötegelt futási kérés, amely egyszerre több minimum-élsúly és döntetlen-kezelési politika kombinációt futtat le, és az összes eredményt egységes \texttt{SignedBalanceSweepResponse} válaszban adja vissza. A sweep sémaverziója (\texttt{signed-balance-sweep-v1}) az eredmények jövőbeli összehasonlíthatóságát biztosítja.
+
+Minden egyes sweep-futás az alapfuttatással azonos Rust kódon megy keresztül, így az összes kombinált eredmény egységes implementációs alapra támaszkodik. A sweep főbb paraméterei:
+
+\begin{itemize}
+    \item \texttt{min\_support\_values}: vizsgált minimális élsúlyok listája;
+    \item \texttt{tie\_policies}: vizsgált döntetlen-kezelési politikák listája (\texttt{exclude}, \texttt{ally}, \texttt{enemy});
+    \item \texttt{graph\_modes}: \texttt{social-path} és/vagy \texttt{battle-path}.
+\end{itemize}
+
+Ez lehetővé teszi, hogy egy kérésben teljes érzékenységi mátrix készüljön, például: minden min\_support × tie\_policy kombinációra megkapjuk az analizált triádok számát és az egyensúlyi arányt. Az alapfuttatásban (min\_support=2, exclude) kapott 0.9774-es arány így nem egyszeri ``választott paraméter'' eredménye, hanem ellenőrzött összehasonlítási pontként kezelhető.
+
+\subsection{Asszortativitási szignifikanciateszt}
+
+Az \texttt{AssortativitySignificanceRequest} permutációs nullmodellt futtat: véletlenszerűen kever össze játékos--score párokat az éleken, és az így kapott nulldisztribúcióval veti össze a megfigyelt korrelációt. A determinisztikus RNG-mag (\texttt{SystemTime::UNIX\_EPOCH} alapú, de rögzíthető) garantálja a reprodukálhatóságot.
+
+A nullmodell-futtatás főbb jellemzői:
+
+\begin{itemize}
+    \item permutáció-szám konfigurálható (\texttt{num\_permutations});
+    \item a figyelt korreláció ($r_\mathrm{obs}$) összehasonlítható a null-eloszlás átlagával és szórásával;
+    \item a $p$-érték az $r_\mathrm{null} \geq r_\mathrm{obs}$ arányból becsülhető;
+    \item a sémaverziójú kimenet (\texttt{assortativity-significance-v1}) az eredményeket önmagukon belül értelmezhetővé teszi.
+\end{itemize}
+
+A jelen dolgozatban a szignifikanciafuttatások megléte a rendszerben dokumentált, de az összes kombinációra kiterjedő, végleges nullmodell-kísérletsorozat a jövőbeli fejlesztések közé tartozik. A hangsúly egyelőre a leíró korrelációkon és az érzékenységvizsgálaton van, amelyek önmagukban is érvényes empirikus eredmények.
+
+\subsection{A kísérletfuttató infrastruktúra módszertani értéke}
+
+A sweep és a szignifikanciateszt léte nem csak technikai kényelmi funkció. Módszertanilag azt jelenti, hogy a dolgozatban közölt eredmények reprodukálhatók és bővíthetők: ugyanazon infrastruktúrán egy jövőbeli vizsgálat egyre finomabb paraméterekkel futhat le, anélkül hogy az alapimplementációt módosítani kellene. Ez összhangban van a reprodukálható kutatás alapelvével \cite{sandve2013}: a szoftver, nem csak a szöveg hordozza a módszertani döntéseket.
 
 \chapter{Kísérleti futtatások, validáció és eredmények}
 
@@ -1942,7 +2499,9 @@ Kiegyensúlyozottsági arány & 0.9774 & 0.7582 \\
 
 A két adat közötti különbség (0.9774 vs. 0.7582) nem zaj, hanem módszertanilag értelmes kontraszts. A flexset-en a domináns szövetségesi kapcsolatok jóval erősebbek, ezért a projekció után több teljesen összekapcsolt triád marad, és ezek körében a strukturális stabilitás is magasabb. A soloq-on a véletlenszerűbb csapatbeosztás kisebb triádsűrűséget és alacsonyabb egyensúlyi arányt eredményez.
 
-A védhető megfogalmazás: \emph{a flexset dataseten, domináns előjel-projekcióval és legalább kétszeres élsúllyal szűrve, a megfigyelt teljesen összekapcsolt triádok 97.74\%-a strukturálisan kiegyensúlyozott; a soloq dataseten ugyanez az arány 75.82\%.}
+A vizsgálat eredménye a következőképpen összegzendő: a \texttt{flexset} dataseten, legalább kétszeres élsúlyú, domináns ally/enemy előjelű projekcióval szűrve, a teljes gráf 28\,091 teljesen összekapcsolt triádjából 97,74\% strukturálisan kiegyensúlyozottnak minősül a Cartwright--Harary-féle kritérium alapján. A \texttt{soloq} dataseten az azonos módszertannal elvégzett elemzés 75,82\%-os kiegyensúlyozottsági arányt mutat 1377 teljesen összekapcsolt triádon.
+
+\placeholder{Signed-balance eredmény: flexset 97,74\% vs. soloq 75,82\% --- sávdiagram a kiegyensúlyozott és kiegyensúlyozatlan triádok arányával}{Strukturális egyensúlyi arányok összehasonlítása a két dataseten}
 
 A magas balance-ratio \emph{nem} azt jelenti, hogy a játékosközösség „harmonikus” szociológiai értelemben. A rendszer ismétlődő mérkőzéskapcsolatokból számol domináns előjelet. A signed balance így sokkal inkább a projekciós szabályok és a stabil kapcsolati mag kombinált viselkedését méri, mintsem közvetlen pszichológiai vagy szociológiai valóságot.
 
@@ -1983,6 +2542,8 @@ Az asszortativitás nem azonos erősségű a klaszteren belüli és klaszterek k
 
 Ez megint fontos módszertani figyelmeztetés. A klaszter nem egyenlő a teljesítményhomogenitással. A közösségi szerkezet és a metrikai hasonlóság kapcsolatban van egymással, de nem redukálható teljesen egymásra. Ez megerősíti, hogy a klaszterezési és a score-analitikai réteg külön-külön is értelmezendő.
 
+\placeholder{Asszortativitás oldal --- aktuális frontend screenshot, a négy gráfmód/metrika kombináció eredményeivel}{Az asszortativitás-analitika frontend nézete}
+
 \section{A frontend és a rendszerkoherencia értékelése}
 
 A projekt egyik fontos eredménye nem kizárólag a számszerű analitikában áll, hanem abban is, hogy a rendszer ma már koherens egészként működik. A jelenlegi állapotban:
@@ -2012,11 +2573,13 @@ Védhetőnek azt tartom, ha ezt az ország-elemzési vonalat \emph{kiegészítő
     \item ezért a dolgozat központi állításait nem erre építem.
 \end{itemize}
 
+\placeholder{Validációs összefoglaló --- a verifikált modulok, futtatott parancsok és mért eredmények egy ábrán}{A kísérleti futtatások és validáció összefoglaló sémája}
+
 \chapter{Rendszerszintű értékelés és megvitatás}
 
 \section{Mi bizonyult a legerősebb rendszertervezési döntésnek?}
 
-Az egész projektet visszanézve a legerősebb döntésnek azt tartom, hogy a különböző feladatokat nem próbáltam egyetlen univerzális technológiába kényszeríteni. Az \texttt{architecture-decision} szemlélet alapján ez úgy fogalmazható meg, hogy a rendszer nem eszközpreferencia, hanem minőségi attribútumok mentén fejlődött. A fontos attribútumok a következők voltak:
+Az egész projektet visszanézve a legerősebb döntésnek azt tartom, hogy a különböző feladatokat nem próbáltam egyetlen univerzális technológiába kényszeríteni. A rendszer nem eszközpreferencia, hanem minőségi attribútumok mentén fejlődött. A fontos attribútumok a következők voltak:
 
 \begin{itemize}
     \item reprodukálhatóság,
@@ -2028,7 +2591,21 @@ Az egész projektet visszanézve a legerősebb döntésnek azt tartom, hogy a k�
 
 Ezek közül ritkán lehet mindent ugyanazzal az eszközzel a legjobban kiszolgálni. A Python gyors iterációt és kényelmes adatfeldolgozást ad, a Rust teljesítményt és pontos gráfkontrollt, a Node/Express stabil integrációs felületet, a React pedig erős bemutathatóságot. A többnyelvűség tehát itt nem öncélú komplexitás, hanem funkcionális specializáció.
 
+\clearpage
+\begingroup
+\special{papersize=210mm,430mm}
+\special{pdf:put @thispage << /MediaBox [0 0 595.276 1218.898] >>}
 \section{A rendszer erősségei}
+\enlargethispage{150mm}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=330mm,keepaspectratio]{full system diagram.pdf}
+\caption{A teljes rendszer komponensdiagramja --- az adatút a Riot API-tól a React frontendig}
+\end{figure}
+\clearpage
+\endgroup
+\special{papersize=210mm,297mm}
 
 A jelenlegi állapot alapján a projekt legfontosabb erősségei:
 
@@ -2101,12 +2678,12 @@ A jelenleg megvalósult mag tartalmazza a databaseproject és C\# böngésző al
 A még nem lezárt, de az architektúra alapján célzottan megvalósítható irányok:
 
 \begin{itemize}
-    \item párhuzamos Brandes-féle betweenness centralitás (Rust/rayon);
+    \item a Brandes-féle betweenness centralitás teljesebb benchmarkolása és Graph V2 artifact-integrációja;
     \item adatvezérelt \texttt{opscore}-kalibráció meccsnyerési aránnyal;
     \item erősebb permutációs nullmodellek az asszortativitáshoz és signed-balance-hez.
 \end{itemize}
 
-Visszavont irányok (a korábbi tervdokumentumokban szerepeltek, jelenleg nem aktívak): párhuzamos Brandes az aktuális Rust kódban még nem implementált; Genetic NeuroSim v2, temporal consistency/stabilitás és community cohesion vs. performance vizsgálat eltávolítva a jelenlegi scope-ból.
+Visszavont irányok (a korábbi tervdokumentumokban szerepeltek, jelenleg nem aktívak): Genetic NeuroSim v2, temporal consistency/stabilitás és community cohesion vs. performance vizsgálat eltávolítva a jelenlegi scope-ból. A Brandes-központiság ezzel szemben már implementált modul, amelynek további feladata nem az alapalgoritmus megírása, hanem a benchmarkolás és a Graph V2 artifact-rétegbe illesztés.
 
 Ez a szétválasztás nem gyengíti, hanem erősíti a dolgozatot. A bírálat szempontjából sokkal védhetőbb egy olyan szöveg, amely pontosan kijelöli a rendszer jelenlegi határát, mint egy olyan, amely minden jó ötletet kész eredménynek próbál feltüntetni.
 
@@ -2247,6 +2824,8 @@ Kutatási szerep & Signed-graph és social struct. & Teljesítmény-alapvonal, k
 
 Az összehasonlítás általános tanulsága: a \texttt{flexset} az előjeles gráf és a társas struktúra vizsgálatának természetes terepe, a \texttt{soloq} pedig a teljesítmény-alapvonal és a kontroll-dataset szerepét tölti be. Ahol a két dataset hasonló eredményt ad (pl. mindkettőn pozitív social-path opscore asszortativitás), ott az eredmény általánosabb jellegű. Ahol eltérnek (pl. signed-balance arány, triádsűrűség), ott az eltérés a queue-mechanikából fakad, és önmagában is tudományosan értelmezhető.
 
+\placeholder{Flexset vs. SoloQ összehasonlító sávdiagram --- átlagos élsúly, klaszterméret, signed-balance arány és social-path opscore asszortativitás egymás mellett}{A két adatkészlet főbb mérőszámainak összehasonlítása}
+
 \chapter{Összegzés}
 
 \section{A projekt összefoglalása}
@@ -2279,52 +2858,6 @@ Az aktuális implementáció és az elvégzett empirikus elemzések alapján a k
     \item A kétdataset-összehasonlítás legszilárdabb eredménye: a Flex Queue lényegesen sűrűbb, stabilabb és signed-graph szempontból erősebb szociális struktúrát generál, mint a Solo/Duo Queue; ez a különbség minden elemzési szinten mérhető.
     \item A \texttt{feedscore} \texttt{battle-path} módban közel nulla vagy negatív asszortativitást mutat mindkét dataseten, ami megerősíti, hogy a gráfprojekció megválasztása módszertanilag lényeges, nem puszta technikai beállítás.
 \end{itemize}
-
-\chapter{Jövőbeli fejlesztések}
-
-\section{Jövőbeli fejlesztési irányok}
-
-A projekt jelenlegi állapotában már elég erős ahhoz, hogy a további fejlesztéseknél ne újabb random feature-öket, hanem célzott, tudományosan indokolható bővítéseket keressünk. Az alábbiakban csak azok az irányok szerepelnek, amelyek a kódbázisban jelenleg \emph{nem} implementáltak, de az architekturális alapok megvannak hozzájuk.
-
-\subsection{Párhuzamos Brandes-féle betweenness centralitás}
-
-A Rust réteg és a meglévő gráfmodell kifejezetten alkalmas arra, hogy a betweenness centrality soros, majd \texttt{rayon}-alapú párhuzamos változata is bekerüljön \cite{brandes2001}. A betweenness centralitás különösen értékes lenne a bridge-orbit vizualizáció validálásához: az orbitscore és orbitRadius mezők vizuális heurisztikák, amelyek az igazi Brandes-középséggel összevethetők lennének, igazolva vagy cáfolva a heurisztika hasznosságát.
-
-A párhuzamos Brandes ebben a kontextusban azért erős irány, mert:
-\begin{itemize}
-    \item a Rust \texttt{rayon} könyvtára adatpárhuzamosságot tesz lehetővé minimális kódváltoztatással;
-    \item a flexset gráf (5741 csúcs, 18548 él) már elég nagy ahhoz, hogy a párhuzamos verzió mérhetően gyorsabb legyen;
-    \item az eredmény közvetlenül integrálható a Graph V2 artifact-ba, mint validált centralitás-mező.
-\end{itemize}
-
-\subsection{Adatvezérelt opscore-kalibráció}
-
-A jelenlegi rendszer átlátható, de kézi súlyokon alapuló szerepkör-szorzókat használ. Egy adatvezérelt kalibráció, amely a meccsnyerési arányhoz igazítja a szorzókat, erősítheti a módszertant anélkül, hogy feladná az interpretálhatóságot. Ez az irány különösen indokolt, mert a flexset és soloq dataset együtt már elég nagyméretű korpuszt jelent ehhez.
-
-\subsection{Erősebb nullmodellek az asszortativitáshoz és signed-balance-hez}
-
-A rendszerben már van randomizációs infrastruktúra az asszortativitáshoz és a signed-balance-hez, de a szignifikanciakeret nem teljes. A jövőbeli fejlesztés célja permutációs null-modell futtatása: random opscore/feedscore érték-hozzárendelésekkel kapott korreláció eloszlásához viszonyítva lesz-e szignifikáns a tényleges eredmény? Ez különösen értékes a soloq dataset alacsonyabb asszortativitási értékeinek értelmezéséhez.
-
-\subsection{Időbeli stabilitás és volatilitás}
-
-A jelenlegi pontozás dataset-aggregátum, nem időfüggő. A meccsek sorrendjéből játékosonként stabilitási és volatilitási mutatók levezethetők: vajon a magas opscore-ú játékos konzisztensen teljesít, vagy a score mögött szórt, instabil meccsek sorozata rejlik? Ez a fejlesztési irány nem változtatja meg a jelenlegi kódbázist, hanem kiegészítő analitikai réteget ad hozzá.
-
-\subsection{Visszavont vagy elhalasztott irányok}
-
-A dolgozat korábbi tervdokumentumaiban szerepelt néhány irány, amelyeket a jelenlegi verzióban visszavontam vagy elhalasztottam:
-
-\begin{itemize}
-    \item \textbf{Contraction Hierarchies}: a jelenlegi gráfméret mellett nem indokolt az implementálása; az A* egzakt verziója elegendő teljesítményt ad.
-    \item \textbf{Temporal consistency / játékos stabilitás}: eltávolítva a jelenlegi verzióból; a meccsek időrendjének kezelése a score-rétegben nem prioritás.
-    \item \textbf{Community cohesion vs. performance kapcsolat}: elhalasztva; a klaszter-kohézió és a teljesítmény összefüggésének vizsgálata erős jövőbeli irány, de a jelenlegi rendszer ehhez még nem gyűjtött elég longitudinális adatot.
-    \item \textbf{Genetic NeuroSim v2}: kutatási kísérlet maradt; az aktuális system scope-on kívül esik.
-\end{itemize}
-
-Ezeket a visszavont irányokat azért sorolom fel, mert a tervdokumentumokban nyomuk maradt. A dolgozat konzisztenciája szempontjából fontos kimondani: ezek jelenlegi állapotban nem implementáltak, és a jelen szöveg nem tekinti őket kész feature-nek.
-
-\section{Zárszó}
-
-Ha a projektet egy mondatban kellene összefoglalnom, azt mondanám: a \emph{Premade Graph} nem egyszerűen játékosstatisztikák megjelenítése, hanem egy olyan próbálkozás, amely a kompetitív játékot kapcsolati és analitikai térként kezeli. Ez a szemlélet tette lehetővé, hogy a meccsekből gráf, a gráfból közösség, a közösségből előjeles szerkezet, az előjeles szerkezetből pedig ténylegesen vitatható és megvédhető kutatási kérdés legyen.
 
 \chapter{Az adatbázis-engineering kiegészítő alprojekt: databaseproject és C\# böngésző}
 
@@ -2447,6 +2980,49 @@ A C\# böngésző azért is értékes a dolgozat szempontjából, mert lehetőv�
 A databaseproject PostgreSQL-sémája és a fő rendszer SQLite-adatbázisa között nincs automatikus, élő szinkronizáció. A PostgreSQL-modell akadémiai-demonstrációs célt szolgál, nem production-szinkronizációt. Ez explicit módon van dokumentálva a \texttt{docs/databaseproject/documentation.tex} fájlban: ``A beadandó adatbázis-változat PostgreSQL-re készült, mert a feladat tárolt eljárásokat, triggereket, rekurzív lekérdezéseket, JSON mezőket és összetettebb SQL elemzéseket is kér. A tényleges alkalmazás jelenleg SQLite-ot használ helyi perzisztenciára, de a dokumentált modell ugyanazokat a fogalmakat viszi át egy erősebb adatbázisrendszerbe.''
 
 Ez a szétválasztás előny, nem hiba: megmutatja, hogy a szoftvermérnöki döntés (SQLite a fő rendszerben) indokolt a project méretéhez és céljához, miközben az akadémiai adatbázistervezési kompetencia bemutatható a PostgreSQL-modellen keresztül.
+
+\chapter{Jövőbeli fejlesztések}
+
+\section{Jövőbeli fejlesztési irányok}
+
+A projekt jelenlegi állapotában már elég erős ahhoz, hogy a további fejlesztéseknél ne újabb random feature-öket, hanem célzott, tudományosan indokolható bővítéseket keressünk. Az alábbiakban csak azok az irányok szerepelnek, amelyek a kódbázisban jelenleg \emph{nem} implementáltak, de az architekturális alapok megvannak hozzájuk.
+
+\subsection{Brandes-központiság benchmarkolása és artifact-integrációja}
+
+A Rust rétegben a betweenness centrality soros és \texttt{rayon}-alapú párhuzamos változata már bekerült \cite{brandes2001}. A következő feladat nem az alapalgoritmus megírása, hanem a teljesebb valós adatkészletes benchmarkolás és a Graph V2 artifact-réteggel való szorosabb összekötés. A betweenness centralitás különösen értékes a bridge-orbit vizualizáció validálásához: az orbitscore és orbitRadius mezők vizuális heurisztikák, amelyek az igazi Brandes-középséggel összevethetők.
+
+A további Brandes-munka ebben a kontextusban azért erős irány, mert:
+\begin{itemize}
+    \item a Rust \texttt{rayon} könyvtára adatpárhuzamosságot tesz lehetővé minimális kódváltoztatással;
+    \item a flexset gráf (5741 csúcs, 18548 él) már elég nagy ahhoz, hogy a párhuzamos verzió mérhetően gyorsabb legyen;
+    \item az eredmény közvetlenül integrálható a Graph V2 artifact-ba mint validált centralitás-mező;
+    \item a bridge-orbit heurisztika így nemcsak vizuális ötletként, hanem mérhető központisági összehasonlításként is értékelhető.
+\end{itemize}
+
+\subsection{Adatvezérelt opscore-kalibráció}
+
+A jelenlegi rendszer átlátható, de kézi súlyokon alapuló szerepkör-szorzókat használ. Egy adatvezérelt kalibráció, amely a meccsnyerési arányhoz igazítja a szorzókat, erősítheti a módszertant anélkül, hogy feladná az interpretálhatóságot. Ez az irány különösen indokolt, mert a flexset és soloq dataset együtt már elég nagyméretű korpuszt jelent ehhez.
+
+\subsection{Erősebb nullmodellek az asszortativitáshoz és signed-balance-hez}
+
+A rendszerben már van randomizációs infrastruktúra az asszortativitáshoz és a signed-balance-hez, de a szignifikanciakeret nem teljes. A jövőbeli fejlesztés célja permutációs null-modell futtatása: random opscore/feedscore érték-hozzárendelésekkel kapott korreláció eloszlásához viszonyítva lesz-e szignifikáns a tényleges eredmény? Ez különösen értékes a soloq dataset alacsonyabb asszortativitási értékeinek értelmezéséhez.
+
+\subsection{Visszavont vagy elhalasztott irányok}
+
+A dolgozat korábbi tervdokumentumaiban szerepelt néhány irány, amelyeket a jelenlegi verzióban visszavontam vagy elhalasztottam:
+
+\begin{itemize}
+    \item \textbf{Contraction Hierarchies}: a jelenlegi gráfméret mellett nem indokolt az implementálása; az A* egzakt verziója elegendő teljesítményt ad.
+    \item \textbf{Temporal consistency / játékos stabilitás}: eltávolítva a jelenlegi verzióból; a meccsek időrendje nem elég erős módszertani alap hosszanti stabilitási állításokhoz.
+    \item \textbf{Community cohesion vs. performance kapcsolat}: eltávolítva a jelenlegi verzióból; a signed-balance és az asszortativitás tisztábban, védhetőbb matematikai keretben válaszolja meg a releváns szerkezeti kérdéseket.
+    \item \textbf{Genetic NeuroSim v2}: kutatási kísérlet maradt; az aktuális system scope-on kívül esik.
+\end{itemize}
+
+Ezeket a visszavont irányokat azért sorolom fel, mert a tervdokumentumokban nyomuk maradt. A dolgozat konzisztenciája szempontjából fontos kimondani: ezek jelenlegi állapotban nem implementáltak, és a jelen szöveg nem tekinti őket kész feature-nek.
+
+\section{Zárszó}
+
+Ha a projektet egy mondatban kellene összefoglalnom, azt mondanám: a \emph{Premade Graph} nem egyszerűen játékosstatisztikák megjelenítése, hanem egy olyan próbálkozás, amely a kompetitív játékot kapcsolati és analitikai térként kezeli. Ez a szemlélet tette lehetővé, hogy a meccsekből gráf, a gráfból közösség, a közösségből előjeles szerkezet, az előjeles szerkezetből pedig ténylegesen vitatható és megvédhető kutatási kérdés legyen.
 
 \begin{thebibliography}{99}
 

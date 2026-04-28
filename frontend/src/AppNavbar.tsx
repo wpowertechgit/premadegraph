@@ -14,13 +14,13 @@ import {
   FaPlus,
   FaProjectDiagram,
   FaRoute,
-  FaSatelliteDish,
   FaSearch,
   FaSyncAlt,
   FaTimes,
 } from "react-icons/fa";
 import { useI18n } from "./i18n";
 import type { DatasetRecord, RuntimeKeyRecord } from "./App";
+import collectorIcon from "../assets/The_Collector_WR_item.png";
 
 type AppNavbarProps = {
   collapsed: boolean;
@@ -230,7 +230,7 @@ export default function AppNavbar({
       description: language === "hu"
         ? "Collector oldal standard és strengthen-graph futásokhoz"
         : "Collector page for standard and strengthen-graph runs",
-      icon: <FaSatelliteDish />,
+      icon: <img src={collectorIcon} alt="" className="app-sidebar__link-icon-image" />,
     },
     {
       to: "/graph",

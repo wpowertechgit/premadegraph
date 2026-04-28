@@ -318,6 +318,13 @@ button:focus-visible {
   font-size: 1.05rem;
 }
 
+.app-sidebar__link-icon-image {
+  width: 2.25rem;
+  height: 2.25rem;
+  object-fit: contain;
+  display: block;
+}
+
 .app-sidebar__link.is-active .app-sidebar__link-icon {
   color: #ffd7cc;
   background: linear-gradient(135deg, rgba(155, 43, 31, 0.92) 0%, rgba(103, 20, 17, 0.86) 100%);
