@@ -106,6 +106,26 @@ fn default_assortativity_seed() -> u64 {
     42
 }
 
+fn default_betweenness_path_mode() -> String {
+    "battle-path".to_string()
+}
+
+fn default_betweenness_min_edge_support() -> u32 {
+    1
+}
+
+fn default_betweenness_top_nodes() -> usize {
+    20
+}
+
+fn default_betweenness_parallel() -> bool {
+    true
+}
+
+fn default_betweenness_weighted() -> bool {
+    true
+}
+
 fn default_true() -> bool {
     true
 }
@@ -182,6 +202,25 @@ pub struct AssortativitySignificanceRequest {
     pub seed: u64,
     #[serde(default)]
     pub include_null_distribution_samples: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BetweennessCentralityRequest {
+    #[serde(default = "default_betweenness_path_mode")]
+    pub path_mode: String,
+    #[serde(default = "default_betweenness_weighted")]
+    pub weighted_mode: bool,
+    #[serde(default = "default_betweenness_min_edge_support")]
+    pub min_edge_support: u32,
+    #[serde(default = "default_betweenness_top_nodes")]
+    pub max_top_nodes: usize,
+    #[serde(default = "default_betweenness_parallel")]
+    pub parallel: bool,
+    #[serde(default)]
+    pub run_serial_baseline: bool,
+    #[serde(default)]
+    pub include_full_results: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -610,5 +649,68 @@ pub struct AssortativitySignificanceResponse {
     pub parameter_grid: serde_json::Value,
     pub null_model: serde_json::Value,
     pub runs: Vec<AssortativitySignificanceRun>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BetweennessCentralityDecisions {
+    pub graph_scope: String,
+    pub algorithm: String,
+    pub parallelization: String,
+    pub graph_mode: String,
+    pub weighted_mode: bool,
+    pub edge_support_rule: String,
+    pub edge_cost_rule: String,
+    pub normalization_rule: String,
+    pub min_edge_support: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BetweennessCentralityGraphSummary {
+    pub runtime_nodes: usize,
+    pub projected_nodes: usize,
+    pub candidate_edges: usize,
+    pub analyzed_edges: usize,
+    pub skipped_low_support_edges: usize,
+    pub skipped_invalid_edges: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BetweennessCentralityRuntime {
+    pub algorithm_runtime_ms: f64,
+    pub serial_runtime_ms: Option<f64>,
+    pub parallel_runtime_ms: Option<f64>,
+    pub speedup: Option<f64>,
+    pub rayon_threads: usize,
+    pub parallel_chunks: usize,
+    pub serial_parallel_max_abs_delta: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BetweennessCentralityNodeResult {
+    pub rank: usize,
+    pub player_id: String,
+    pub label: String,
+    pub cluster_id: Option<String>,
+    pub degree: usize,
+    pub weighted_strength: u32,
+    pub raw_betweenness: f64,
+    pub normalized_betweenness: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BetweennessCentralityResponse {
+    pub status: String,
+    pub decisions: BetweennessCentralityDecisions,
+    pub graph_summary: BetweennessCentralityGraphSummary,
+    pub runtime: BetweennessCentralityRuntime,
+    pub top_nodes: Vec<BetweennessCentralityNodeResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_results: Option<Vec<BetweennessCentralityNodeResult>>,
     pub warnings: Vec<String>,
 }

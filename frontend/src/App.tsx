@@ -13,6 +13,7 @@ const GraphPage = lazy(() => import("./GraphPage"));
 const PlayerDetailPage = lazy(() => import("./PlayerDetailPage"));
 const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 const AssortativityPage = lazy(() => import("./AssortativityPage"));
+const BetweennessCentralityPage = lazy(() => import("./BetweennessCentralityPage"));
 const DualAnalyticsView = lazy(() => import("./DualAnalyticsView"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
@@ -146,6 +147,14 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
             element={(
               <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
                 <AssortativityPage />
+              </Suspense>
+            )}
+          />
+          <Route
+            path="/betweenness-centrality"
+            element={(
+              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                <BetweennessCentralityPage />
               </Suspense>
             )}
           />

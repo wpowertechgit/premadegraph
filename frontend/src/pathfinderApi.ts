@@ -11,6 +11,7 @@ import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./grap
 import type { GraphV2Buffers, GraphV2ClusterMeta, GraphV2Manifest, GraphV2NodeMeta } from "./graphV2Types";
 import type { SignedBalanceRequest, SignedBalanceResponse } from "./signedBalanceTypes";
 import type { AssortativityRequest, AssortativityResponse } from "./assortativityTypes";
+import type { BetweennessCentralityRequest, BetweennessCentralityResponse } from "./betweennessTypes";
 
 const API_BASE = "http://localhost:3001/api/pathfinder";
 const RUST_API_BASE = "http://localhost:3001/api/pathfinder-rust";
@@ -30,7 +31,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   const rawText = await response.text();
   if (rawText.trimStart().startsWith("<!DOCTYPE") || rawText.trimStart().startsWith("<html")) {
     throw new Error(
-      "The backend returned HTML instead of JSON. The backend server likely needs a restart so the new assortativity endpoint becomes available.",
+      "The backend returned HTML instead of JSON. The backend server likely needs a restart so the new analysis endpoint becomes available.",
     );
   }
 
@@ -275,4 +276,18 @@ export async function runRustAssortativity(request: AssortativityRequest): Promi
   });
 
   return parseJsonResponse<AssortativityResponse>(response);
+}
+
+export async function runRustBetweennessCentrality(
+  request: BetweennessCentralityRequest,
+): Promise<BetweennessCentralityResponse> {
+  const response = await fetch(`${RUST_API_BASE}/betweenness-centrality`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+  });
+
+  return parseJsonResponse<BetweennessCentralityResponse>(response);
 }

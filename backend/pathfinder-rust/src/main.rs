@@ -3,13 +3,14 @@ mod models;
 
 use engine::{
     apply_runtime_breakdown, assortativity_analysis, assortativity_significance_analysis,
-    build_graph_state, compare_algorithms, engine_spec_response, export_birdseye_bundle,
-    export_graph_v2_bundle, global_view_response, options_response, player_focus_response,
-    run_search, signed_balance_analysis, signed_balance_sensitivity_analysis,
+    betweenness_centrality_analysis, build_graph_state, compare_algorithms, engine_spec_response,
+    export_birdseye_bundle, export_graph_v2_bundle, global_view_response, options_response,
+    player_focus_response, run_search, signed_balance_analysis,
+    signed_balance_sensitivity_analysis,
 };
 use models::{
-    AssortativityRequest, AssortativitySignificanceRequest, CompareRequest, PathfinderRequest,
-    SignedBalanceRequest, SignedBalanceSweepRequest,
+    AssortativityRequest, AssortativitySignificanceRequest, BetweennessCentralityRequest,
+    CompareRequest, PathfinderRequest, SignedBalanceRequest, SignedBalanceSweepRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -177,6 +178,22 @@ fn execute_command(
             ))
             .map_err(|error| error.to_string())
         }
+        "betweenness-centrality" => {
+            let input = payload.unwrap_or_default();
+            let request: BetweennessCentralityRequest = if input.trim().is_empty() {
+                serde_json::from_str("{}").map_err(|error| {
+                    format!("failed to build default betweenness centrality request: {error}")
+                })?
+            } else {
+                serde_json::from_str(input)
+                    .map_err(|error| format!("invalid betweenness centrality payload: {error}"))?
+            };
+            serde_json::to_string(&betweenness_centrality_analysis(
+                ensure_graph(graph, &mut graph_build_ms),
+                request,
+            ))
+            .map_err(|error| error.to_string())
+        }
         "birdseye-3d-export" => Ok(export_birdseye_bundle().display().to_string()),
         "graph-v2-export" => Ok(export_graph_v2_bundle().display().to_string()),
         _ => serde_json::to_string(&engine_spec_response()).map_err(|error| error.to_string()),
@@ -256,7 +273,8 @@ fn main() {
         | "signed-balance"
         | "assortativity"
         | "balance-sweep"
-        | "assortativity-significance" => read_stdin(),
+        | "assortativity-significance"
+        | "betweenness-centrality" => read_stdin(),
         _ => String::new(),
     };
     let output = execute_command(command, Some(&input), &mut graph).expect("command failed");

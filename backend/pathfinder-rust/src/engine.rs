@@ -1,5 +1,6 @@
 mod assortativity;
 mod birdseye;
+mod centrality;
 mod experiments;
 mod graph;
 mod graph_v2;
@@ -8,6 +9,7 @@ mod signed_balance;
 
 use self::assortativity::assortativity_response;
 use self::birdseye::export_birdseye_3d_artifacts;
+use self::centrality::betweenness_centrality_response;
 use self::experiments::{assortativity_significance_response, signed_balance_sweep_response};
 use self::graph::{
     global_view_snapshot, pathfinder_snapshot, player_focus_snapshot, population_snapshot,
@@ -391,6 +393,13 @@ pub fn assortativity_analysis(
     assortativity_response(graph, request)
 }
 
+pub fn betweenness_centrality_analysis(
+    graph: &GraphState,
+    request: BetweennessCentralityRequest,
+) -> BetweennessCentralityResponse {
+    betweenness_centrality_response(graph, request)
+}
+
 pub fn export_birdseye_bundle() -> std::path::PathBuf {
     export_birdseye_3d_artifacts()
 }
@@ -422,7 +431,18 @@ pub fn engine_spec_response() -> EngineSpecResponse {
             "algorithm": ["bfs", "dijkstra", "bidirectional", "astar"],
             "pathMode": ["social-path", "battle-path"],
             "weightedMode": "boolean",
-            "options": { "includeTrace": "boolean", "maxSteps": "number" }
+            "options": { "includeTrace": "boolean", "maxSteps": "number" },
+            "analysisCommands": {
+                "betweenness-centrality": {
+                    "pathMode": ["social-path", "battle-path"],
+                    "weightedMode": "boolean",
+                    "minEdgeSupport": "number",
+                    "maxTopNodes": "number",
+                    "parallel": "boolean",
+                    "runSerialBaseline": "boolean",
+                    "includeFullResults": "boolean"
+                }
+            }
         }),
         response_contract: serde_json::json!({
             "request": "echo of the search query without options",

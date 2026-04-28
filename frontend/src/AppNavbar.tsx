@@ -265,6 +265,12 @@ export default function AppNavbar({
       icon: <FaChartLine />,
     },
     {
+      to: "/betweenness-centrality",
+      label: t.app.nav.betweenness,
+      description: t.app.nav.betweennessDescription,
+      icon: <FaProjectDiagram />,
+    },
+    {
       to: "/pathfinder-lab",
       label: t.app.nav.pathfinderLab,
       description: t.app.nav.pathfinderLabDescription,

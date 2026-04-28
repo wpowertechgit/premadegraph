@@ -12,6 +12,7 @@ interface GraphV2SceneProps {
   selectedSourceId: string;
   selectedTargetId: string;
   pathNodeIds: string[];
+  centralityBridgeNodeIds: string[];
   onNodeClick: (nodeId: string) => void;
   onHoverIndexChange: (index: number | null) => void;
 }
@@ -22,6 +23,7 @@ type SceneRefs = {
   camera: THREE.OrthographicCamera;
   nodeMesh: THREE.InstancedMesh;
   nodeHaloMesh: THREE.InstancedMesh;
+  centralityGlowMesh: THREE.InstancedMesh;
   clusterFillMesh: THREE.Mesh;
   clusterOutlineMesh: THREE.Mesh;
   clusterUnityMesh: THREE.Mesh;
@@ -32,6 +34,7 @@ type SceneRefs = {
   mutablePositions: Float32Array;
   edgeIndexRows: EdgeIndexRow[];
   nodeIdToIndex: Map<string, number>;
+  centralityBridgeIndices: Set<number>;
   lastHighlightedIndices: Set<number>;
   raycaster: THREE.Raycaster;
   pointer: THREE.Vector2;
@@ -48,6 +51,7 @@ type ClusterVisualEntry = {
 
 const NODE_RADIUS = 5.2;
 const NODE_HALO_RADIUS = 8.8;
+const CENTRALITY_GLOW_RADIUS = 15.5;
 const HIGHLIGHT_BEST_OP = 1;
 const HIGHLIGHT_WORST_FEED = 2;
 
@@ -458,6 +462,45 @@ function setInstancePosition(mesh: THREE.InstancedMesh, index: number, x: number
   mesh.instanceMatrix.needsUpdate = true;
 }
 
+function baseNodeScale(metrics: Uint32Array, index: number, stride: number) {
+  const degree = metricAt(metrics, index, 0, stride);
+  return 0.74 + Math.min(Math.sqrt(degree), 8) * 0.09;
+}
+
+function updateCentralityGlowGeometry(refs: SceneRefs) {
+  const rankColor = new THREE.Color("#ffd84d");
+  const tailColor = new THREE.Color("#ff9f43");
+  const orderedIndices = Array.from(refs.centralityBridgeIndices);
+  const rankDenominator = Math.max(orderedIndices.length - 1, 1);
+
+  for (let index = 0; index < refs.mutablePositions.length / 2; index += 1) {
+    setInstancePosition(
+      refs.centralityGlowMesh,
+      index,
+      refs.mutablePositions[index * 2],
+      refs.mutablePositions[index * 2 + 1],
+      0.001,
+    );
+  }
+
+  orderedIndices.forEach((nodeIndex, rankIndex) => {
+    const tone = rankColor.clone().lerp(tailColor, rankIndex / rankDenominator);
+    const scale = 1.1 + Math.max(0, 0.55 - rankIndex * 0.035);
+    refs.centralityGlowMesh.setColorAt(nodeIndex, tone);
+    setInstancePosition(
+      refs.centralityGlowMesh,
+      nodeIndex,
+      refs.mutablePositions[nodeIndex * 2],
+      refs.mutablePositions[nodeIndex * 2 + 1],
+      scale,
+    );
+  });
+
+  if (refs.centralityGlowMesh.instanceColor) {
+    refs.centralityGlowMesh.instanceColor.needsUpdate = true;
+  }
+}
+
 function updatePathGeometry(refs: SceneRefs, pathNodeIds: string[]) {
   const positions: number[] = [];
   for (let index = 0; index < pathNodeIds.length - 1; index += 1) {
@@ -507,16 +550,32 @@ export default function GraphV2Scene({
   selectedSourceId,
   selectedTargetId,
   pathNodeIds,
+  centralityBridgeNodeIds,
   onNodeClick,
   onHoverIndexChange,
 }: GraphV2SceneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const refsRef = useRef<SceneRefs | null>(null);
   const selectedIdsRef = useRef({ source: selectedSourceId, target: selectedTargetId });
+  const centralityBridgeNodeIdsRef = useRef<string[]>(centralityBridgeNodeIds);
 
   useEffect(() => {
     selectedIdsRef.current = { source: selectedSourceId, target: selectedTargetId };
   }, [selectedSourceId, selectedTargetId]);
+
+  useEffect(() => {
+    centralityBridgeNodeIdsRef.current = centralityBridgeNodeIds;
+    const refs = refsRef.current;
+    if (!refs) {
+      return;
+    }
+    refs.centralityBridgeIndices = new Set(
+      centralityBridgeNodeIds
+        .map((nodeId) => refs.nodeIdToIndex.get(nodeId))
+        .filter((index): index is number => index !== undefined),
+    );
+    updateCentralityGlowGeometry(refs);
+  }, [centralityBridgeNodeIds]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -602,6 +661,18 @@ export default function GraphV2Scene({
     nodeHaloMesh.renderOrder = 26;
     nodeHaloMesh.frustumCulled = false;
 
+    const centralityGlowGeometry = new THREE.CircleGeometry(CENTRALITY_GLOW_RADIUS, 28);
+    const centralityGlowMaterial = createInstancedCircleMaterial(0.58);
+    centralityGlowMaterial.blending = THREE.AdditiveBlending;
+    const centralityGlowMesh = new THREE.InstancedMesh(
+      centralityGlowGeometry,
+      centralityGlowMaterial,
+      manifest.nodeCount,
+    );
+    centralityGlowMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(manifest.nodeCount * 3), 3);
+    centralityGlowMesh.renderOrder = 28;
+    centralityGlowMesh.frustumCulled = false;
+
     const geometry = new THREE.CircleGeometry(NODE_RADIUS, 18);
     const material = createInstancedCircleMaterial(1);
     const nodeMesh = new THREE.InstancedMesh(geometry, material, manifest.nodeCount);
@@ -609,8 +680,7 @@ export default function GraphV2Scene({
     nodeMesh.renderOrder = 30;
     nodeMesh.frustumCulled = false;
     for (let index = 0; index < manifest.nodeCount; index += 1) {
-      const degree = metricAt(buffers.nodeMetrics, index, 0, manifest.nodeMetricStride);
-      const scale = 0.74 + Math.min(Math.sqrt(degree), 8) * 0.09;
+      const scale = baseNodeScale(buffers.nodeMetrics, index, manifest.nodeMetricStride);
       const color = nodeColor(nodeMeta, index);
       setInstancePosition(
         nodeMesh,
@@ -628,6 +698,14 @@ export default function GraphV2Scene({
       );
       nodeMesh.setColorAt(index, color);
       nodeHaloMesh.setColorAt(index, color);
+      centralityGlowMesh.setColorAt(index, new THREE.Color("#ffd84d"));
+      setInstancePosition(
+        centralityGlowMesh,
+        index,
+        mutablePositions[index * 2],
+        mutablePositions[index * 2 + 1],
+        0.001,
+      );
     }
     if (nodeMesh.instanceColor) {
       nodeMesh.instanceColor.needsUpdate = true;
@@ -635,7 +713,11 @@ export default function GraphV2Scene({
     if (nodeHaloMesh.instanceColor) {
       nodeHaloMesh.instanceColor.needsUpdate = true;
     }
+    if (centralityGlowMesh.instanceColor) {
+      centralityGlowMesh.instanceColor.needsUpdate = true;
+    }
     scene.add(nodeHaloMesh);
+    scene.add(centralityGlowMesh);
     scene.add(nodeMesh);
 
     const refs: SceneRefs = {
@@ -644,6 +726,7 @@ export default function GraphV2Scene({
       camera,
       nodeMesh,
       nodeHaloMesh,
+      centralityGlowMesh,
       clusterFillMesh,
       clusterOutlineMesh,
       clusterUnityMesh,
@@ -654,11 +737,17 @@ export default function GraphV2Scene({
       mutablePositions,
       edgeIndexRows: edgeRows,
       nodeIdToIndex,
+      centralityBridgeIndices: new Set(
+        centralityBridgeNodeIdsRef.current
+          .map((nodeId) => nodeIdToIndex.get(nodeId))
+          .filter((index): index is number => index !== undefined),
+      ),
       lastHighlightedIndices: new Set(),
       raycaster: new THREE.Raycaster(),
       pointer: new THREE.Vector2(),
     };
     refsRef.current = refs;
+    updateCentralityGlowGeometry(refs);
     updatePathGeometry(refs, pathNodeIds);
 
     let animationFrame = 0;
@@ -707,6 +796,9 @@ export default function GraphV2Scene({
         mutablePositions[draggingNode * 2 + 1] = world.y;
         setInstancePosition(nodeMesh, draggingNode, world.x, world.y, 1.28);
         setInstancePosition(nodeHaloMesh, draggingNode, world.x, world.y, 1.28);
+        if (refs.centralityBridgeIndices.has(draggingNode)) {
+          setInstancePosition(centralityGlowMesh, draggingNode, world.x, world.y, 1.38);
+        }
         updateLineGeometry(allyInternalLines, mutablePositions);
         updateLineGeometry(allyBridgeLines, mutablePositions);
         updateLineGeometry(enemyLines, mutablePositions);
@@ -726,10 +818,10 @@ export default function GraphV2Scene({
       const distance = Math.hypot(event.clientX - pointerDownScreen.x, event.clientY - pointerDownScreen.y);
       if (draggingNode !== null) {
         const index = draggingNode;
-        const degree = metricAt(buffers.nodeMetrics, index, 0, manifest.nodeMetricStride);
-        const scale = 0.74 + Math.min(Math.sqrt(degree), 8) * 0.09;
+        const scale = baseNodeScale(buffers.nodeMetrics, index, manifest.nodeMetricStride);
         setInstancePosition(nodeMesh, index, mutablePositions[index * 2], mutablePositions[index * 2 + 1], scale);
         setInstancePosition(nodeHaloMesh, index, mutablePositions[index * 2], mutablePositions[index * 2 + 1], scale);
+        updateCentralityGlowGeometry(refs);
         if (distance < 5) {
           onNodeClick(nodeMeta.ids[index]);
         }
@@ -759,12 +851,22 @@ export default function GraphV2Scene({
       for (const index of [sourceIndex, targetIndex]) {
         if (index !== undefined) activeHighlights.add(index);
       }
+      const bridgePulse = 1 + Math.sin(performance.now() * 0.004) * 0.16;
+      Array.from(refs.centralityBridgeIndices).forEach((nodeIndex, rankIndex) => {
+        const scale = (1.04 + Math.max(0, 0.55 - rankIndex * 0.035)) * bridgePulse;
+        setInstancePosition(
+          centralityGlowMesh,
+          nodeIndex,
+          mutablePositions[nodeIndex * 2],
+          mutablePositions[nodeIndex * 2 + 1],
+          scale,
+        );
+      });
       for (const index of refs.lastHighlightedIndices) {
         if (activeHighlights.has(index)) {
           continue;
         }
-        const degree = metricAt(buffers.nodeMetrics, index, 0, manifest.nodeMetricStride);
-        const scale = 0.74 + Math.min(Math.sqrt(degree), 8) * 0.09;
+        const scale = baseNodeScale(buffers.nodeMetrics, index, manifest.nodeMetricStride);
         setInstancePosition(nodeMesh, index, mutablePositions[index * 2], mutablePositions[index * 2 + 1], scale);
         setInstancePosition(nodeHaloMesh, index, mutablePositions[index * 2], mutablePositions[index * 2 + 1], scale);
       }

@@ -9,10 +9,12 @@ import {
   fetchRustGraphV2NodeMeta,
   fetchRustPathfinderOptions,
   rebuildRustGraphV2,
+  runRustBetweennessCentrality,
   runRustPathfinderBackend,
 } from "./pathfinderApi";
 import { type PathMode, type PlayerOption } from "./pathfinderTypes";
 import type { GraphV2Buffers, GraphV2ClusterMeta, GraphV2Manifest, GraphV2NodeMeta } from "./graphV2Types";
+import type { BetweennessCentralityResponse } from "./betweennessTypes";
 import { getAlgorithmLabel, getPathModeLabel, translateBackendText, useI18n } from "./i18n";
 import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "./theme";
 
@@ -58,6 +60,11 @@ const GraphPage = () => {
   const [showEnemyEdges, setShowEnemyEdges] = useState(false);
   const [showBridgeEdges, setShowBridgeEdges] = useState(true);
   const [showRawInternalEdges, setShowRawInternalEdges] = useState(true);
+  const [showCentralityMarks, setShowCentralityMarks] = useState(true);
+  const [centralityMinSupport, setCentralityMinSupport] = useState(20);
+  const [centralityResult, setCentralityResult] = useState<BetweennessCentralityResponse | null>(null);
+  const [centralityLoading, setCentralityLoading] = useState(false);
+  const [centralityError, setCentralityError] = useState<string | null>(null);
   const [pathNodeIds, setPathNodeIds] = useState<string[]>([]);
   const [pathStatus, setPathStatus] = useState<string | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -174,6 +181,7 @@ const GraphPage = () => {
       return null;
     }
     const stride = manifest.nodeMetricStride;
+    const centralityNode = centralityResult?.topNodes.find((node) => node.playerId === nodeMeta.ids[hoverIndex]);
     return {
       id: nodeMeta.ids[hoverIndex],
       label: nodeMeta.labels[hoverIndex],
@@ -183,8 +191,16 @@ const GraphPage = () => {
       allyDegree: buffers.nodeMetrics[hoverIndex * stride + 1] ?? 0,
       enemyDegree: buffers.nodeMetrics[hoverIndex * stride + 2] ?? 0,
       totalSupport: buffers.nodeMetrics[hoverIndex * stride + 3] ?? 0,
+      centralityRank: centralityNode?.rank ?? null,
+      rawBetweenness: centralityNode?.rawBetweenness ?? null,
+      normalizedBetweenness: centralityNode?.normalizedBetweenness ?? null,
     };
-  }, [buffers, hoverIndex, manifest, nodeMeta]);
+  }, [buffers, centralityResult?.topNodes, hoverIndex, manifest, nodeMeta]);
+
+  const centralityBridgeNodeIds = useMemo(
+    () => (showCentralityMarks ? centralityResult?.topNodes.map((node) => node.playerId) ?? [] : []),
+    [centralityResult?.topNodes, showCentralityMarks],
+  );
 
   const topClusters = useMemo(
     () => clusterMeta?.clusters.slice(0, 4) ?? [],
@@ -203,6 +219,28 @@ const GraphPage = () => {
       setError(translateBackendText(language, err.message || t.app.alerts.unknown));
     } finally {
       setRebuilding(false);
+    }
+  };
+
+  const runCentralityOverlay = async () => {
+    try {
+      setCentralityLoading(true);
+      setCentralityError(null);
+      const response = await runRustBetweennessCentrality({
+        pathMode: "battle-path",
+        weightedMode: true,
+        minEdgeSupport: centralityMinSupport,
+        maxTopNodes: 30,
+        parallel: true,
+        runSerialBaseline: centralityMinSupport >= 20,
+        includeFullResults: false,
+      });
+      setCentralityResult(response);
+      setShowCentralityMarks(true);
+    } catch (err: any) {
+      setCentralityError(translateBackendText(language, err.message || t.app.alerts.unknown));
+    } finally {
+      setCentralityLoading(false);
     }
   };
 
@@ -230,6 +268,7 @@ const GraphPage = () => {
         selectedSourceId={sourcePlayerId}
         selectedTargetId={targetPlayerId}
         pathNodeIds={pathNodeIds}
+        centralityBridgeNodeIds={centralityBridgeNodeIds}
         onNodeClick={handleNodeClick}
         onHoverIndexChange={setHoverIndex}
       />
@@ -290,6 +329,12 @@ const GraphPage = () => {
             <div><div style={metricLabelStyle}>feedscore</div><div style={metricValueStyle}>{hoveredPlayer.feedscore?.toFixed(2) ?? "-"}</div></div>
             <div><div style={metricLabelStyle}>ally degree</div><div style={metricValueStyle}>{hoveredPlayer.allyDegree}</div></div>
             <div><div style={metricLabelStyle}>enemy degree</div><div style={metricValueStyle}>{hoveredPlayer.enemyDegree}</div></div>
+            {hoveredPlayer.centralityRank ? (
+              <>
+                <div><div style={metricLabelStyle}>bridge rank</div><div style={{ ...metricValueStyle, color: "#ffd84d" }}>#{hoveredPlayer.centralityRank}</div></div>
+                <div><div style={metricLabelStyle}>raw BC</div><div style={{ ...metricValueStyle, color: "#ffd84d" }}>{hoveredPlayer.rawBetweenness?.toFixed(2) ?? "-"}</div></div>
+              </>
+            ) : null}
           </div>
         </div>
       )}
@@ -405,6 +450,104 @@ const GraphPage = () => {
             Show member links
           </label>
 
+          <div
+            style={{
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "8px",
+              padding: "0.75rem",
+              display: "grid",
+              gap: "0.65rem",
+              background: "rgba(8, 15, 23, 0.5)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+              <div>
+                <div style={sectionLabelStyle()}>Brandes marks</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.2rem" }}>
+                  Yellow glow marks top bridge players.
+                </div>
+              </div>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", color: "var(--text-secondary)" }}>
+                <input
+                  type="checkbox"
+                  checked={showCentralityMarks}
+                  disabled={!centralityResult}
+                  onChange={(event) => setShowCentralityMarks(event.target.checked)}
+                />
+                Show
+              </label>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.5rem", alignItems: "center" }}>
+              <label style={{ display: "grid", gap: "0.28rem" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>Minimum support</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={centralityMinSupport}
+                  onChange={(event) => setCentralityMinSupport(Math.max(1, Number(event.target.value) || 1))}
+                  style={{
+                    width: "100%",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border-strong)",
+                    background: "rgba(8, 15, 23, 0.88)",
+                    color: "var(--text-primary)",
+                    padding: "0.58rem 0.65rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={centralityLoading}
+                onClick={runCentralityOverlay}
+                style={{
+                  ...buttonStyle("secondary"),
+                  minHeight: "38px",
+                  padding: "0.62rem 0.72rem",
+                  alignSelf: "end",
+                  borderColor: "rgba(255, 216, 77, 0.36)",
+                  color: "#ffe38a",
+                }}
+              >
+                {centralityLoading ? "Marking..." : "Mark bridges"}
+              </button>
+            </div>
+
+            {centralityError ? (
+              <div style={{ color: "#ffb39b", fontSize: "0.84rem", lineHeight: 1.45 }}>{centralityError}</div>
+            ) : null}
+
+            {centralityResult ? (
+              <div style={{ display: "grid", gap: "0.45rem" }}>
+                <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.45 }}>
+                  {centralityResult.graphSummary.projectedNodes.toLocaleString()} nodes · {centralityResult.graphSummary.analyzedEdges.toLocaleString()} edges · {centralityResult.runtime.speedup ? `${centralityResult.runtime.speedup.toFixed(2)}x` : "no baseline"}
+                </div>
+                {centralityResult.topNodes.slice(0, 5).map((node) => (
+                  <div
+                    key={node.playerId}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "auto 1fr auto",
+                      gap: "0.5rem",
+                      alignItems: "center",
+                      color: "var(--text-secondary)",
+                      fontSize: "0.82rem",
+                    }}
+                  >
+                    <span style={{ color: "#ffd84d", fontWeight: 800 }}>#{node.rank}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.label}</span>
+                    <span style={{ color: "#ffe38a" }}>{node.rawBetweenness.toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.45 }}>
+                Start with support 20 for strong-tie brokers, then lower it when you want a wider run.
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
             <button
               type="button"
@@ -445,6 +588,7 @@ const GraphPage = () => {
               ["#2fde82", "best opscore"],
               ["#ff4d5f", "worst feedscore"],
               ["#52c7ff", "ally bridge"],
+              ["#ffd84d", "Brandes bridge"],
               ["#f4d35e", "selected route"],
             ].map(([color, label]) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.42rem", minWidth: 0 }}>

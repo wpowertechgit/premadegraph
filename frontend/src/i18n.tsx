@@ -17,6 +17,8 @@ type TranslationTree = {
       signedBalanceDescription: string;
       assortativity: string;
       assortativityDescription: string;
+      betweenness: string;
+      betweennessDescription: string;
       pathfinderLab: string;
       pathfinderLabDescription: string;
       generateGraph: string;
@@ -381,6 +383,8 @@ const translations: Record<Language, TranslationTree> = {
         signedBalanceDescription: "Research-facing signed-network experiment for testing local structural balance in the player graph",
         assortativity: "Assortativity",
         assortativityDescription: "Experiment page for checking whether connected players stay similar on key performance signals",
+        betweenness: "Bridge Centrality",
+        betweennessDescription: "Brandes betweenness experiment for finding broker players and measuring parallel speedup",
         pathfinderLab: "Pathfinder Lab",
         pathfinderLabDescription: "Route-search experiment for comparing algorithms, traversal modes, and replay traces on the graph",
         generateGraph: "Generate Graph",
@@ -743,6 +747,8 @@ const translations: Record<Language, TranslationTree> = {
         signedBalanceDescription: "Előjeles hálózati egyensúlykísérlet munkaterület",
         assortativity: "Asszortativitás",
         assortativityDescription: "Teljesítménymutató-korrelációs kísérleti oldal",
+        betweenness: "Híd centralitás",
+        betweennessDescription: "Brandes központisági kísérlet brókerjátékosokhoz és párhuzamos futásméréshez",
         pathfinderLab: "Pathfinder Labor",
         pathfinderLabDescription: "Algoritmus-összehasonlítás és visszajátszás",
         generateGraph: "Gráf generálása",

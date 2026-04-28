@@ -912,6 +912,18 @@ function normalizeAssortativitySignificancePayload(payload = {}) {
   };
 }
 
+function normalizeBetweennessPayload(payload = {}) {
+  return {
+    pathMode: payload.pathMode,
+    weightedMode: payload.weightedMode,
+    minEdgeSupport: payload.minEdgeSupport,
+    maxTopNodes: payload.maxTopNodes,
+    parallel: payload.parallel,
+    runSerialBaseline: payload.runSerialBaseline,
+    includeFullResults: payload.includeFullResults,
+  };
+}
+
 function runSignedBalanceQueued(payload = {}) {
   const normalized = normalizeSignedBalancePayload(payload);
   const requestKey = JSON.stringify(normalized);
@@ -2524,6 +2536,21 @@ app.post("/api/pathfinder-rust/assortativity-significance", async (req, res) => 
     res.json(response);
   } catch (error) {
     console.error("Rust assortativity significance failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/pathfinder-rust/betweenness-centrality", async (req, res) => {
+  try {
+    const payload = normalizeBetweennessPayload(req.body || {});
+    const response = await executeRustCommand(
+      "betweenness-centrality",
+      payload,
+      getActiveRustEnv(),
+    );
+    res.json(response);
+  } catch (error) {
+    console.error("Rust betweenness centrality failed:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

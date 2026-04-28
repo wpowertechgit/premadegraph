@@ -1,9 +1,18 @@
 # Parallel Brandes Betweenness Centrality Implementation Plan
 
-**Status:** Planning  
+**Status:** Implemented core Rust analysis + API command  
 **Priority:** Secondary (post-dataset collection)  
 **Scope:** Rust backend, premadegraph  
 **Estimated Effort:** 2–3 weeks (serial + parallel + benchmarking + integration)
+
+**Implementation note (current repo):** The Rust implementation lives in
+`backend/pathfinder-rust/src/engine/centrality.rs` and is exposed through the
+`betweenness-centrality` Rust command plus
+`POST /api/pathfinder-rust/betweenness-centrality`. It implements weighted
+Brandes with Dijkstra, `1 / strength` edge costs through integer scaling,
+serial and deterministic Rayon chunk-parallel execution, serial-vs-parallel
+validation support, and JSON output for top bridge nodes. Thesis figures and
+full real-dataset benchmarks are still follow-up work.
 
 ---
 
