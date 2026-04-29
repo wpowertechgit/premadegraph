@@ -22,20 +22,17 @@ import type { AssortativityResponse } from "./assortativityTypes";
 import type { SignedBalanceResponse } from "./signedBalanceTypes";
 
 const COLORS = {
-  ink: "#f7f2e8",
-  muted: "#c8bea8",
-  panel: "linear-gradient(160deg, rgba(30, 22, 15, 0.94) 0%, rgba(18, 15, 11, 0.98) 100%)",
-  border: "rgba(240, 198, 132, 0.18)",
-  hero:
-    "radial-gradient(circle at 18% 10%, rgba(127, 210, 195, 0.14) 0%, rgba(127, 210, 195, 0) 28%), radial-gradient(circle at 82% 18%, rgba(239, 155, 125, 0.14) 0%, rgba(239, 155, 125, 0) 26%), linear-gradient(180deg, rgba(10, 10, 11, 0.98) 0%, rgba(16, 14, 12, 0.98) 100%)",
+  ink: "#f7f8f8",
+  muted: "#8a8f98",
+  border: "rgba(255, 255, 255, 0.07)",
 };
 
 function panelStyle(): React.CSSProperties {
   return {
-    borderRadius: "28px",
+    borderRadius: "12px",
     border: `1px solid ${COLORS.border}`,
-    background: COLORS.panel,
-    boxShadow: "0 30px 80px rgba(0, 0, 0, 0.28)",
+    background: "#0d1117",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.32)",
   };
 }
 
@@ -162,7 +159,7 @@ export default function DualAnalyticsView() {
   ];
 
   return (
-    <div style={{ ...pageShellStyle(), color: COLORS.ink, background: COLORS.hero }}>
+    <div style={{ ...pageShellStyle(), color: COLORS.ink }}>
       <div style={{ display: "grid", gap: "1rem" }}>
         <section style={{ ...panelStyle(), padding: "1.5rem", display: "grid", gap: "0.9rem" }}>
           <div style={{ ...sectionLabelStyle(), color: COLORS.muted }}>combined analytics</div>
@@ -230,8 +227,8 @@ export default function DualAnalyticsView() {
               <article
                 key={cell.title}
                 style={{
-                  borderRadius: "20px",
-                  border: `1px solid ${cell.active ? "rgba(127, 210, 195, 0.42)" : "rgba(240, 198, 132, 0.18)"}`,
+                  borderRadius: "8px",
+                  border: `1px solid ${cell.active ? "rgba(127, 210, 195, 0.42)" : "rgba(255, 255, 255, 0.07)"}`,
                   background: cell.active ? "rgba(127, 210, 195, 0.10)" : "rgba(10, 12, 16, 0.46)",
                   padding: "1rem",
                   display: "grid",

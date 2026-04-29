@@ -21,12 +21,10 @@ const DEFAULT_REQUEST: BetweennessCentralityRequest = {
 };
 
 const COLORS = {
-  ink: "#f5f8fb",
-  muted: "#9fb3c7",
-  line: "rgba(141, 168, 193, 0.2)",
-  lineStrong: "rgba(141, 168, 193, 0.34)",
-  panel: "linear-gradient(145deg, rgba(12, 22, 30, 0.96) 0%, rgba(21, 36, 43, 0.94) 52%, rgba(9, 15, 20, 0.98) 100%)",
-  soft: "linear-gradient(155deg, rgba(23, 35, 40, 0.84) 0%, rgba(12, 19, 25, 0.92) 100%)",
+  ink: "#f7f8f8",
+  muted: "#8a8f98",
+  line: "rgba(255, 255, 255, 0.07)",
+  lineStrong: "rgba(255, 255, 255, 0.10)",
   accent: "#91d8c5",
   amber: "#efc06f",
   coral: "#f0947f",
@@ -34,28 +32,23 @@ const COLORS = {
 };
 
 function shellStyle(): React.CSSProperties {
-  return {
-    ...pageShellStyle(),
-    color: COLORS.ink,
-    background:
-      "linear-gradient(180deg, rgba(7, 13, 18, 0.99) 0%, rgba(11, 18, 22, 0.98) 50%, rgba(6, 10, 14, 1) 100%)",
-  };
+  return { ...pageShellStyle(), color: COLORS.ink };
 }
 
 function panelStyle(): React.CSSProperties {
   return {
-    borderRadius: "18px",
+    borderRadius: "12px",
     border: `1px solid ${COLORS.line}`,
-    background: COLORS.panel,
-    boxShadow: "0 24px 64px rgba(0, 0, 0, 0.28)",
+    background: "#0d1117",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.32)",
   };
 }
 
 function softPanelStyle(): React.CSSProperties {
   return {
-    borderRadius: "14px",
+    borderRadius: "8px",
     border: `1px solid ${COLORS.line}`,
-    background: COLORS.soft,
+    background: "rgba(255,255,255,0.02)",
   };
 }
 

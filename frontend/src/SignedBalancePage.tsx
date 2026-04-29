@@ -32,14 +32,14 @@ const DEFAULT_REQUEST: SignedBalanceRequest = {
 };
 
 const AMETHYST = {
-  ink: "#f5efff",
-  muted: "#c6badf",
-  soft: "#a595ca",
-  line: "rgba(213, 196, 255, 0.16)",
-  lineStrong: "rgba(226, 212, 255, 0.3)",
-  paper: "linear-gradient(145deg, rgba(34, 21, 58, 0.96) 0%, rgba(58, 33, 86, 0.92) 48%, rgba(30, 16, 46, 0.94) 100%)",
-  paperSoft: "linear-gradient(155deg, rgba(27, 18, 45, 0.72) 0%, rgba(53, 29, 79, 0.62) 58%, rgba(18, 11, 31, 0.78) 100%)",
-  shadow: "0 28px 80px rgba(10, 4, 18, 0.45)",
+  ink: "#f7f8f8",
+  muted: "#8a8f98",
+  soft: "#62666d",
+  line: "rgba(255, 255, 255, 0.07)",
+  lineStrong: "rgba(255, 255, 255, 0.12)",
+  paper: "#0d1117",
+  paperSoft: "rgba(255, 255, 255, 0.02)",
+  shadow: "0 4px 16px rgba(0, 0, 0, 0.32)",
 };
 
 function miniLabelStyle() {
@@ -48,7 +48,7 @@ function miniLabelStyle() {
 
 function origamiPanelStyle(): React.CSSProperties {
   return {
-    borderRadius: "32px",
+    borderRadius: "12px",
     border: `1px solid ${AMETHYST.line}`,
     background: AMETHYST.paper,
     boxShadow: AMETHYST.shadow,
@@ -60,18 +60,16 @@ function origamiPanelStyle(): React.CSSProperties {
 
 function foldedPaperStyle(): React.CSSProperties {
   return {
-    borderRadius: "24px",
+    borderRadius: "8px",
     border: `1px solid ${AMETHYST.line}`,
     background: AMETHYST.paperSoft,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 40px rgba(11, 5, 18, 0.28)",
-    clipPath: "polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 24px 100%, 0 calc(100% - 24px))",
   };
 }
 
 function dividerThreadStyle(): React.CSSProperties {
   return {
     height: "1px",
-    background: "linear-gradient(90deg, rgba(224, 209, 255, 0) 0%, rgba(224, 209, 255, 0.42) 18%, rgba(224, 209, 255, 0.42) 82%, rgba(224, 209, 255, 0) 100%)",
+    background: "rgba(255, 255, 255, 0.07)",
   };
 }
 
@@ -136,8 +134,8 @@ function InfoDot({ text }: { text: string }) {
         height: "1.15rem",
         borderRadius: "999px",
         border: `1px solid ${AMETHYST.lineStrong}`,
-        background: "rgba(77, 49, 112, 0.88)",
-        color: "#f3e9ff",
+        background: "rgba(107, 124, 255, 0.18)",
+        color: "#f7f8f8",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -322,9 +320,9 @@ function TriadExampleFigure({
   return (
     <div
       style={{
-        borderRadius: "18px",
+        borderRadius: "8px",
         padding: "0.9rem",
-        background: "radial-gradient(circle at top, rgba(168, 117, 255, 0.2), rgba(24, 14, 38, 0.96))",
+        background: "rgba(255, 255, 255, 0.02)",
         border: `1px solid ${AMETHYST.line}`,
         display: "grid",
         gap: "0.65rem",
@@ -411,7 +409,6 @@ function ObservedTriadFigure({
         padding: "1rem",
         display: "grid",
         gap: "0.7rem",
-        background: "linear-gradient(155deg, rgba(47, 28, 71, 0.78) 0%, rgba(22, 14, 34, 0.82) 100%)",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -674,11 +671,6 @@ export default function SignedBalancePage() {
       style={{
         ...pageShellStyle(),
         color: AMETHYST.ink,
-        background: `
-          radial-gradient(circle at 12% 10%, rgba(152, 112, 226, 0.16) 0%, rgba(152, 112, 226, 0) 30%),
-          radial-gradient(circle at 88% 18%, rgba(120, 74, 196, 0.14) 0%, rgba(120, 74, 196, 0) 28%),
-          linear-gradient(180deg, rgba(11, 7, 18, 0.98) 0%, rgba(17, 11, 27, 0.98) 100%)
-        `,
       }}
     >
       <div style={{ display: "grid", gap: "1.4rem" }}>
@@ -690,17 +682,6 @@ export default function SignedBalancePage() {
             gap: "1.2rem",
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              inset: "0 auto auto 0",
-              width: "320px",
-              height: "190px",
-              background: "linear-gradient(135deg, rgba(214, 192, 255, 0.16) 0%, rgba(214, 192, 255, 0) 100%)",
-              clipPath: "polygon(0 0, 100% 0, 72% 100%, 0 80%)",
-              pointerEvents: "none",
-            }}
-          />
           <div
             style={{
               display: "grid",
@@ -759,10 +740,10 @@ export default function SignedBalancePage() {
                 style={{
                   ...foldedPaperStyle(),
                   padding: "0.95rem 1rem",
-                  color: "#e7dbff",
+                  color: datasetMode === "mock" ? "#8b9aff" : AMETHYST.muted,
                   background: datasetMode === "mock"
-                    ? "linear-gradient(145deg, rgba(88, 56, 129, 0.78) 0%, rgba(46, 26, 70, 0.82) 100%)"
-                    : "linear-gradient(145deg, rgba(41, 25, 66, 0.68) 0%, rgba(23, 14, 36, 0.76) 100%)",
+                    ? "rgba(107, 124, 255, 0.10)"
+                    : "rgba(255, 255, 255, 0.02)",
                 }}
               >
                 {datasetMode === "mock" ? t.signedBalance.mockModeBadge : t.signedBalance.readOnly}
@@ -800,12 +781,6 @@ export default function SignedBalancePage() {
                         }}
                         style={{
                           ...buttonStyle(active ? "primary" : "secondary"),
-                          background: active
-                            ? "linear-gradient(135deg, rgba(233, 220, 255, 0.96) 0%, rgba(190, 151, 255, 0.92) 100%)"
-                            : "rgba(39, 23, 63, 0.82)",
-                          color: active ? "#1f1232" : "#f3ebff",
-                          border: active ? "1px solid rgba(255,255,255,0.4)" : `1px solid ${AMETHYST.lineStrong}`,
-                          boxShadow: active ? "0 18px 32px rgba(79, 43, 128, 0.24)" : "none",
                         }}
                       >
                         {option.label}
@@ -816,7 +791,7 @@ export default function SignedBalancePage() {
                 <div style={{ color: AMETHYST.muted, fontSize: "0.84rem", lineHeight: 1.55 }}>
                   {t.signedBalance.datasetModeHelp}
                 </div>
-                <div style={{ color: "#dcc8ff", fontSize: "0.84rem", lineHeight: 1.55 }}>
+                <div style={{ color: AMETHYST.muted, fontSize: "0.84rem", lineHeight: 1.55 }}>
                   {datasetMode === "mock" ? t.signedBalance.mockDatasetActiveEffect : t.signedBalance.datasetModeEffect}
                 </div>
               </div>
@@ -844,7 +819,7 @@ export default function SignedBalancePage() {
                       ...current,
                       minEdgeSupport: Math.max(1, Number(event.target.value) || 1),
                     }))}
-                    style={{ ...inputStyle(), background: "rgba(23, 14, 36, 0.9)", border: `1px solid ${AMETHYST.lineStrong}` }}
+                    style={inputStyle()}
                   />
                 </ControlField>
 
@@ -856,7 +831,7 @@ export default function SignedBalancePage() {
                   <select
                     value={request.tiePolicy}
                     onChange={(event) => updateTiePolicy(event.target.value)}
-                    style={{ ...inputStyle(), background: "rgba(23, 14, 36, 0.9)", border: `1px solid ${AMETHYST.lineStrong}` }}
+                    style={inputStyle()}
                   >
                     <option value="exclude">{t.signedBalance.tieExclude}</option>
                     <option value="ally">{t.signedBalance.tieAlly}</option>
@@ -878,7 +853,7 @@ export default function SignedBalancePage() {
                       ...current,
                       maxTopNodes: Math.max(3, Number(event.target.value) || 3),
                     }))}
-                    style={{ ...inputStyle(), background: "rgba(23, 14, 36, 0.9)", border: `1px solid ${AMETHYST.lineStrong}` }}
+                    style={inputStyle()}
                   />
                 </ControlField>
 
@@ -895,11 +870,6 @@ export default function SignedBalancePage() {
                     }))}
                     style={{
                       ...buttonStyle(request.includeClusterSummaries ? "primary" : "ghost"),
-                      background: request.includeClusterSummaries
-                        ? "linear-gradient(135deg, rgba(233, 220, 255, 0.96) 0%, rgba(190, 151, 255, 0.92) 100%)"
-                        : "rgba(23, 14, 36, 0.82)",
-                      color: request.includeClusterSummaries ? "#231337" : "#f3ebff",
-                      border: `1px solid ${request.includeClusterSummaries ? "rgba(255,255,255,0.4)" : AMETHYST.lineStrong}`,
                     }}
                   >
                     {request.includeClusterSummaries ? t.common.enabled : t.common.disabled}
@@ -916,13 +886,8 @@ export default function SignedBalancePage() {
                   disabled={loading}
                   style={{
                     ...buttonStyle("primary"),
-                    borderRadius: "999px",
                     padding: "0.82rem 1.2rem",
                     cursor: loading ? "not-allowed" : "pointer",
-                    background: "linear-gradient(135deg, rgba(233, 220, 255, 0.96) 0%, rgba(190, 151, 255, 0.92) 100%)",
-                    color: "#1c1130",
-                    border: "1px solid rgba(255,255,255,0.4)",
-                    boxShadow: "0 18px 36px rgba(91, 51, 146, 0.34)",
                   }}
                 >
                   {loading ? t.signedBalance.running : t.signedBalance.runAnalysis}
@@ -1172,7 +1137,7 @@ export default function SignedBalancePage() {
                   <div
                     key={node.playerId}
                     style={{
-                      borderRadius: "16px",
+                      borderRadius: "8px",
                       padding: "0.85rem",
                       background: "rgba(9, 14, 20, 0.62)",
                       border: "1px solid rgba(84, 103, 122, 0.18)",
@@ -1250,7 +1215,7 @@ export default function SignedBalancePage() {
                       <div
                         key={`${cluster.clusterId}-card`}
                         style={{
-                          borderRadius: "18px",
+                          borderRadius: "8px",
                           border: `1px solid ${aboveGlobal ? "rgba(127, 210, 195, 0.28)" : "rgba(239, 155, 125, 0.28)"}`,
                           background: aboveGlobal ? "rgba(127, 210, 195, 0.08)" : "rgba(239, 155, 125, 0.08)",
                           padding: "0.95rem",
@@ -1363,7 +1328,7 @@ export default function SignedBalancePage() {
                 <div
                   key={example.triadType}
                   style={{
-                    borderRadius: "18px",
+                    borderRadius: "8px",
                     padding: "0.95rem",
                     background: "rgba(9, 14, 20, 0.62)",
                     border: "1px solid rgba(84, 103, 122, 0.18)",
@@ -1388,7 +1353,7 @@ export default function SignedBalancePage() {
                     </div>
                   </div>
                   <div style={{ color: "#9db0c4", lineHeight: 1.65 }}>{example.interpretation}</div>
-                  <div style={{ color: "#cebfe8", lineHeight: 1.55 }}>{example.context}</div>
+                  <div style={{ color: "#8a8f98", lineHeight: 1.55 }}>{example.context}</div>
                 </div>
               ))}
             </div>
@@ -1409,7 +1374,7 @@ export default function SignedBalancePage() {
               <div
                 key={item.title}
                 style={{
-                  borderRadius: "16px",
+                  borderRadius: "8px",
                   padding: "0.95rem",
                   background: "rgba(9, 14, 20, 0.62)",
                   border: "1px solid rgba(84, 103, 122, 0.18)",
@@ -1441,7 +1406,7 @@ export default function SignedBalancePage() {
                 <div
                   key={item.title}
                   style={{
-                    borderRadius: "16px",
+                    borderRadius: "8px",
                     padding: "0.95rem",
                     background: "rgba(9, 14, 20, 0.62)",
                     border: "1px solid rgba(84, 103, 122, 0.18)",

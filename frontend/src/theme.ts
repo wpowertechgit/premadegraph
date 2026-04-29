@@ -16,16 +16,16 @@ export const appTheme = createTheme({
   palette: {
     mode: "dark",
     primary: {
-      main: "#66b8ff",
-      light: "#9dd4ff",
-      dark: "#2d78b4",
-      contrastText: "#071019",
+      main: "#6b7cff",
+      light: "#8b9aff",
+      dark: "#5e6ad2",
+      contrastText: "#ffffff",
     },
     secondary: {
       main: "#8bd6c2",
     },
     success: {
-      main: "#71d79b",
+      main: "#10b981",
     },
     warning: {
       main: "#eab36c",
@@ -34,41 +34,41 @@ export const appTheme = createTheme({
       main: "#f08a87",
     },
     background: {
-      default: "#071019",
-      paper: "#0f1b27",
+      default: "#080a0c",
+      paper: "#0d1117",
     },
     text: {
-      primary: "#f5f8fc",
-      secondary: "#9bb1c7",
+      primary: "#f7f8f8",
+      secondary: "#8a8f98",
     },
-    divider: "rgba(126, 155, 183, 0.18)",
+    divider: "rgba(255, 255, 255, 0.06)",
   },
   shape: {
-    borderRadius: 12,
+    borderRadius: 8,
   },
   typography: {
-    fontFamily: 'var(--font-body)',
+    fontFamily: "var(--font-body)",
     h1: {
-      fontFamily: 'var(--font-display)',
-      fontWeight: 800,
+      fontFamily: "var(--font-display)",
+      fontWeight: 700,
       letterSpacing: "-0.04em",
     },
     h2: {
-      fontFamily: 'var(--font-display)',
-      fontWeight: 800,
+      fontFamily: "var(--font-display)",
+      fontWeight: 700,
       letterSpacing: "-0.03em",
     },
     h3: {
-      fontFamily: 'var(--font-display)',
+      fontFamily: "var(--font-display)",
       fontWeight: 700,
       letterSpacing: "-0.02em",
     },
     h4: {
-      fontFamily: 'var(--font-display)',
-      fontWeight: 700,
+      fontFamily: "var(--font-display)",
+      fontWeight: 600,
     },
     button: {
-      fontWeight: 700,
+      fontWeight: 600,
       textTransform: "none",
     },
   },
@@ -76,8 +76,8 @@ export const appTheme = createTheme({
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          background:
-            "radial-gradient(circle at top, rgba(28, 57, 89, 0.55) 0%, rgba(7, 16, 25, 0.98) 42%, #04080d 100%)",
+          backgroundColor: "#080a0c",
+          backgroundImage: "none",
         },
       },
     },
@@ -85,79 +85,114 @@ export const appTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: "none",
-          border: "1px solid rgba(126, 155, 183, 0.18)",
-          boxShadow: "0 24px 56px rgba(0, 0, 0, 0.24)",
+          backgroundColor: "#0d1117",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.32)",
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
-          paddingInline: "1rem",
-          minHeight: "46px",
+          borderRadius: 6,
+          paddingInline: "0.9rem",
+          minHeight: "36px",
+          boxShadow: "none",
+          "&:hover": {
+            boxShadow: "none",
+          },
         },
         containedPrimary: {
-          background:
-            "linear-gradient(135deg, rgba(88, 183, 255, 0.96) 0%, rgba(127, 220, 255, 0.92) 100%)",
-          color: "#06131b",
-          boxShadow: "0 18px 32px rgba(36, 102, 149, 0.28)",
+          background: "#5e6ad2",
+          color: "#ffffff",
+          "&:hover": {
+            background: "#6b7cff",
+          },
         },
         outlined: {
-          borderColor: "rgba(126, 155, 183, 0.24)",
+          borderColor: "rgba(255, 255, 255, 0.10)",
+          "&:hover": {
+            borderColor: "rgba(255, 255, 255, 0.18)",
+            background: "rgba(255, 255, 255, 0.04)",
+          },
+        },
+        text: {
+          "&:hover": {
+            background: "rgba(255, 255, 255, 0.04)",
+          },
         },
       },
     },
     MuiFilledInput: {
       styleOverrides: {
         root: {
-          backgroundColor: "rgba(11, 22, 34, 0.82)",
-          borderRadius: 10,
-          border: "1px solid rgba(126, 155, 183, 0.16)",
+          backgroundColor: "rgba(255, 255, 255, 0.03)",
+          borderRadius: 6,
+          border: "1px solid rgba(255, 255, 255, 0.08)",
           overflow: "hidden",
           "&:before, &:after": {
             display: "none",
           },
           "&:hover": {
-            backgroundColor: "rgba(14, 27, 41, 0.92)",
+            backgroundColor: "rgba(255, 255, 255, 0.05)",
           },
           "&.Mui-focused": {
-            backgroundColor: "rgba(14, 27, 41, 0.98)",
-            borderColor: "rgba(102, 184, 255, 0.5)",
-            boxShadow: "0 0 0 3px rgba(102, 184, 255, 0.18)",
+            backgroundColor: "rgba(255, 255, 255, 0.05)",
+            borderColor: "rgba(107, 124, 255, 0.5)",
+            boxShadow: "0 0 0 3px rgba(107, 124, 255, 0.14)",
           },
         },
         input: {
-          color: "#f5f8fc",
+          color: "#f7f8f8",
         },
       },
     },
     MuiInputLabel: {
       styleOverrides: {
         root: {
-          color: "#93abc2",
+          color: "#8a8f98",
         },
       },
     },
     MuiSelect: {
       styleOverrides: {
         select: {
-          color: "#f5f8fc",
+          color: "#f7f8f8",
         },
         icon: {
-          color: "#93abc2",
+          color: "#8a8f98",
         },
       },
     },
     MuiTableCell: {
       styleOverrides: {
         root: {
-          borderColor: "rgba(126, 155, 183, 0.14)",
+          borderColor: "rgba(255, 255, 255, 0.06)",
         },
         head: {
-          color: "#dce9f6",
-          fontWeight: 700,
-          backgroundColor: "rgba(9, 17, 25, 0.82)",
+          color: "#d0d6e0",
+          fontWeight: 600,
+          backgroundColor: "rgba(255, 255, 255, 0.02)",
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+          height: "22px",
+          fontSize: "0.72rem",
+          fontWeight: 600,
+        },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: "#1a2330",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+          borderRadius: 6,
+          fontSize: "0.78rem",
         },
       },
     },
@@ -177,7 +212,7 @@ export function pageShellStyle(fullBleed = false): React.CSSProperties {
 
 export function surfaceCardStyle(): React.CSSProperties {
   return {
-    borderRadius: "var(--radius-xl)",
+    borderRadius: "var(--radius-md)",
     border: "1px solid var(--border-subtle)",
     background: "var(--surface-card)",
     boxShadow: "var(--shadow-card)",
@@ -187,10 +222,10 @@ export function surfaceCardStyle(): React.CSSProperties {
 
 export function glassCardStyle(): React.CSSProperties {
   return {
-    borderRadius: "var(--radius-xl)",
-    border: "1px solid rgba(126, 155, 183, 0.24)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
     background: "var(--surface-glass)",
-    backdropFilter: "blur(18px)",
+    backdropFilter: "blur(12px)",
     boxShadow: "var(--shadow-card)",
     color: "var(--text-primary)",
   };
@@ -199,67 +234,69 @@ export function glassCardStyle(): React.CSSProperties {
 export function sectionLabelStyle(): React.CSSProperties {
   return {
     color: "var(--text-muted)",
-    fontSize: "0.78rem",
+    fontSize: "0.72rem",
     textTransform: "uppercase",
-    letterSpacing: "0.12em",
-    fontWeight: 700,
+    letterSpacing: "0.10em",
+    fontWeight: 600,
   };
 }
 
 export function metricCardStyle(): React.CSSProperties {
   return {
     ...surfaceCardStyle(),
-    padding: "0.95rem 1rem",
+    padding: "0.85rem 1rem",
     display: "grid",
-    gap: "0.35rem",
+    gap: "0.3rem",
   };
 }
 
 export function inputStyle(): React.CSSProperties {
   return {
     width: "100%",
-    borderRadius: "var(--radius-md)",
+    borderRadius: "var(--radius-sm)",
     border: "1px solid var(--border-strong)",
-    background: "var(--surface-soft)",
+    background: "rgba(255, 255, 255, 0.03)",
     color: "var(--text-primary)",
-    padding: "0.85rem 0.95rem",
+    padding: "0.6rem 0.8rem",
     boxSizing: "border-box",
     outline: "none",
   };
 }
 
-export function buttonStyle(variant: "primary" | "secondary" | "ghost" | "danger" = "primary"): React.CSSProperties {
+export function buttonStyle(
+  variant: "primary" | "secondary" | "ghost" | "danger" = "primary",
+): React.CSSProperties {
   const variants: Record<typeof variant, React.CSSProperties> = {
     primary: {
-      background: "linear-gradient(135deg, rgba(88, 183, 255, 0.96) 0%, rgba(127, 220, 255, 0.92) 100%)",
-      color: "#071019",
-      border: "1px solid rgba(141, 221, 255, 0.55)",
-      boxShadow: "0 18px 32px rgba(36, 102, 149, 0.28)",
+      background: "#5e6ad2",
+      color: "#ffffff",
+      border: "1px solid rgba(107, 124, 255, 0.4)",
     },
     secondary: {
-      background: "rgba(15, 34, 50, 0.92)",
+      background: "rgba(255, 255, 255, 0.04)",
       color: "var(--text-primary)",
       border: "1px solid var(--border-strong)",
     },
     ghost: {
-      background: "rgba(10, 19, 28, 0.62)",
+      background: "rgba(255, 255, 255, 0.02)",
       color: "var(--text-primary)",
-      border: "1px solid rgba(126, 155, 183, 0.16)",
+      border: "1px solid rgba(255, 255, 255, 0.08)",
     },
     danger: {
-      background: "rgba(57, 21, 24, 0.88)",
+      background: "rgba(240, 138, 135, 0.10)",
       color: "#ffd7d6",
-      border: "1px solid rgba(240, 138, 135, 0.25)",
+      border: "1px solid rgba(240, 138, 135, 0.22)",
     },
   };
 
   return {
-    minHeight: "46px",
-    borderRadius: "var(--radius-md)",
-    padding: "0.8rem 1rem",
-    fontWeight: 700,
+    minHeight: "36px",
+    borderRadius: "var(--radius-sm)",
+    padding: "0.55rem 0.9rem",
+    fontWeight: 600,
     cursor: "pointer",
-    transition: "transform var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast), opacity var(--motion-fast)",
+    transition:
+      "transform var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast), opacity var(--motion-fast)",
     ...variants[variant],
   };
 }

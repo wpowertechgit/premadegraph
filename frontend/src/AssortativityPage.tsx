@@ -19,22 +19,14 @@ const DEFAULT_REQUEST: AssortativityRequest = {
 };
 
 const COLORS = {
-  ink: "#f7f2e8",
-  muted: "#c8bea8",
+  ink: "#f7f8f8",
+  muted: "#8a8f98",
   accent: "#f0bb74",
   accentSoft: "#f7d5a9",
   mint: "#7fd2c3",
   mintSoft: "#d7fbf5",
   coral: "#ef9b7d",
-  line: "rgba(240, 198, 132, 0.18)",
-  hero:
-    "radial-gradient(circle at 16% 18%, rgba(240, 187, 116, 0.23) 0%, rgba(240, 187, 116, 0) 30%), radial-gradient(circle at 88% 14%, rgba(93, 192, 176, 0.18) 0%, rgba(93, 192, 176, 0) 26%), linear-gradient(180deg, rgba(12, 10, 8, 0.98) 0%, rgba(19, 15, 11, 0.98) 100%)",
-  card:
-    "linear-gradient(160deg, rgba(47, 29, 18, 0.96) 0%, rgba(74, 44, 24, 0.9) 46%, rgba(26, 19, 14, 0.96) 100%)",
-  soft:
-    "linear-gradient(160deg, rgba(21, 31, 34, 0.84) 0%, rgba(14, 21, 27, 0.9) 100%)",
-  graph:
-    "radial-gradient(circle at top, rgba(24, 46, 72, 0.92) 0%, rgba(6, 11, 18, 0.98) 62%, rgba(2, 4, 8, 1) 100%)",
+  line: "rgba(255, 255, 255, 0.07)",
 };
 
 type FocusRequest = { index: number; token: number } | null;
@@ -49,24 +41,23 @@ type ActiveGraphInfo = {
 };
 
 function shellStyle(): React.CSSProperties {
-  return { ...pageShellStyle(), color: COLORS.ink, background: COLORS.hero };
+  return { ...pageShellStyle(), color: COLORS.ink };
 }
 
 function panelStyle(): React.CSSProperties {
   return {
-    borderRadius: "28px",
+    borderRadius: "12px",
     border: `1px solid ${COLORS.line}`,
-    background: COLORS.card,
-    boxShadow: "0 30px 80px rgba(0, 0, 0, 0.28)",
+    background: "#0d1117",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.32)",
   };
 }
 
 function softCardStyle(): React.CSSProperties {
   return {
-    borderRadius: "22px",
+    borderRadius: "8px",
     border: `1px solid ${COLORS.line}`,
-    background: COLORS.soft,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+    background: "rgba(255,255,255,0.02)",
   };
 }
 
@@ -83,7 +74,7 @@ function formatCoefficient(value: number | null, language: "en" | "hu", fallback
 }
 
 function metricTone(value: number | null) {
-  if (value === null || Number.isNaN(value)) return "#bfa58a";
+  if (value === null || Number.isNaN(value)) return "#8a8f98";
   if (value > 0.1) return COLORS.mint;
   if (value < -0.1) return COLORS.coral;
   return COLORS.accent;
@@ -437,7 +428,7 @@ function EvidenceGraph({
       {fallbackMessage ? <div style={{ ...softCardStyle(), padding: "0.95rem", color: COLORS.accentSoft, lineHeight: 1.6 }}>{fallbackMessage}</div> : null}
 
       <div style={{ ...softCardStyle(), padding: "0.35rem", overflow: "hidden" }}>
-        <div style={{ position: "relative", minHeight: "560px", background: COLORS.graph, borderRadius: "18px" }}>
+        <div style={{ position: "relative", minHeight: "560px", background: "radial-gradient(circle at top, rgba(24,46,72,0.92) 0%, rgba(6,11,18,0.98) 62%, rgba(2,4,8,1) 100%)", borderRadius: "12px" }}>
           {loading || !manifest || !nodeMeta || !buffers ? (
             <div style={{ minHeight: "560px", display: "grid", placeItems: "center", color: "#d8e7f9", textAlign: "center", padding: "1.5rem" }}>
               <div style={{ display: "grid", gap: "0.35rem" }}>

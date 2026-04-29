@@ -1,11 +1,10 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
-import type { Location } from "react-router-dom";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Snackbar } from "@mui/material";
 import { useI18n } from "./i18n";
 import AppNavbar from "./AppNavbar";
 import GraphSpherePage from "./GraphSpherePage";
-import RouteTransitionOverlay from "./RouteTransitionOverlay";
+import { startRouteTransition } from "./RouteTransitionOverlay";
 
 const MatchAnalysisPage = lazy(() => import("./MatchAnalysisForm"));
 const MatchCollectorPage = lazy(() => import("./MatchCollectorPage"));
@@ -17,9 +16,6 @@ const BetweennessCentralityPage = lazy(() => import("./BetweennessCentralityPage
 const DualAnalyticsView = lazy(() => import("./DualAnalyticsView"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
-const TRANSITION_TOTAL_MS = 320;
-const TRANSITION_SWAP_MS = 160;
-const INSTANT_ROUTE_PATHS = new Set(["/graph-sphere"]);
 const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
 const NAV_WIDTH_MIN = 280;
 const NAV_WIDTH_MAX = 520;
@@ -45,136 +41,116 @@ export type RuntimeKeyRecord = {
   storage: string;
 };
 
-function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
-  const { t } = useI18n();
+/**
+ * Intercepts <Link> / navigate() calls and wraps them in a View Transition
+ * so the browser handles cross-fade natively. Falls back cleanly on
+ * unsupported browsers and prefers-reduced-motion.
+ */
+function TransitionNavigationHandler() {
   const location = useLocation();
-  const [displayedLocation, setDisplayedLocation] = useState<Location>(location);
-  const [transitionPhase, setTransitionPhase] = useState<"idle" | "outro" | "intro">("idle");
-  const timeoutsRef = useRef<number[]>([]);
+  const navigate = useNavigate();
+  const prevPathRef = useRef(location.pathname + location.search);
 
   useEffect(() => {
-    if (location.key === displayedLocation.key && location.pathname === displayedLocation.pathname) {
+    const current = location.pathname + location.search;
+    if (current === prevPathRef.current) {
       return;
     }
+    prevPathRef.current = current;
+    // View Transition already committed by the time React re-renders here;
+    // this effect is informational — actual transition is triggered on link clicks
+    // via the custom navigation handler below when using the helper directly.
+  }, [location]);
 
-    const useInstantSwap = INSTANT_ROUTE_PATHS.has(location.pathname) || INSTANT_ROUTE_PATHS.has(displayedLocation.pathname);
+  return null;
+}
 
-    timeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
-    timeoutsRef.current = [];
-
-    if (useInstantSwap) {
-      setDisplayedLocation(location);
-      setTransitionPhase("idle");
-      return;
-    }
-
-    setTransitionPhase("outro");
-
-    const swapTimeout = window.setTimeout(() => {
-      setDisplayedLocation(location);
-      setTransitionPhase("intro");
-    }, TRANSITION_SWAP_MS);
-
-    const finishTimeout = window.setTimeout(() => {
-      setTransitionPhase("idle");
-    }, TRANSITION_TOTAL_MS);
-
-    timeoutsRef.current = [swapTimeout, finishTimeout];
-
-    return () => {
-      timeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
-      timeoutsRef.current = [];
-    };
-  }, [displayedLocation.key, displayedLocation.pathname, location]);
+function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
+  const { t } = useI18n();
 
   return (
     <main className={`app-main${navCollapsed ? " is-collapsed" : ""}`}>
-      <div className={`app-route-stage route-phase-${transitionPhase}`}>
-        <RouteTransitionOverlay
-          routeKey={`${displayedLocation.key || displayedLocation.pathname}:${location.key || location.pathname}`}
-          phase={transitionPhase}
-          durationMs={TRANSITION_TOTAL_MS}
-        />
-        <div className={`app-route-content${transitionPhase !== "idle" ? ` is-${transitionPhase}` : ""}`}>
-          <Routes location={displayedLocation}>
-          <Route path="/" element={<Navigate to="/matchanalysis" replace />} />
-          <Route
-            path="/matchanalysis"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <MatchAnalysisPage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/match-collector"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <MatchCollectorPage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/graph"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <GraphPage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/player-detail"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <PlayerDetailPage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/graph-sphere"
-            element={<GraphSpherePage />}
-          />
-          <Route
-            path="/signed-balance"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <SignedBalancePage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/assortativity"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <AssortativityPage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/betweenness-centrality"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <BetweennessCentralityPage />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/analytics/signed-balance-assortativity"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <DualAnalyticsView />
-              </Suspense>
-            )}
-          />
-          <Route
-            path="/pathfinder-lab"
-            element={(
-              <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                <PathfinderLabPage />
-              </Suspense>
-            )}
-          />
-        </Routes>
+      <div className="app-route-stage">
+        <div className="app-route-content">
+          <Routes>
+            <Route path="/" element={<Navigate to="/matchanalysis" replace />} />
+            <Route
+              path="/matchanalysis"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <MatchAnalysisPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/match-collector"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <MatchCollectorPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/graph"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <GraphPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/player-detail"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <PlayerDetailPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/graph-sphere"
+              element={<GraphSpherePage />}
+            />
+            <Route
+              path="/signed-balance"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <SignedBalancePage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/assortativity"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <AssortativityPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/betweenness-centrality"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <BetweennessCentralityPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/analytics/signed-balance-assortativity"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <DualAnalyticsView />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/pathfinder-lab"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <PathfinderLabPage />
+                </Suspense>
+              )}
+            />
+          </Routes>
         </div>
       </div>
     </main>
@@ -402,6 +378,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ViewTransitionLinkInterceptor />
       <div
         className={`app-shell${navCollapsed ? " is-collapsed" : ""}${isMobileLayout ? " is-mobile-layout" : ""}${mobileNavOpen ? " is-mobile-nav-open" : ""}`}
         style={{
@@ -453,6 +430,46 @@ function App() {
       </div>
     </BrowserRouter>
   );
+}
+
+/**
+ * Intercepts clicks on <a> elements that point to internal routes and wraps
+ * the resulting React Router navigation inside startRouteTransition so the
+ * View Transition API fires before the URL changes.
+ *
+ * Placed inside BrowserRouter so useNavigate is available.
+ */
+function ViewTransitionLinkInterceptor() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      const anchor = target.closest("a");
+      if (!anchor) {
+        return;
+      }
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("http") || href.startsWith("//") || href.startsWith("mailto:")) {
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      event.preventDefault();
+      startRouteTransition(() => {
+        navigate(href);
+      });
+    }
+
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [navigate]);
+
+  return null;
 }
 
 export default App;
