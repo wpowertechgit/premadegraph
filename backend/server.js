@@ -27,6 +27,16 @@ const LEGACY_MATCHES_DIR = DATA_ROOT;
 const LEGACY_RAW_DB_PATH = path.resolve(__dirname, "players.db");
 const LEGACY_REFINED_DB_PATH = path.resolve(__dirname, "..", "playersrefined.db");
 const LEGACY_CACHE_ROOT = path.resolve(__dirname, "pathfinder-rust", "cache");
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+const DOCUMENTATION_ROOT = path.join(PROJECT_ROOT, "docs");
+const DOCUMENTATION_TMP_ROOT = path.join(PROJECT_ROOT, "tmp", "documentation-viewer");
+const DOCUMENTATION_ROOT_MARKDOWN = new Set([
+  "README.md",
+  "README.hu.md",
+  "DESIGN.md",
+  "TERMS_OF_USE.md",
+  "CODE_OF_CONDUCT.md",
+]);
 const ENV_FILE_PATH = path.join(__dirname, ".env");
 const COLLECTOR_CONFIGS_DIR = path.join(__dirname, "collector_configs");
 const DATASET_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -1303,6 +1313,147 @@ function requestStopMatchCollectorJob() {
   return getCollectorStatusSnapshot();
 }
 
+function readMarkdownTitle(content, fallbackTitle) {
+  const titleLine = content
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => /^#\s+/.test(line));
+  return titleLine ? titleLine.replace(/^#\s+/u, "").trim() : fallbackTitle;
+}
+
+function readMarkdownSummary(content) {
+  const lines = content.split(/\r?\n/u);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (
+      !trimmed ||
+      trimmed.startsWith("#") ||
+      trimmed.startsWith("---") ||
+      trimmed.startsWith("```") ||
+      trimmed.startsWith("|")
+    ) {
+      continue;
+    }
+    return trimmed.replace(/^[-*]\s+/u, "").slice(0, 220);
+  }
+  return "";
+}
+
+function titleFromFileName(fileName) {
+  return fileName
+    .replace(/\.md$/iu, "")
+    .replace(/[-_]+/gu, " ")
+    .replace(/\b\w/gu, (letter) => letter.toUpperCase());
+}
+
+function collectMarkdownDocuments(rootDir, prefix, group) {
+  if (!fs.existsSync(rootDir)) {
+    return [];
+  }
+
+  const documents = [];
+  const entries = fs.readdirSync(rootDir, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries) {
+    const absolutePath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      documents.push(...collectMarkdownDocuments(absolutePath, path.posix.join(prefix, entry.name), entry.name));
+      continue;
+    }
+
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) {
+      continue;
+    }
+
+    const content = fs.readFileSync(absolutePath, "utf-8");
+    const stats = fs.statSync(absolutePath);
+    const relativePath = path.posix.join(prefix, entry.name);
+    documents.push({
+      id: relativePath,
+      path: relativePath,
+      title: readMarkdownTitle(content, titleFromFileName(entry.name)),
+      summary: readMarkdownSummary(content),
+      group,
+      size: stats.size,
+      updatedAt: stats.mtime.toISOString(),
+    });
+  }
+
+  return documents;
+}
+
+function buildDocumentationManifest() {
+  const documents = [
+    ...Array.from(DOCUMENTATION_ROOT_MARKDOWN)
+      .filter((fileName) => fs.existsSync(path.join(PROJECT_ROOT, fileName)))
+      .map((fileName) => {
+        const absolutePath = path.join(PROJECT_ROOT, fileName);
+        const content = fs.readFileSync(absolutePath, "utf-8");
+        const stats = fs.statSync(absolutePath);
+        return {
+          id: fileName,
+          path: fileName,
+          title: readMarkdownTitle(content, titleFromFileName(fileName)),
+          summary: readMarkdownSummary(content),
+          group: "Project",
+          size: stats.size,
+          updatedAt: stats.mtime.toISOString(),
+        };
+      }),
+    ...collectMarkdownDocuments(DOCUMENTATION_ROOT, "docs", "Research docs"),
+  ].sort((a, b) => a.path.localeCompare(b.path));
+
+  const thesisSourcePath = path.join(DOCUMENTATION_ROOT, "mainraw.pdf");
+  const thesisStats = fs.existsSync(thesisSourcePath) ? fs.statSync(thesisSourcePath) : null;
+
+  return {
+    documents,
+    thesisPdf: thesisStats
+      ? {
+          title: "Compiled Thesis PDF",
+          sourcePath: "docs/mainraw.pdf",
+          url: "http://localhost:3001/api/documentation/thesis.pdf",
+          size: thesisStats.size,
+          updatedAt: thesisStats.mtime.toISOString(),
+        }
+      : null,
+  };
+}
+
+function resolveDocumentationMarkdownPath(portablePath) {
+  const normalizedPath = String(portablePath || "").replace(/\\/gu, "/");
+  if (DOCUMENTATION_ROOT_MARKDOWN.has(normalizedPath)) {
+    return path.join(PROJECT_ROOT, normalizedPath);
+  }
+
+  if (!normalizedPath.startsWith("docs/") || !normalizedPath.toLowerCase().endsWith(".md")) {
+    return null;
+  }
+
+  const resolvedPath = path.resolve(PROJECT_ROOT, normalizedPath);
+  if (resolvedPath !== DOCUMENTATION_ROOT && !resolvedPath.startsWith(`${DOCUMENTATION_ROOT}${path.sep}`)) {
+    return null;
+  }
+  return resolvedPath;
+}
+
+function getThesisPdfCopyPath() {
+  const sourcePath = path.join(DOCUMENTATION_ROOT, "mainraw.pdf");
+  if (!fs.existsSync(sourcePath)) {
+    return null;
+  }
+
+  ensureDirectory(DOCUMENTATION_TMP_ROOT);
+  const stats = fs.statSync(sourcePath);
+  const revision = `${Math.round(stats.mtimeMs)}-${stats.size}`;
+  const copyPath = path.join(DOCUMENTATION_TMP_ROOT, `thesis-${revision}.pdf`);
+  if (!fs.existsSync(copyPath)) {
+    fs.copyFileSync(sourcePath, copyPath);
+  }
+  return copyPath;
+}
+
 app.use(cors());
 app.use("/db-explorer", (req, res) => {
   const target = new URL(req.originalUrl, DB_EXPLORER_ORIGIN);
@@ -1364,6 +1515,47 @@ const datasetKdaCache = {
 
 const playerScoreCache = new Map();  // "${datasetId}:${puuid}" → full /scores response
 const playerOptionsCache = { promise: null, players: null, dbPath: null };
+
+app.get("/api/documentation/manifest", (req, res) => {
+  try {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(buildDocumentationManifest());
+  } catch (error) {
+    console.error("Documentation manifest failed:", error.message);
+    res.status(500).json({ error: "Documentation manifest failed." });
+  }
+});
+
+app.get("/api/documentation/markdown", (req, res) => {
+  try {
+    const markdownPath = resolveDocumentationMarkdownPath(req.query.path);
+    if (!markdownPath || !fs.existsSync(markdownPath)) {
+      return res.status(404).json({ error: "Markdown document not found." });
+    }
+
+    const content = fs.readFileSync(markdownPath, "utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.type("text/markdown; charset=utf-8").send(content);
+  } catch (error) {
+    console.error("Markdown document load failed:", error.message);
+    res.status(500).json({ error: "Markdown document load failed." });
+  }
+});
+
+app.get("/api/documentation/thesis.pdf", (req, res) => {
+  try {
+    const copyPath = getThesisPdfCopyPath();
+    if (!copyPath) {
+      return res.status(404).send("Compiled thesis PDF not found.");
+    }
+
+    res.setHeader("Cache-Control", "no-store");
+    res.sendFile(copyPath);
+  } catch (error) {
+    console.error("Thesis PDF copy failed:", error.message);
+    res.status(500).send("Thesis PDF copy failed.");
+  }
+});
 
 function openConfiguredDatabase(databasePath, label) {
   return new sqlite3.Database(
@@ -1484,33 +1676,27 @@ async function loadDatasetColumnStats() {
     const t0 = Date.now();
     try {
       const rows = await refinedDbAll(
-        `SELECT
-           opscore,
-           feedscore,
-           artifact_kda,
-           artifact_economy,
-           artifact_map_awareness,
-           artifact_utility,
-           artifact_damage,
-           artifact_tanking,
-           artifact_objectives,
-           artifact_early_game
-         FROM players
-         WHERE matches_processed > 0`,
+         `SELECT
+            opscore,
+            feedscore,
+            artifact_combat_impact,
+            artifact_risk_discipline,
+            artifact_resource_tempo,
+            artifact_map_objective_control,
+            artifact_team_enablement
+          FROM players
+          WHERE matches_processed > 0`,
       );
       const elapsed = Date.now() - t0;
 
       const distributions = {
         opscore:       rows.map((r) => safeNumber(r.opscore)).filter(Number.isFinite).sort((a, b) => a - b),
         feedscore:     rows.map((r) => safeNumber(r.feedscore)).filter(Number.isFinite).sort((a, b) => a - b),
-        kda:           rows.map((r) => safeNumber(r.artifact_kda)).filter(Number.isFinite).sort((a, b) => a - b),
-        economy:       rows.map((r) => safeNumber(r.artifact_economy)).filter(Number.isFinite).sort((a, b) => a - b),
-        map_awareness: rows.map((r) => safeNumber(r.artifact_map_awareness)).filter(Number.isFinite).sort((a, b) => a - b),
-        utility:       rows.map((r) => safeNumber(r.artifact_utility)).filter(Number.isFinite).sort((a, b) => a - b),
-        damage:        rows.map((r) => safeNumber(r.artifact_damage)).filter(Number.isFinite).sort((a, b) => a - b),
-        tanking:       rows.map((r) => safeNumber(r.artifact_tanking)).filter(Number.isFinite).sort((a, b) => a - b),
-        objectives:    rows.map((r) => safeNumber(r.artifact_objectives)).filter(Number.isFinite).sort((a, b) => a - b),
-        early_game:    rows.map((r) => safeNumber(r.artifact_early_game)).filter(Number.isFinite).sort((a, b) => a - b),
+        combat_impact: rows.map((r) => safeNumber(r.artifact_combat_impact)).filter(Number.isFinite).sort((a, b) => a - b),
+        risk_discipline: rows.map((r) => safeNumber(r.artifact_risk_discipline)).filter(Number.isFinite).sort((a, b) => a - b),
+        resource_tempo: rows.map((r) => safeNumber(r.artifact_resource_tempo)).filter(Number.isFinite).sort((a, b) => a - b),
+        map_objective_control: rows.map((r) => safeNumber(r.artifact_map_objective_control)).filter(Number.isFinite).sort((a, b) => a - b),
+        team_enablement: rows.map((r) => safeNumber(r.artifact_team_enablement)).filter(Number.isFinite).sort((a, b) => a - b),
       };
 
       const averages = {};
@@ -1980,21 +2166,31 @@ function parsePlayerNames(rawNames) {
   }
 }
 
+function parseScoreDetails(rawDetails) {
+  if (!rawDetails) {
+    return null;
+  }
+  try {
+    return JSON.parse(rawDetails);
+  } catch {
+    return null;
+  }
+}
+
 const PLAYER_DETAIL_ARTIFACT_LABELS = {
-  kda: "KDA",
-  economy: "Economy",
-  map_awareness: "Map awareness",
-  utility: "Utility",
-  damage: "Damage",
-  tanking: "Tanking",
-  objectives: "Objectives",
-  early_game: "Early game",
+  combat_impact: "Combat impact",
+  risk_discipline: "Risk discipline",
+  resource_tempo: "Resource tempo",
+  map_objective_control: "Map and objective control",
+  team_enablement: "Team enablement",
 };
 
 const PLAYER_DETAIL_GROUPS = {
-  combat: ["kda", "damage", "tanking"],
-  map_control: ["map_awareness", "objectives", "early_game"],
-  resource_utility: ["economy", "utility"],
+  combat: ["combat_impact"],
+  risk: ["risk_discipline"],
+  resource: ["resource_tempo"],
+  map_objective: ["map_objective_control"],
+  team: ["team_enablement"],
 };
 
 function safeNumber(value) {
@@ -2280,13 +2476,13 @@ app.get("/api/players/:puuid/scores", async (req, res) => {
     const t2 = Date.now();
     const [row, kdaRaw] = await Promise.all([
       refinedDbGet(
-        `SELECT
-           puuid, names, opscore, feedscore,
-           detected_role, role_confidence, matches_processed, score_computed_at, country,
-           artifact_kda, artifact_economy, artifact_map_awareness, artifact_utility,
-           artifact_damage, artifact_tanking, artifact_objectives, artifact_early_game
-         FROM players
-         WHERE puuid = ?`,
+         `SELECT
+            puuid, names, opscore, feedscore,
+            detected_role, role_confidence, matches_processed, score_computed_at, country,
+            artifact_combat_impact, artifact_risk_discipline, artifact_resource_tempo,
+            artifact_map_objective_control, artifact_team_enablement, score_detail_json
+          FROM players
+          WHERE puuid = ?`,
         [puuid],
       ),
       buildPlayerKdaBenchmark(puuid),
@@ -2315,15 +2511,13 @@ app.get("/api/players/:puuid/scores", async (req, res) => {
         matchesProcessed: row.matches_processed || 0,
         computedAt: row.score_computed_at,
         artifacts: {
-          kda: Number(row.artifact_kda) || 0,
-          economy: Number(row.artifact_economy) || 0,
-          map_awareness: Number(row.artifact_map_awareness) || 0,
-          utility: Number(row.artifact_utility) || 0,
-          damage: Number(row.artifact_damage) || 0,
-          tanking: Number(row.artifact_tanking) || 0,
-          objectives: Number(row.artifact_objectives) || 0,
-          early_game: Number(row.artifact_early_game) || 0,
+          combat_impact: Number(row.artifact_combat_impact) || 0,
+          risk_discipline: Number(row.artifact_risk_discipline) || 0,
+          resource_tempo: Number(row.artifact_resource_tempo) || 0,
+          map_objective_control: Number(row.artifact_map_objective_control) || 0,
+          team_enablement: Number(row.artifact_team_enablement) || 0,
         },
+        details: parseScoreDetails(row.score_detail_json),
       },
       benchmarks: { ...benchmarks, kda: kdaBenchmark },
       country: row.country || null,
@@ -2427,15 +2621,13 @@ app.get("/api/scores/config", (req, res) => {
     roleMultipliers: scoringConfig.roleMultipliers || {},
     deathTolerance: scoringConfig.deathTolerance || {},
     normalization: scoringConfig.normalization || {},
+    opscoreV2: scoringConfig.opscoreV2 || {},
     artifacts: {
-      kda: "Kills plus weighted assists, reduced by death penalty.",
-      economy: "Gold earned per minute plus gold spending efficiency.",
-      map_awareness: "Vision score, warding, sweeper usage, and ward clears.",
-      utility: "Crowd control, shielding, healing, and mitigation output.",
-      damage: "Combined physical, magic, and true damage to champions.",
-      tanking: "Damage absorbed per minute.",
-      objectives: "Turret, inhibitor, plate, and structure pressure.",
-      early_game: "First blood, first tower, and lane CS pressure in the first 10 minutes.",
+      combat_impact: "Fight conversion and damage pressure, with elite overflow for carry performances.",
+      risk_discipline: "Contribution-aware death cost and survival quality. Feed risk is derived from this artifact.",
+      resource_tempo: "Gold, CS, spending efficiency, and lane or jungle tempo.",
+      map_objective_control: "Vision control plus objective and structure conversion with split-push dominance weighting.",
+      team_enablement: "Crowd-control setup, ally protection, and save/enablement signals.",
     },
   });
 });

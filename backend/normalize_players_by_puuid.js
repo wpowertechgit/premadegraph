@@ -13,14 +13,12 @@ const PLAYER_TABLE_COLUMNS = [
   { name: "detected_role", definition: "TEXT DEFAULT 'UNKNOWN'" },
   { name: "role_confidence", definition: "REAL DEFAULT 0.0" },
   { name: "matches_processed", definition: "INTEGER DEFAULT 0" },
-  { name: "artifact_kda", definition: "REAL DEFAULT 0" },
-  { name: "artifact_economy", definition: "REAL DEFAULT 0" },
-  { name: "artifact_map_awareness", definition: "REAL DEFAULT 0" },
-  { name: "artifact_utility", definition: "REAL DEFAULT 0" },
-  { name: "artifact_damage", definition: "REAL DEFAULT 0" },
-  { name: "artifact_tanking", definition: "REAL DEFAULT 0" },
-  { name: "artifact_objectives", definition: "REAL DEFAULT 0" },
-  { name: "artifact_early_game", definition: "REAL DEFAULT 0" },
+  { name: "artifact_combat_impact", definition: "REAL DEFAULT 0" },
+  { name: "artifact_risk_discipline", definition: "REAL DEFAULT 0" },
+  { name: "artifact_resource_tempo", definition: "REAL DEFAULT 0" },
+  { name: "artifact_map_objective_control", definition: "REAL DEFAULT 0" },
+  { name: "artifact_team_enablement", definition: "REAL DEFAULT 0" },
+  { name: "score_detail_json", definition: "TEXT" },
   { name: "score_computed_at", definition: "TEXT" },
 ];
 
@@ -34,6 +32,14 @@ const LEGACY_SCORE_COLUMNS = new Set([
   "opscore_stability",
   "current_streak",
   "dynamic_score_updated",
+  "artifact_kda",
+  "artifact_economy",
+  "artifact_map_awareness",
+  "artifact_utility",
+  "artifact_damage",
+  "artifact_tanking",
+  "artifact_objectives",
+  "artifact_early_game",
 ]);
 
 function resolvePathFromEnv(...keys) {
@@ -167,14 +173,12 @@ async function ensurePlayersTableSchema(db) {
       buildSelectExpression(existingColumns, "detected_role", "'UNKNOWN'"),
       buildSelectExpression(existingColumns, "role_confidence", "0.0"),
       buildSelectExpression(existingColumns, "matches_processed", "0"),
-      buildSelectExpression(existingColumns, "artifact_kda", "0"),
-      buildSelectExpression(existingColumns, "artifact_economy", "0"),
-      buildSelectExpression(existingColumns, "artifact_map_awareness", "0"),
-      buildSelectExpression(existingColumns, "artifact_utility", "0"),
-      buildSelectExpression(existingColumns, "artifact_damage", "0"),
-      buildSelectExpression(existingColumns, "artifact_tanking", "0"),
-      buildSelectExpression(existingColumns, "artifact_objectives", "0"),
-      buildSelectExpression(existingColumns, "artifact_early_game", "0"),
+      buildSelectExpression(existingColumns, "artifact_combat_impact", "0"),
+      buildSelectExpression(existingColumns, "artifact_risk_discipline", "0"),
+      buildSelectExpression(existingColumns, "artifact_resource_tempo", "0"),
+      buildSelectExpression(existingColumns, "artifact_map_objective_control", "0"),
+      buildSelectExpression(existingColumns, "artifact_team_enablement", "0"),
+      buildSelectExpression(existingColumns, "score_detail_json", "NULL"),
       existingColumns.has("score_computed_at")
         ? "score_computed_at"
         : buildSelectExpression(existingColumns, "dynamic_score_updated", "NULL"),
@@ -192,14 +196,12 @@ async function ensurePlayersTableSchema(db) {
         detected_role,
         role_confidence,
         matches_processed,
-        artifact_kda,
-        artifact_economy,
-        artifact_map_awareness,
-        artifact_utility,
-        artifact_damage,
-        artifact_tanking,
-        artifact_objectives,
-        artifact_early_game,
+        artifact_combat_impact,
+        artifact_risk_discipline,
+        artifact_resource_tempo,
+        artifact_map_objective_control,
+        artifact_team_enablement,
+        score_detail_json,
         score_computed_at
       )
       SELECT ${selectList}
@@ -264,6 +266,7 @@ async function normalizePlayersByPuuid(options = {}) {
             }
 
             const gameDuration = data.info.gameDuration;
+            const teamContext = scoringUtils.buildMatchTeamContext(data.info.participants);
 
             for (const participant of data.info.participants) {
               if (!participant.puuid) {
@@ -273,7 +276,7 @@ async function normalizePlayersByPuuid(options = {}) {
               const puuid = participant.puuid;
               const displayName = `${scoringUtils.normalizeName(participant.riotIdGameName)}#${scoringUtils.normalizeName(participant.riotIdTagline)}`;
               const role = scoringUtils.detectPlayerRoleFromMatch(participant);
-              const matchStats = scoringUtils.buildMatchStats(participant, gameDuration);
+              const matchStats = scoringUtils.buildMatchStats(participant, gameDuration, teamContext);
 
               let player = playersMap.get(puuid);
               if (!player) {
@@ -330,18 +333,16 @@ async function normalizePlayersByPuuid(options = {}) {
 
         const rawOpscores = computedProfiles.map((entry) => entry.profile.dynamicOpscoreRaw);
         const rawFeedscores = computedProfiles.map((entry) => entry.profile.dynamicFeedscoreRaw);
-        const opscorePercentiles = scoringUtils.deriveNormalizationAnchors(rawOpscores);
-        const feedscorePercentiles = scoringUtils.deriveNormalizationAnchors(rawFeedscores);
 
-        const normalizedOpscores = [];
-        const normalizedFeedscores = [];
+        const storedOpscores = [];
+        const storedFeedscores = [];
         const roleBalance = {};
         const computedAt = new Date().toISOString();
 
         const logFilePath = path.join(path.dirname(dbFile), "raw_scores_log.txt");
         const logStream = fs.createWriteStream(logFilePath, { flags: "w" });
         logStream.write(
-          "puuid;raw_opscore;normalized_opscore;raw_feedscore;normalized_feedscore;primary_role;role_share\n",
+          "puuid;local_opscore;feed_risk;primary_role;role_share;combat_impact;risk_discipline;resource_tempo;map_objective_control;team_enablement\n",
         );
 
         await dbRun(db, "BEGIN TRANSACTION");
@@ -358,31 +359,23 @@ async function normalizePlayersByPuuid(options = {}) {
             detected_role,
             role_confidence,
             matches_processed,
-            artifact_kda,
-            artifact_economy,
-            artifact_map_awareness,
-            artifact_utility,
-            artifact_damage,
-            artifact_tanking,
-            artifact_objectives,
-            artifact_early_game,
+            artifact_combat_impact,
+            artifact_risk_discipline,
+            artifact_resource_tempo,
+            artifact_map_objective_control,
+            artifact_team_enablement,
+            score_detail_json,
             score_computed_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
         for (const entry of computedProfiles) {
-          const normalizedOpscore = scoringUtils.roundTo(
-            scoringUtils.normalizeOpscoreTo0To10(entry.profile.dynamicOpscoreRaw, opscorePercentiles),
-            2,
-          );
-          const normalizedFeedscore = scoringUtils.roundTo(
-            scoringUtils.normalizeFeedscoreTo0To10(entry.profile.dynamicFeedscoreRaw, feedscorePercentiles),
-            2,
-          );
+          const normalizedOpscore = scoringUtils.roundTo(entry.profile.dynamicOpscoreRaw, 2);
+          const normalizedFeedscore = scoringUtils.roundTo(entry.profile.dynamicFeedscoreRaw, 2);
 
-          normalizedOpscores.push(normalizedOpscore);
-          normalizedFeedscores.push(normalizedFeedscore);
+          storedOpscores.push(normalizedOpscore);
+          storedFeedscores.push(normalizedFeedscore);
 
           const role = entry.profile.detectedRole || "UNKNOWN";
           if (!roleBalance[role]) {
@@ -399,12 +392,15 @@ async function normalizePlayersByPuuid(options = {}) {
           logStream.write(
             [
               entry.puuid,
-              entry.profile.dynamicOpscoreRaw.toFixed(4),
               normalizedOpscore.toFixed(2),
-              entry.profile.dynamicFeedscoreRaw.toFixed(4),
               normalizedFeedscore.toFixed(2),
               role,
               entry.profile.roleConfidence.toFixed(4),
+              entry.profile.artifacts.combat_impact.toFixed(4),
+              entry.profile.artifacts.risk_discipline.toFixed(4),
+              entry.profile.artifacts.resource_tempo.toFixed(4),
+              entry.profile.artifacts.map_objective_control.toFixed(4),
+              entry.profile.artifacts.team_enablement.toFixed(4),
             ].join(";") + "\n",
           );
 
@@ -419,14 +415,12 @@ async function normalizePlayersByPuuid(options = {}) {
               role,
               entry.profile.roleConfidence,
               entry.profile.matchesProcessed,
-              entry.profile.artifacts.kda,
-              entry.profile.artifacts.economy,
-              entry.profile.artifacts.map_awareness,
-              entry.profile.artifacts.utility,
-              entry.profile.artifacts.damage,
-              entry.profile.artifacts.tanking,
-              entry.profile.artifacts.objectives,
-              entry.profile.artifacts.early_game,
+              entry.profile.artifacts.combat_impact,
+              entry.profile.artifacts.risk_discipline,
+              entry.profile.artifacts.resource_tempo,
+              entry.profile.artifacts.map_objective_control,
+              entry.profile.artifacts.team_enablement,
+              JSON.stringify({ subcategories: entry.profile.subcategories, roleBreakdown: entry.profile.roleBreakdown }),
               computedAt,
               (err) => {
                 if (err) {
@@ -458,25 +452,19 @@ async function normalizePlayersByPuuid(options = {}) {
           `Raw opscore stats - Avg: ${scoringUtils.average(rawOpscores).toFixed(2)}, Min: ${Math.min(...rawOpscores).toFixed(2)}, Max: ${Math.max(...rawOpscores).toFixed(2)}`,
         );
         console.log(
-          `Normalized opscore stats - Avg: ${scoringUtils.average(normalizedOpscores).toFixed(2)}, Min: ${Math.min(...normalizedOpscores).toFixed(2)}, Max: ${Math.max(...normalizedOpscores).toFixed(2)}`,
-        );
-        console.log(
-          `Opscore anchors - Floor(p5): ${opscorePercentiles.floor.toFixed(2)}, Center(p50->${opscorePercentiles.centerScore.toFixed(1)}): ${opscorePercentiles.center.toFixed(2)}, Ceiling(p95): ${opscorePercentiles.ceiling.toFixed(2)}`,
+          `Stored local opscore stats - Avg: ${scoringUtils.average(storedOpscores).toFixed(2)}, Min: ${Math.min(...storedOpscores).toFixed(2)}, Max: ${Math.max(...storedOpscores).toFixed(2)}`,
         );
         console.log(
           `Raw feedscore stats - Avg: ${scoringUtils.average(rawFeedscores).toFixed(2)}, Min: ${Math.min(...rawFeedscores).toFixed(2)}, Max: ${Math.max(...rawFeedscores).toFixed(2)}`,
         );
         console.log(
-          `Normalized feedscore stats - Avg: ${scoringUtils.average(normalizedFeedscores).toFixed(2)}, Min: ${Math.min(...normalizedFeedscores).toFixed(2)}, Max: ${Math.max(...normalizedFeedscores).toFixed(2)}`,
+          `Stored feed-risk stats - Avg: ${scoringUtils.average(storedFeedscores).toFixed(2)}, Min: ${Math.min(...storedFeedscores).toFixed(2)}, Max: ${Math.max(...storedFeedscores).toFixed(2)}`,
         );
-        console.log(
-          `Feedscore anchors - Floor(p5): ${feedscorePercentiles.floor.toFixed(2)}, Center(p50->${feedscorePercentiles.centerScore.toFixed(1)}): ${feedscorePercentiles.center.toFixed(2)}, Ceiling(p95): ${feedscorePercentiles.ceiling.toFixed(2)}`,
-        );
-        console.log("Primary-role opscore balance snapshot:");
+        console.log("Primary-role local opscore balance snapshot:");
         for (const role of Object.keys(roleBalance).sort()) {
           const snapshot = roleBalance[role];
           console.log(
-            `  ${role}: players=${snapshot.count}, raw_avg=${scoringUtils.average(snapshot.rawOpscore).toFixed(2)}, normalized_avg=${scoringUtils.average(snapshot.normalizedOpscore).toFixed(2)}`,
+            `  ${role}: players=${snapshot.count}, raw_avg=${scoringUtils.average(snapshot.rawOpscore).toFixed(2)}, stored_avg=${scoringUtils.average(snapshot.normalizedOpscore).toFixed(2)}`,
           );
         }
 

@@ -3,16 +3,13 @@ import "./PlayerPerformanceCard.css";
 import { fetchPlayerScores, fetchScoresConfig } from "../pathfinderApi";
 
 type ArtifactKey =
-  | "kda"
-  | "economy"
-  | "map_awareness"
-  | "utility"
-  | "damage"
-  | "tanking"
-  | "objectives"
-  | "early_game";
+  | "combat_impact"
+  | "risk_discipline"
+  | "resource_tempo"
+  | "map_objective_control"
+  | "team_enablement";
 
-type GroupKey = "combat" | "map_control" | "resource_utility";
+type GroupKey = "combat" | "risk" | "resource" | "map_objective" | "team";
 
 type ArtifactBenchmark = {
   key: ArtifactKey;
@@ -82,17 +79,27 @@ const IMPACT_GROUPS: Array<{
   {
     key: "combat",
     title: "Combat Impact",
-    subtitle: "KDA, damage dealt, and damage absorbed",
+    subtitle: "Fight conversion and damage pressure",
   },
   {
-    key: "map_control",
-    title: "Map Control",
-    subtitle: "Vision, objectives, and early pressure",
+    key: "risk",
+    title: "Risk Discipline",
+    subtitle: "Death cost and survival quality",
   },
   {
-    key: "resource_utility",
-    title: "Resource & Utility",
-    subtitle: "Economy, farming value, and team utility",
+    key: "resource",
+    title: "Resource Tempo",
+    subtitle: "Economy and lane or jungle tempo",
+  },
+  {
+    key: "map_objective",
+    title: "Map & Objective",
+    subtitle: "Vision, objectives, and structure pressure",
+  },
+  {
+    key: "team",
+    title: "Team Enablement",
+    subtitle: "Setup control and ally protection",
   },
 ];
 
@@ -257,10 +264,14 @@ export default function PlayerPerformanceCard({ puuid }: { puuid: string }) {
       if (group.key === "combat") {
         headline = `Avg KDA ${scoreData.benchmarks.kda.playerAverage.toFixed(2)}`;
         subline = `Dataset avg ${scoreData.benchmarks.kda.datasetAverage.toFixed(2)} across ${scoreData.benchmarks.kda.datasetSamples} player-games`;
-      } else if (group.key === "map_control") {
-        subline = `${ordinalPercentile(percentile)} for vision, objective work, and early pressure`;
-      } else if (group.key === "resource_utility") {
-        subline = `${ordinalPercentile(percentile)} for economy and utility output`;
+      } else if (group.key === "risk") {
+        subline = `${ordinalPercentile(percentile)} for feed-risk discipline and survival`;
+      } else if (group.key === "resource") {
+        subline = `${ordinalPercentile(percentile)} for economy and tempo`;
+      } else if (group.key === "map_objective") {
+        subline = `${ordinalPercentile(percentile)} for map and objective conversion`;
+      } else if (group.key === "team") {
+        subline = `${ordinalPercentile(percentile)} for setup and protection output`;
       }
 
       return {
@@ -323,13 +334,13 @@ export default function PlayerPerformanceCard({ puuid }: { puuid: string }) {
             </small>
           </div>
           <div className="player-performance-card__summary-item">
-            <span>Feedscore</span>
+            <span>Feed Risk</span>
             <strong>{scoreData.scores.feedscore.toFixed(2)}</strong>
-            <small>Lower is better. This score is benchmarked against {scoreData.benchmarks.sampleSize} players.</small>
+            <small>Derived from Risk Discipline. Lower is better.</small>
           </div>
           <p>
-            These comparisons are dataset-grounded and role-aware for <strong>{role}</strong>. The percent rings below
-            show percentile versus the stored player pool, not share of this player&apos;s own stats.
+            Opscore is locally graded for <strong>{role}</strong>. Dataset averages and percentiles are comparison
+            context only; they do not define the grade.
           </p>
         </div>
       </div>
@@ -390,7 +401,7 @@ export default function PlayerPerformanceCard({ puuid }: { puuid: string }) {
           <article className="player-performance-card__insight">
             <h4>Feed Discipline</h4>
             <p>
-              Feed discipline reads deaths against contribution, so lower feedscore is better. This player is{" "}
+              Feed discipline is derived from the Risk Discipline artifact, so lower feed risk is better. This player is{" "}
               {relativeBand(scoreData.scores.feedscore, scoreData.benchmarks.feedscore.average, true)} and sits in the{" "}
               {ordinalPercentile(scoreData.benchmarks.feedscore.percentile)} for survivability versus contribution.
             </p>

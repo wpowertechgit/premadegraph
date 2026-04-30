@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   FaBars,
+  FaBookOpen,
   FaChartLine,
   FaChevronLeft,
   FaChevronRight,
@@ -268,6 +269,14 @@ export default function AppNavbar({
       label: t.app.nav.pathfinderLab,
       description: t.app.nav.pathfinderLabDescription,
       icon: <FaRoute />,
+    },
+    {
+      to: "/documentation",
+      label: language === "hu" ? "Dokumentacio" : "Documentation",
+      description: language === "hu"
+        ? "Markdown kutatasi jegyzetek es a forditott thesis PDF"
+        : "Markdown research notes and the compiled thesis PDF",
+      icon: <FaBookOpen />,
     },
     {
       to: "http://localhost:3001/db-explorer/",
