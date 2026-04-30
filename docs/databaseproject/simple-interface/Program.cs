@@ -128,26 +128,28 @@ string RenderShell(string active, string body, string subtitle)
       <title>Premade Graph adatbázis felület</title>
       <style>
         :root {
-          color-scheme: light;
-          --ink: #1d2433;
-          --muted: #667085;
-          --line: #d8dee8;
-          --paper: #f7f3ec;
-          --panel: #ffffff;
-          --accent: #0f766e;
-          --soft: #edf7f5;
-          --danger: #a63d40;
+          color-scheme: dark;
+          --ink: #f7f8f8;
+          --muted: #8a8f98;
+          --line: rgba(255,255,255,0.07);
+          --line-strong: rgba(255,255,255,0.10);
+          --paper: #080a0c;
+          --panel: #0d1117;
+          --panel-raised: #131920;
+          --accent: #6b7cff;
+          --accent-dim: rgba(107,124,255,0.12);
+          --danger: #f08a87;
         }
         * { box-sizing: border-box; }
         body {
           margin: 0;
-          font-family: Georgia, "Times New Roman", serif;
+          font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
           background: var(--paper);
           color: var(--ink);
         }
         header {
           border-bottom: 1px solid var(--line);
-          background: #fffdf8;
+          background: var(--panel);
           padding: 22px 32px 18px;
         }
         .topline {
@@ -160,43 +162,50 @@ string RenderShell(string active, string body, string subtitle)
         }
         h1 {
           margin: 0;
-          font-size: clamp(28px, 4vw, 46px);
+          font-size: clamp(22px, 3vw, 34px);
           line-height: 1;
-          letter-spacing: 0;
+          letter-spacing: -0.03em;
+          font-weight: 700;
         }
         .subtitle {
           margin: 8px 0 0;
           color: var(--muted);
           max-width: 760px;
-          font-size: 16px;
+          font-size: 15px;
         }
         nav {
           display: flex;
-          gap: 8px;
+          gap: 6px;
           flex-wrap: wrap;
         }
         nav a {
-          border: 1px solid var(--line);
+          border: 1px solid var(--line-strong);
           color: var(--ink);
-          padding: 9px 12px;
+          padding: 7px 12px;
           text-decoration: none;
-          background: var(--panel);
-          font-size: 14px;
+          background: var(--panel-raised);
+          font-size: 13px;
+          border-radius: 6px;
+        }
+        nav a:hover {
+          border-color: rgba(255,255,255,0.18);
+          background: rgba(255,255,255,0.05);
         }
         nav a.active {
-          background: var(--accent);
-          color: white;
-          border-color: var(--accent);
+          background: #5e6ad2;
+          color: #fff;
+          border-color: rgba(107,124,255,0.4);
         }
         main {
           max-width: 1180px;
           margin: 0 auto;
-          padding: 30px 32px 48px;
+          padding: 28px 32px 48px;
         }
         .panel, .query-card, .notice {
           background: var(--panel);
           border: 1px solid var(--line);
-          box-shadow: 0 18px 42px rgba(29, 36, 51, 0.08);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.32);
+          border-radius: 8px;
         }
         .panel {
           padding: 0;
@@ -204,35 +213,45 @@ string RenderShell(string active, string body, string subtitle)
         }
         .panel h2, .notice h2 {
           margin: 0;
-          padding: 18px 20px;
+          padding: 16px 20px;
           border-bottom: 1px solid var(--line);
-          font-size: 22px;
+          font-size: 18px;
+          font-weight: 600;
+          letter-spacing: -0.02em;
         }
         .notice {
           padding-bottom: 20px;
         }
         .notice p {
-          margin: 16px 20px;
+          margin: 14px 20px;
           color: var(--muted);
+          line-height: 1.6;
         }
         .notice code {
           color: var(--danger);
-          font-weight: 700;
+          font-weight: 600;
         }
         table {
           width: 100%;
           border-collapse: collapse;
-          font-size: 15px;
+          font-size: 14px;
         }
         th, td {
-          padding: 12px 14px;
+          padding: 10px 14px;
           border-bottom: 1px solid var(--line);
           text-align: left;
           vertical-align: top;
         }
         th {
-          background: var(--soft);
-          color: #12413d;
+          background: var(--panel-raised);
+          color: #d0d6e0;
+          font-weight: 600;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        tr:hover td {
+          background: rgba(255,255,255,0.02);
         }
         code, .score {
           font-variant-numeric: tabular-nums;
@@ -246,66 +265,102 @@ string RenderShell(string active, string body, string subtitle)
         .browser-toolbar, .browser-tabs, .pager {
           display: flex;
           flex-wrap: wrap;
-          gap: 10px;
+          gap: 8px;
           align-items: end;
-          padding: 16px 20px;
+          padding: 12px 20px;
           border-bottom: 1px solid var(--line);
-          background: #fffdf8;
+          background: var(--panel);
         }
         .browser-tabs a, .pager a, .pager span {
-          border: 1px solid var(--line);
+          border: 1px solid var(--line-strong);
           color: var(--ink);
-          background: var(--panel);
-          padding: 8px 10px;
+          background: var(--panel-raised);
+          padding: 6px 10px;
           text-decoration: none;
-          font-size: 14px;
+          font-size: 13px;
+          border-radius: 6px;
+        }
+        .browser-tabs a:hover, .pager a:hover {
+          background: rgba(255,255,255,0.05);
+          border-color: rgba(255,255,255,0.18);
         }
         .browser-tabs a.active, .pager a.primary {
-          background: var(--accent);
-          border-color: var(--accent);
-          color: white;
+          background: #5e6ad2;
+          border-color: rgba(107,124,255,0.4);
+          color: #fff;
         }
         .table-note {
-          padding: 0 20px 16px;
+          padding: 8px 20px 12px;
           color: var(--muted);
-          background: #fffdf8;
+          font-size: 13px;
+          background: var(--panel);
           border-bottom: 1px solid var(--line);
         }
         .browser-toolbar label, .filter-row label {
           display: grid;
-          gap: 5px;
+          gap: 4px;
           color: var(--muted);
-          font-size: 13px;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
         }
         .browser-toolbar input, .browser-toolbar select, .filter-row input {
-          border: 1px solid var(--line);
-          background: white;
+          border: 1px solid var(--line-strong);
+          background: rgba(255,255,255,0.03);
           color: var(--ink);
-          padding: 9px 10px;
-          min-height: 38px;
+          padding: 7px 10px;
+          min-height: 36px;
           font: inherit;
-          font-size: 14px;
+          font-size: 13px;
+          border-radius: 6px;
+          outline: none;
+          color-scheme: dark;
         }
-        .browser-toolbar button, .browser-toolbar a.clear-link, .filter-row button {
-          border: 1px solid var(--accent);
-          background: var(--accent);
-          color: white;
-          padding: 9px 12px;
-          min-height: 38px;
-          text-decoration: none;
+        .browser-toolbar select option, .filter-row select option {
+          background: #0d1117;
+          color: #f7f8f8;
+        }
+        .browser-toolbar input:focus, .browser-toolbar select:focus, .filter-row input:focus {
+          border-color: rgba(107,124,255,0.5);
+          box-shadow: 0 0 0 3px rgba(107,124,255,0.12);
+        }
+        .browser-toolbar button, .filter-row button {
+          border: 1px solid rgba(107,124,255,0.4);
+          background: #5e6ad2;
+          color: #fff;
+          padding: 7px 12px;
+          min-height: 36px;
           font: inherit;
-          font-size: 14px;
+          font-size: 13px;
+          border-radius: 6px;
           cursor: pointer;
+          font-weight: 600;
+        }
+        .browser-toolbar button:hover, .filter-row button:hover {
+          background: #6b7cff;
         }
         .browser-toolbar a.clear-link {
-          background: white;
+          border: 1px solid var(--line-strong);
+          background: rgba(255,255,255,0.03);
           color: var(--accent);
+          padding: 7px 12px;
+          min-height: 36px;
+          text-decoration: none;
+          font: inherit;
+          font-size: 13px;
+          border-radius: 6px;
+          display: inline-flex;
+          align-items: center;
+          cursor: pointer;
+        }
+        .browser-toolbar a.clear-link:hover {
+          background: rgba(255,255,255,0.05);
         }
         .filter-row {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
           gap: 10px;
-          padding: 16px 20px;
+          padding: 12px 20px;
           border-bottom: 1px solid var(--line);
         }
         .table-scroll {
@@ -313,9 +368,10 @@ string RenderShell(string active, string body, string subtitle)
           overflow-y: visible;
         }
         th a {
-          color: #12413d;
+          color: #d0d6e0;
           text-decoration: none;
         }
+        th a:hover { color: var(--ink); }
         .cell-json, .cell-text {
           max-width: 360px;
           white-space: nowrap;
@@ -329,30 +385,36 @@ string RenderShell(string active, string body, string subtitle)
         .expand-cell {
           position: absolute;
           left: 10px;
-          bottom: 8px;
+          bottom: 7px;
           width: 20px;
           height: 20px;
-          border: 1px solid var(--accent);
+          border: 1px solid rgba(107,124,255,0.4);
           color: var(--accent);
-          background: white;
+          background: var(--accent-dim);
+          border-radius: 4px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           text-decoration: none;
           font-weight: 700;
+          font-size: 13px;
           line-height: 1;
+        }
+        .expand-cell:hover {
+          background: rgba(107,124,255,0.22);
         }
         .info {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 18px;
-          height: 18px;
-          margin-left: 6px;
-          border: 1px solid #8aa4a0;
-          color: #12413d;
-          background: #f5fbfa;
-          font-size: 12px;
+          width: 16px;
+          height: 16px;
+          margin-left: 5px;
+          border: 1px solid var(--line-strong);
+          color: var(--muted);
+          background: var(--panel-raised);
+          font-size: 11px;
+          border-radius: 999px;
           cursor: help;
           position: relative;
         }
@@ -360,17 +422,19 @@ string RenderShell(string active, string body, string subtitle)
           content: attr(data-info);
           position: absolute;
           right: 0;
-          top: 24px;
+          top: 22px;
           z-index: 5;
           width: min(320px, calc(100vw - 48px));
           padding: 10px 12px;
-          border: 1px solid var(--line);
-          background: #17202f;
-          color: #f8fafc;
-          box-shadow: 0 12px 26px rgba(29, 36, 51, 0.2);
+          border: 1px solid var(--line-strong);
+          background: #1a2330;
+          color: var(--ink);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
           font-weight: 400;
-          line-height: 1.35;
+          font-size: 12px;
+          line-height: 1.45;
           white-space: normal;
+          border-radius: 6px;
         }
         th:first-child .info:hover::after, th:first-child .info:focus::after {
           left: 0;
@@ -384,6 +448,7 @@ string RenderShell(string active, string body, string subtitle)
         .empty {
           padding: 24px 20px;
           color: var(--muted);
+          font-size: 14px;
         }
         .query-card {
           padding: 18px;
@@ -391,20 +456,23 @@ string RenderShell(string active, string body, string subtitle)
         }
         .query-card h2 {
           margin: 0 0 4px;
-          font-size: 20px;
+          font-size: 17px;
+          font-weight: 600;
         }
         .query-card p {
           margin: 0 0 12px;
           color: var(--muted);
+          font-size: 13px;
         }
         pre {
           margin: 0;
           overflow: auto;
           padding: 14px;
-          background: #17202f;
-          color: #e7edf7;
-          font-size: 13px;
-          line-height: 1.45;
+          background: #080a0c;
+          color: #c9d8e8;
+          font-size: 12.5px;
+          line-height: 1.5;
+          border-radius: 0 0 8px 8px;
         }
         @media (max-width: 860px) {
           .topline { align-items: start; flex-direction: column; }

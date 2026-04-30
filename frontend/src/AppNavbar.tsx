@@ -8,7 +8,6 @@ import {
   FaChevronUp,
   FaChevronDown,
   FaDatabase,
-  FaFireAlt,
   FaGlobe,
   FaKey,
   FaPlus,
@@ -251,12 +250,6 @@ export default function AppNavbar({
       label: t.app.nav.graphSphere,
       description: t.app.nav.graphSphereDescription,
       icon: <FaGlobe />,
-    },
-    {
-      to: "/signed-balance",
-      label: t.app.nav.signedBalance,
-      description: t.app.nav.signedBalanceDescription,
-      icon: <FaFireAlt />,
     },
     {
       to: "/assortativity",

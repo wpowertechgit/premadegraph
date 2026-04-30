@@ -10,10 +10,8 @@ const MatchAnalysisPage = lazy(() => import("./MatchAnalysisForm"));
 const MatchCollectorPage = lazy(() => import("./MatchCollectorPage"));
 const GraphPage = lazy(() => import("./GraphPage"));
 const PlayerDetailPage = lazy(() => import("./PlayerDetailPage"));
-const SignedBalancePage = lazy(() => import("./SignedBalancePage"));
 const AssortativityPage = lazy(() => import("./AssortativityPage"));
 const BetweennessCentralityPage = lazy(() => import("./BetweennessCentralityPage"));
-const DualAnalyticsView = lazy(() => import("./DualAnalyticsView"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 
 const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
@@ -110,14 +108,7 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
               path="/graph-sphere"
               element={<GraphSpherePage />}
             />
-            <Route
-              path="/signed-balance"
-              element={(
-                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                  <SignedBalancePage />
-                </Suspense>
-              )}
-            />
+            <Route path="/signed-balance" element={<Navigate to="/assortativity" replace />} />
             <Route
               path="/assortativity"
               element={(
@@ -134,14 +125,7 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
                 </Suspense>
               )}
             />
-            <Route
-              path="/analytics/signed-balance-assortativity"
-              element={(
-                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
-                  <DualAnalyticsView />
-                </Suspense>
-              )}
-            />
+            <Route path="/analytics/signed-balance-assortativity" element={<Navigate to="/assortativity" replace />} />
             <Route
               path="/pathfinder-lab"
               element={(

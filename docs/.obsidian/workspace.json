@@ -11,10 +11,12 @@
             "id": "d641eb085116033e",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
-              "icon": "lucide-file",
-              "title": "New tab"
+              "type": "pdf",
+              "state": {
+                "file": "mainraw.pdf"
+              },
+              "icon": "lucide-file-text",
+              "title": "mainraw"
             }
           }
         ]
@@ -178,9 +180,11 @@
   },
   "active": "d641eb085116033e",
   "lastOpenFiles": [
+    "master-soloq-eune-collection-strategy.md",
+    "apex-flex-collection-strategy.md",
+    "DOCUMENT_MAP.md",
     "multi-key-implementation-prompt.md",
     "assortativity-analysis.md",
-    "apex-flex-collection-strategy.md",
     "databaseproject/Adatbazis Project Dokumentacio.pdf"
   ]
 }

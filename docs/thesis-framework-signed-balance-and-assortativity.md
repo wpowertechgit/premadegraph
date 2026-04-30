@@ -1,5 +1,11 @@
 # Thesis Framework: Signed Balance And Assortativity As Complementary Network Analysis
 
+> **Superseded note (2026-04-30):** This framing has been downgraded. Read
+> [`signed-balance-methodological-retirement.md`](signed-balance-methodological-retirement.md)
+> first. Signed Balance remains an implemented experimental option, but it is no
+> longer a central thesis result because enemy edges are not reliable negative
+> social ties in League of Legends matchmaking.
+
 ## Data Context
 
 This thesis analyzes a **premade player network** built from League of Legends match data:

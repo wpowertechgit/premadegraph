@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { type PlayerOption } from "./pathfinderTypes";
 import { useI18n } from "./i18n";
 import { inputStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
@@ -26,15 +26,19 @@ export default function PlayerLookupField({
 }: PlayerLookupFieldProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const selectedPlayer = players.find((player) => player.id === selectedId);
-    setQuery(selectedPlayer?.label ?? "");
+    const label = selectedPlayer?.label ?? "";
+    setQuery(label);
+    setDebouncedQuery(label);
   }, [players, selectedId]);
 
   const filteredPlayers = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = debouncedQuery.trim().toLowerCase();
     if (normalized.length < 1) {
       return players.slice(0, 8);
     }
@@ -42,7 +46,7 @@ export default function PlayerLookupField({
     return players
       .filter((player) => player.label.toLowerCase().includes(normalized))
       .slice(0, 8);
-  }, [players, query]);
+  }, [players, debouncedQuery]);
 
   return (
     <div style={{ position: "relative" }}>
@@ -55,12 +59,16 @@ export default function PlayerLookupField({
           setQuery(nextValue);
           setOpen(true);
 
-          const exactMatch = players.find(
-            (player) => player.label.toLowerCase() === nextValue.trim().toLowerCase(),
-          );
-          if (exactMatch) {
-            onSelectedIdChange(exactMatch.id);
-          }
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            setDebouncedQuery(nextValue);
+            const exactMatch = players.find(
+              (player) => player.label.toLowerCase() === nextValue.trim().toLowerCase(),
+            );
+            if (exactMatch) {
+              onSelectedIdChange(exactMatch.id);
+            }
+          }, 150);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => {
@@ -95,8 +103,14 @@ export default function PlayerLookupField({
                 type="button"
                 onMouseDown={(event) => {
                   event.preventDefault();
+                  // Cancel any pending debounce so it cannot fire a second onSelectedIdChange.
+                  if (debounceRef.current) {
+                    clearTimeout(debounceRef.current);
+                    debounceRef.current = null;
+                  }
                   onSelectedIdChange(player.id);
                   setQuery(player.label);
+                  setDebouncedQuery(player.label);
                   setOpen(false);
                 }}
                 style={{

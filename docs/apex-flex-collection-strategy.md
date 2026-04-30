@@ -4,7 +4,7 @@
 
 **Dataset ID:** `flexset`  
 **Target:** Master+ Ranked Flex Queue (EUNE)  
-**Thesis Relevance:** Core dataset for signed graph analysis, structural balance theory, assortativity, and temporal consistency studies.
+**Thesis Relevance:** Core dataset for Flex Queue associative graph analysis, dataset comparison, assortativity, and centrality studies. Signed balance is retained only as a methodological boundary case; see `signed-balance-methodological-retirement.md`.
 
 ---
 

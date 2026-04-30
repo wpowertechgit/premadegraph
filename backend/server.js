@@ -1342,6 +1342,28 @@ app.use('/graph-view', express.static(path.join(__dirname, 'output')));
 const backendDir = __dirname;
 const replayDbPath = path.resolve(__dirname, "pathfinder_replays.db");
 let rawDb = null;
+let refinedDb = null;
+
+// Per-dataset caches — all cleared when the active dataset changes (invalidatePlayerCaches).
+// datasetColumnStatsCache: one full-table scan per dataset; subsequent player lookups
+// use cached sorted distributions and pre-computed averages (O(1) column access, O(log n)
+// percentile via binary search).
+const datasetColumnStatsCache = {
+  dbPath: null,   // refined-DB path this was built from
+  promise: null,  // in-flight load promise (deduplicates concurrent first-load requests)
+  stats: null,    // { sampleSize, distributions: {col: sortedArray}, averages: {col: number} }
+};
+
+// datasetKdaCache: scans all match JSON files ONCE per dataset, builds per-player totals.
+// Subsequent buildPlayerKdaBenchmark(puuid) calls are O(1) map lookups — no re-scan.
+const datasetKdaCache = {
+  matchDir: null,  // match directory this was built from
+  promise: null,   // in-flight load promise
+  data: null,      // { datasetTotal, datasetSamples, playerTotals: Map<puuid,{total,matches}> }
+};
+
+const playerScoreCache = new Map();  // "${datasetId}:${puuid}" → full /scores response
+const playerOptionsCache = { promise: null, players: null, dbPath: null };
 
 function openConfiguredDatabase(databasePath, label) {
   return new sqlite3.Database(
@@ -1418,6 +1440,103 @@ function openActiveRawDatabase() {
   ensureRawDatabaseSchema();
 }
 
+function invalidatePlayerCaches() {
+  playerScoreCache.clear();
+  datasetColumnStatsCache.dbPath = null;
+  datasetColumnStatsCache.promise = null;
+  datasetColumnStatsCache.stats = null;
+  datasetKdaCache.matchDir = null;
+  datasetKdaCache.promise = null;
+  datasetKdaCache.data = null;
+  playerOptionsCache.promise = null;
+  playerOptionsCache.players = null;
+  playerOptionsCache.dbPath = null;
+  const dataset = getActiveDataset();
+  console.log(`[player-caches] invalidated dataset=${dataset?.id}`);
+}
+
+function openActiveRefinedDatabase() {
+  if (refinedDb) {
+    refinedDb.close();
+  }
+  refinedDb = openConfiguredDatabase(getActiveRefinedDbPath(), "Refined player database");
+  configureDatabase(refinedDb);
+  invalidatePlayerCaches();
+}
+
+// Loads and caches the dataset-wide column distributions used for percentile/comparison
+// calculations. One DB round-trip per dataset; all subsequent player lookups reuse this.
+async function loadDatasetColumnStats() {
+  const currentDbPath = getActiveRefinedDbPath();
+
+  if (datasetColumnStatsCache.dbPath === currentDbPath && datasetColumnStatsCache.stats) {
+    return { stats: datasetColumnStatsCache.stats, cacheHit: true };
+  }
+
+  if (datasetColumnStatsCache.dbPath === currentDbPath && datasetColumnStatsCache.promise) {
+    const stats = await datasetColumnStatsCache.promise;
+    return { stats, cacheHit: true };
+  }
+
+  // Cache miss — store promise immediately so concurrent requests share this one scan.
+  datasetColumnStatsCache.dbPath = currentDbPath;
+  const loadPromise = (async () => {
+    const t0 = Date.now();
+    try {
+      const rows = await refinedDbAll(
+        `SELECT
+           opscore,
+           feedscore,
+           artifact_kda,
+           artifact_economy,
+           artifact_map_awareness,
+           artifact_utility,
+           artifact_damage,
+           artifact_tanking,
+           artifact_objectives,
+           artifact_early_game
+         FROM players
+         WHERE matches_processed > 0`,
+      );
+      const elapsed = Date.now() - t0;
+
+      const distributions = {
+        opscore:       rows.map((r) => safeNumber(r.opscore)).filter(Number.isFinite).sort((a, b) => a - b),
+        feedscore:     rows.map((r) => safeNumber(r.feedscore)).filter(Number.isFinite).sort((a, b) => a - b),
+        kda:           rows.map((r) => safeNumber(r.artifact_kda)).filter(Number.isFinite).sort((a, b) => a - b),
+        economy:       rows.map((r) => safeNumber(r.artifact_economy)).filter(Number.isFinite).sort((a, b) => a - b),
+        map_awareness: rows.map((r) => safeNumber(r.artifact_map_awareness)).filter(Number.isFinite).sort((a, b) => a - b),
+        utility:       rows.map((r) => safeNumber(r.artifact_utility)).filter(Number.isFinite).sort((a, b) => a - b),
+        damage:        rows.map((r) => safeNumber(r.artifact_damage)).filter(Number.isFinite).sort((a, b) => a - b),
+        tanking:       rows.map((r) => safeNumber(r.artifact_tanking)).filter(Number.isFinite).sort((a, b) => a - b),
+        objectives:    rows.map((r) => safeNumber(r.artifact_objectives)).filter(Number.isFinite).sort((a, b) => a - b),
+        early_game:    rows.map((r) => safeNumber(r.artifact_early_game)).filter(Number.isFinite).sort((a, b) => a - b),
+      };
+
+      const averages = {};
+      for (const [key, dist] of Object.entries(distributions)) {
+        averages[key] = dist.length > 0 ? dist.reduce((s, v) => s + v, 0) / dist.length : 0;
+      }
+
+      const stats = { sampleSize: rows.length, distributions, averages };
+      datasetColumnStatsCache.stats = stats;
+      datasetColumnStatsCache.promise = null;
+      const dataset = getActiveDataset();
+      console.log(`[player-detail] column-stats loaded dataset=${dataset?.id} rows=${rows.length} dbMs=${elapsed}`);
+      return stats;
+    } catch (err) {
+      // Clear poisoned state so the next request can retry rather than re-throwing a
+      // stale rejected promise forever.
+      datasetColumnStatsCache.dbPath = null;
+      datasetColumnStatsCache.promise = null;
+      throw err;
+    }
+  })();
+
+  datasetColumnStatsCache.promise = loadPromise;
+  return { stats: await loadPromise, cacheHit: false };
+}
+
 replayDb.configure("busyTimeout", SQLITE_BUSY_TIMEOUT_MS);
 replayDb.serialize(() => {
   replayDb.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`, (error) => {
@@ -1479,22 +1598,12 @@ function dbAll(sql, params = []) {
   return sqliteAll(rawDb, sql, params);
 }
 
-async function withRefinedDb(action) {
-  const refinedDb = openConfiguredDatabase(getActiveRefinedDbPath(), "Refined player database");
-  configureDatabase(refinedDb);
-  try {
-    return await action(refinedDb);
-  } finally {
-    await new Promise((resolve) => refinedDb.close(() => resolve()));
-  }
-}
-
 function refinedDbGet(sql, params = []) {
-  return withRefinedDb((database) => sqliteGet(database, sql, params));
+  return sqliteGet(refinedDb, sql, params);
 }
 
 function refinedDbAll(sql, params = []) {
-  return withRefinedDb((database) => sqliteAll(database, sql, params));
+  return sqliteAll(refinedDb, sql, params);
 }
 
 function replayDbRun(sql, params = []) {
@@ -1589,6 +1698,7 @@ app.post("/api/datasets/:datasetId/select", (req, res) => {
       return res.status(404).json({ error: "Dataset not found." });
     }
     openActiveRawDatabase();
+    openActiveRefinedDatabase();
     res.json({
       current: dataset.id,
       dataset: {
@@ -1933,89 +2043,132 @@ function percentileRank(values, targetValue, { descending = false } = {}) {
   return roundNumber(descending ? 100 - ascendingPercentile : ascendingPercentile, 1);
 }
 
+// Like percentileRank but assumes sortedValues is already sorted ascending (as stored in
+// datasetColumnStatsCache). Uses binary search: O(log n) vs O(n log n) for the general form.
+function percentileRankSorted(sortedValues, targetValue, { descending = false } = {}) {
+  if (!sortedValues.length) return 0;
+
+  const target = safeNumber(targetValue);
+
+  // Lower bound: first index where sortedValues[i] >= target
+  let lo = 0;
+  let hi = sortedValues.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sortedValues[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  const lessCount = lo;
+
+  // Upper bound: first index where sortedValues[i] > target
+  lo = 0;
+  hi = sortedValues.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sortedValues[mid] <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  const equalCount = lo - lessCount;
+
+  const ascendingPercentile = ((lessCount + equalCount * 0.5) / sortedValues.length) * 100;
+  return roundNumber(descending ? 100 - ascendingPercentile : ascendingPercentile, 1);
+}
+
 function computeAverageKda(kills, assists, deaths) {
   return (safeNumber(kills) + safeNumber(assists)) / Math.max(1, safeNumber(deaths));
 }
 
-async function buildPlayerKdaBenchmark(puuid) {
+// Scans all match JSON files ONCE per dataset, building per-player KDA totals and the
+// dataset-wide total. Subsequent buildPlayerKdaBenchmark calls are O(1) map lookups.
+async function loadDatasetKdaData() {
   const matchDir = getActiveMatchesPath();
-  if (!fs.existsSync(matchDir)) {
-    return {
-      playerAverage: 0,
-      datasetAverage: 0,
-      matchesSampled: 0,
-      datasetSamples: 0,
-    };
+
+  if (datasetKdaCache.matchDir === matchDir && datasetKdaCache.data) {
+    return { data: datasetKdaCache.data, cacheHit: true };
   }
 
-  const files = fs.readdirSync(matchDir).filter((file) => file.endsWith(".json")).sort();
-  let playerTotal = 0;
-  let playerMatches = 0;
-  let datasetTotal = 0;
-  let datasetSamples = 0;
+  if (datasetKdaCache.matchDir === matchDir && datasetKdaCache.promise) {
+    const data = await datasetKdaCache.promise;
+    return { data, cacheHit: true };
+  }
 
-  for (const file of files) {
-    try {
-      const data = JSON.parse(fs.readFileSync(path.join(matchDir, file), "utf-8"));
-      const participants = Array.isArray(data?.info?.participants) ? data.info.participants : [];
+  datasetKdaCache.matchDir = matchDir;
+  const loadPromise = (async () => {
+    const t0 = Date.now();
+    const playerTotals = new Map();
+    let datasetTotal = 0;
+    let datasetSamples = 0;
 
-      for (const participant of participants) {
-        const kda = computeAverageKda(participant?.kills, participant?.assists, participant?.deaths);
-        datasetTotal += kda;
-        datasetSamples += 1;
+    if (fs.existsSync(matchDir)) {
+      const allFiles = (await fs.promises.readdir(matchDir))
+        .filter((f) => f.endsWith(".json"))
+        .sort();
 
-        if (participant?.puuid === puuid) {
-          playerTotal += kda;
-          playerMatches += 1;
+      for (const file of allFiles) {
+        try {
+          const raw = JSON.parse(await fs.promises.readFile(path.join(matchDir, file), "utf-8"));
+          const participants = Array.isArray(raw?.info?.participants) ? raw.info.participants : [];
+          for (const p of participants) {
+            const kda = computeAverageKda(p?.kills, p?.assists, p?.deaths);
+            datasetTotal += kda;
+            datasetSamples++;
+            if (p?.puuid) {
+              const entry = playerTotals.get(p.puuid) ?? { total: 0, matches: 0 };
+              entry.total += kda;
+              entry.matches++;
+              playerTotals.set(p.puuid, entry);
+            }
+          }
+        } catch (err) {
+          console.warn(`[kda-cache] failed to parse ${file}: ${err.message}`);
         }
       }
-    } catch (error) {
-      console.warn(`Failed to parse match file for KDA benchmark (${file}):`, error.message);
-    }
-  }
 
+      console.log(
+        `[kda-cache] loaded matchDir=${matchDir} files=${allFiles.length} samples=${datasetSamples} ` +
+        `uniquePlayers=${playerTotals.size} ms=${Date.now() - t0}`,
+      );
+    }
+
+    const data = { datasetTotal, datasetSamples, playerTotals };
+    datasetKdaCache.data = data;
+    datasetKdaCache.promise = null;
+    return data;
+  })().catch((err) => {
+    datasetKdaCache.matchDir = null;
+    datasetKdaCache.promise = null;
+    throw err;
+  });
+
+  datasetKdaCache.promise = loadPromise;
+  return { data: await loadPromise, cacheHit: false };
+}
+
+// O(1) after the first call — data is from the dataset-level KDA cache.
+async function buildPlayerKdaBenchmark(puuid) {
+  const { data, cacheHit } = await loadDatasetKdaData();
+  const { datasetTotal, datasetSamples, playerTotals } = data;
+  const player = playerTotals.get(puuid) ?? { total: 0, matches: 0 };
   return {
-    playerAverage: roundNumber(playerMatches ? playerTotal / playerMatches : 0),
-    datasetAverage: roundNumber(datasetSamples ? datasetTotal / datasetSamples : 0),
-    matchesSampled: playerMatches,
+    _cacheHit: cacheHit,  // stripped before sending to client; used only for logging
+    playerAverage: roundNumber(player.matches > 0 ? player.total / player.matches : 0),
+    datasetAverage: roundNumber(datasetSamples > 0 ? datasetTotal / datasetSamples : 0),
+    matchesSampled: player.matches,
     datasetSamples,
   };
 }
 
-function buildPlayerScoreBenchmarks(playerRow, benchmarkRows) {
-  const artifactRows = benchmarkRows.map((entry) => ({
-    opscore: safeNumber(entry.opscore),
-    feedscore: safeNumber(entry.feedscore),
-    kda: safeNumber(entry.artifact_kda),
-    economy: safeNumber(entry.artifact_economy),
-    map_awareness: safeNumber(entry.artifact_map_awareness),
-    utility: safeNumber(entry.artifact_utility),
-    damage: safeNumber(entry.artifact_damage),
-    tanking: safeNumber(entry.artifact_tanking),
-    objectives: safeNumber(entry.artifact_objectives),
-    early_game: safeNumber(entry.artifact_early_game),
-  }));
-
-  const sampleSize = artifactRows.length;
-  const distributions = {
-    opscore: artifactRows.map((entry) => entry.opscore),
-    feedscore: artifactRows.map((entry) => entry.feedscore),
-    kda: artifactRows.map((entry) => entry.kda),
-    economy: artifactRows.map((entry) => entry.economy),
-    map_awareness: artifactRows.map((entry) => entry.map_awareness),
-    utility: artifactRows.map((entry) => entry.utility),
-    damage: artifactRows.map((entry) => entry.damage),
-    tanking: artifactRows.map((entry) => entry.tanking),
-    objectives: artifactRows.map((entry) => entry.objectives),
-    early_game: artifactRows.map((entry) => entry.early_game),
-  };
+// Pure computation against pre-sorted cached distributions. Uses percentileRankSorted (binary
+// search, O(log n)) instead of re-sorting on every call.
+function buildPlayerScoreBenchmarks(playerRow, stats) {
+  const { sampleSize, distributions, averages } = stats;
 
   const groups = Object.fromEntries(
     Object.entries(PLAYER_DETAIL_GROUPS).map(([groupKey, keys]) => {
       const components = keys.map((key) => {
         const playerValue = safeNumber(playerRow[`artifact_${key}`]);
-        const averageValue = averageNumbers(distributions[key]);
-        const percentile = percentileRank(distributions[key], playerValue);
+        const averageValue = averages[key] ?? 0;
+        const percentile = percentileRankSorted(distributions[key], playerValue);
 
         return {
           key,
@@ -2039,94 +2192,119 @@ function buildPlayerScoreBenchmarks(playerRow, benchmarkRows) {
   return {
     sampleSize,
     opscore: {
-      average: roundNumber(averageNumbers(distributions.opscore)),
-      percentile: percentileRank(distributions.opscore, safeNumber(playerRow.opscore)),
+      average: roundNumber(averages.opscore ?? 0),
+      percentile: percentileRankSorted(distributions.opscore, safeNumber(playerRow.opscore)),
     },
     feedscore: {
-      average: roundNumber(averageNumbers(distributions.feedscore)),
-      percentile: percentileRank(distributions.feedscore, safeNumber(playerRow.feedscore), { descending: true }),
+      average: roundNumber(averages.feedscore ?? 0),
+      percentile: percentileRankSorted(distributions.feedscore, safeNumber(playerRow.feedscore), { descending: true }),
     },
     groups,
   };
 }
 
 app.get("/api/players/options", async (req, res) => {
+  const currentDbPath = getActiveRefinedDbPath();
+  const dataset = getActiveDataset();
+
+  if (playerOptionsCache.dbPath === currentDbPath && playerOptionsCache.players) {
+    console.log(`[players/options] cache=HIT dataset=${dataset?.id}`);
+    return res.json({ players: playerOptionsCache.players });
+  }
+
+  if (playerOptionsCache.dbPath === currentDbPath && playerOptionsCache.promise) {
+    console.log(`[players/options] cache=IN_FLIGHT dataset=${dataset?.id}`);
+    try {
+      const players = await playerOptionsCache.promise;
+      return res.json({ players });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   try {
-    const rows = await refinedDbAll(
-      `SELECT puuid, names
-       FROM players
-       WHERE puuid IS NOT NULL
-         AND TRIM(puuid) != ""`,
-    );
-
-    const players = rows
-      .map((row) => {
-        const allNames = parsePlayerNames(row.names);
-        return {
-          id: row.puuid,
-          label: allNames[0] || row.puuid,
-        };
-      })
-      .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: "base" }));
-
-    res.json({ players });
+    playerOptionsCache.dbPath = currentDbPath;
+    playerOptionsCache.promise = (async () => {
+      const t0 = Date.now();
+      const rows = await refinedDbAll(
+        `SELECT puuid, names
+         FROM players
+         WHERE puuid IS NOT NULL
+           AND TRIM(puuid) != ""`,
+      );
+      const players = rows
+        .map((row) => {
+          const allNames = parsePlayerNames(row.names);
+          return { id: row.puuid, label: allNames[0] || row.puuid };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+      playerOptionsCache.players = players;
+      playerOptionsCache.promise = null;
+      console.log(`[players/options] cache=MISS dataset=${dataset?.id} rows=${rows.length} dbMs=${Date.now() - t0}`);
+      return players;
+    })();
+    const players = await playerOptionsCache.promise;
+    return res.json({ players });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    playerOptionsCache.promise = null;
+    return res.status(500).json({ error: err.message });
   }
 });
 
 app.get("/api/players/:puuid/scores", async (req, res) => {
+  const t0 = Date.now();
+  const { puuid } = req.params;
+  const dataset = getActiveDataset();
+  const datasetId = dataset?.id ?? "unknown";
+
+  // Compound key keeps Flex and SoloQ caches independent even without a dataset switch.
+  const scoreCacheKey = `${datasetId}:${puuid}`;
+
   try {
-    const { puuid } = req.params;
-    const [row, benchmarkRows, kdaBenchmark] = await Promise.all([
+    // Full response cache — hit means zero DB/file work.
+    if (playerScoreCache.has(scoreCacheKey)) {
+      console.log(`[players/scores] dataset=${datasetId} puuid=${puuid.slice(0, 8)}... cache=HIT totalMs=0`);
+      return res.json(playerScoreCache.get(scoreCacheKey));
+    }
+
+    console.log(`[players/scores] dataset=${datasetId} puuid=${puuid.slice(0, 8)}... cache=MISS start`);
+
+    // Dataset-wide column stats — one DB scan per dataset lifetime.
+    const t1 = Date.now();
+    const { stats, cacheHit: statsCacheHit } = await loadDatasetColumnStats();
+    console.log(
+      `[players/scores] column-stats cacheHit=${statsCacheHit} statsMs=${Date.now() - t1} sampleSize=${stats.sampleSize}`,
+    );
+
+    // Single-row player fetch + dataset KDA lookup (file scan is dataset-level cached).
+    const t2 = Date.now();
+    const [row, kdaRaw] = await Promise.all([
       refinedDbGet(
         `SELECT
-        puuid,
-        names,
-        opscore,
-        feedscore,
-        detected_role,
-        role_confidence,
-        matches_processed,
-        score_computed_at,
-        country,
-        artifact_kda,
-        artifact_economy,
-        artifact_map_awareness,
-        artifact_utility,
-        artifact_damage,
-        artifact_tanking,
-        artifact_objectives,
-        artifact_early_game
-       FROM players
-       WHERE puuid = ?`,
-        [puuid],
-      ),
-      refinedDbAll(
-        `SELECT
-          opscore,
-          feedscore,
-          artifact_kda,
-          artifact_economy,
-          artifact_map_awareness,
-          artifact_utility,
-          artifact_damage,
-          artifact_tanking,
-          artifact_objectives,
-          artifact_early_game
+           puuid, names, opscore, feedscore,
+           detected_role, role_confidence, matches_processed, score_computed_at, country,
+           artifact_kda, artifact_economy, artifact_map_awareness, artifact_utility,
+           artifact_damage, artifact_tanking, artifact_objectives, artifact_early_game
          FROM players
-         WHERE matches_processed > 0`,
+         WHERE puuid = ?`,
+        [puuid],
       ),
       buildPlayerKdaBenchmark(puuid),
     ]);
+    console.log(
+      `[players/scores] playerRow=${row ? "found" : "not-found"} kda.cacheHit=${kdaRaw._cacheHit} fetchMs=${Date.now() - t2}`,
+    );
 
     if (!row) {
       return res.status(404).json({ error: "Player not found" });
     }
 
-    const benchmarks = buildPlayerScoreBenchmarks(row, benchmarkRows);
+    // Strip internal _cacheHit flag before sending to client.
+    const { _cacheHit: _kdaCacheHit, ...kdaBenchmark } = kdaRaw;
 
-    res.json({
+    const benchmarks = buildPlayerScoreBenchmarks(row, stats);
+
+    const response = {
       puuid: row.puuid,
       names: parsePlayerNames(row.names),
       scores: {
@@ -2147,14 +2325,18 @@ app.get("/api/players/:puuid/scores", async (req, res) => {
           early_game: Number(row.artifact_early_game) || 0,
         },
       },
-      benchmarks: {
-        ...benchmarks,
-        kda: kdaBenchmark,
-      },
+      benchmarks: { ...benchmarks, kda: kdaBenchmark },
       country: row.country || null,
-    });
+    };
+
+    playerScoreCache.set(scoreCacheKey, response);
+    console.log(`[players/scores] dataset=${datasetId} puuid=${puuid.slice(0, 8)}... done totalMs=${Date.now() - t0}`);
+    return res.json(response);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(
+      `[players/scores] dataset=${datasetId} puuid=${puuid.slice(0, 8)}... error="${err.message}" totalMs=${Date.now() - t0}`,
+    );
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -2870,6 +3052,7 @@ app.post([
 app.listen(PORT, () => {
   loadDatasetRegistry();
   openActiveRawDatabase();
+  openActiveRefinedDatabase();
   warnAboutLegacyMatchFiles();
   console.log(`Backend listening at http://localhost:${PORT}`);
   void prewarmRustMetadata();

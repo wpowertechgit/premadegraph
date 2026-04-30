@@ -1,5 +1,4 @@
 import React, { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import GraphSphereScene from "./GraphSphereScene";
 import { buildMockBirdseyeData } from "./graphBirdseyeMock";
 import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta, runRustAssortativity } from "./pathfinderApi";
@@ -711,19 +710,6 @@ export default function AssortativityPage() {
               <input type="number" min={1} value={request.strongTieThreshold} onChange={(event) => setRequest((current) => ({ ...current, strongTieThreshold: Math.max(1, Number(event.target.value) || 1) }))} style={inputStyle()} />
               <span style={{ color: COLORS.muted, fontSize: "0.84rem", lineHeight: 1.5 }}>{isHu ? "Valaszd szet az ismetlodo kapcsolatokat erosebb es gyengebb kotesekre." : "Split repeated relationships into stronger and weaker ties for comparison."}</span>
             </label>
-          </div>
-
-          <div style={{ display: "flex", gap: "0.7rem", flexWrap: "wrap" }}>
-            <Link to="/analytics/signed-balance-assortativity" style={{ textDecoration: "none" }}>
-              <span style={{ ...buttonStyle("secondary"), display: "inline-flex", alignItems: "center" }}>
-                View Combined Analysis
-              </span>
-            </Link>
-            <Link to="/signed-balance" style={{ textDecoration: "none" }}>
-              <span style={{ ...buttonStyle("ghost"), display: "inline-flex", alignItems: "center" }}>
-                See Signed Balance Results
-              </span>
-            </Link>
           </div>
         </section>
 

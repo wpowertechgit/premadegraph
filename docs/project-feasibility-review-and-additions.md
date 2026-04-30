@@ -1,5 +1,11 @@
 # Project Feasibility Review And Useful Additions
 
+> **Superseded note (2026-04-30):** The optimistic signed-balance framing in this
+> note has been superseded by
+> [`signed-balance-methodological-retirement.md`](signed-balance-methodological-retirement.md).
+> Signed Balance is implemented, but should be treated as a methodological
+> boundary case rather than a strong thesis pillar.
+
 ## Purpose
 
 This note reviews whether the current `premadegraph` thesis direction is feasible as a research-and-systems project and identifies additions that would strengthen the thesis without derailing scope.
@@ -81,7 +87,7 @@ That order is thesis-friendly because it prioritizes interpretability over novel
 
 ### Signed Balance
 
-This is a strong research fit. Signed triads and structural balance are established topics in signed-network research, so using ally/enemy relations for balance analysis is academically defensible.
+Superseded: this is no longer treated as a strong thesis pillar. Signed triads and structural balance are established topics in signed-network research, but the current League of Legends enemy-edge semantics are not strong enough for a central social-network interpretation.
 
 Important caution:
 

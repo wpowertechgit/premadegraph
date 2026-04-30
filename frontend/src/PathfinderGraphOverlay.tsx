@@ -143,8 +143,8 @@ export default function PathfinderGraphOverlay({
           gap: "0.85rem",
           background: "rgba(23, 26, 31, 0.9)",
           border: "1px solid rgba(84, 95, 110, 0.55)",
-          borderRadius: "28px",
-          boxShadow: "0 30px 90px rgba(0, 0, 0, 0.45)",
+          borderRadius: "12px",
+          boxShadow: "0 4px 24px rgba(0, 0, 0, 0.45)",
           padding: "0.85rem",
           overflow: "hidden",
         }}
@@ -203,7 +203,7 @@ export default function PathfinderGraphOverlay({
           {selectedGraphNode ? (
             <div
               style={{
-                borderRadius: "18px",
+                borderRadius: "8px",
                 border: "1px solid rgba(126, 155, 183, 0.22)",
                 background: "rgba(12, 18, 26, 0.9)",
                 padding: "0.85rem 0.95rem",
@@ -282,7 +282,7 @@ export default function PathfinderGraphOverlay({
           ) : (
             <div
               style={{
-                borderRadius: "18px",
+                borderRadius: "8px",
                 border: "1px dashed rgba(126, 155, 183, 0.18)",
                 background: "rgba(12, 18, 26, 0.52)",
                 padding: "0.85rem 0.95rem",
@@ -297,7 +297,7 @@ export default function PathfinderGraphOverlay({
 
         <aside
           style={{
-            borderRadius: "16px",
+            borderRadius: "8px",
             border: "1px solid #2f363f",
             background: "#1d2127",
             padding: "1rem",
@@ -464,7 +464,7 @@ export default function PathfinderGraphOverlay({
               style={{
                 background: "#1d2127",
                 border: "1px solid #303741",
-                borderRadius: "18px",
+                borderRadius: "8px",
                 padding: "1rem",
                 display: "grid",
                 gap: "0.35rem",
@@ -499,7 +499,7 @@ export default function PathfinderGraphOverlay({
               style={{
                 background: "#1d2127",
                 border: "1px solid #303741",
-                borderRadius: "18px",
+                borderRadius: "8px",
                 padding: "1rem",
                 display: "grid",
                 gap: "0.35rem",
@@ -516,7 +516,7 @@ export default function PathfinderGraphOverlay({
               style={{
                 background: "#1d2127",
                 border: "1px solid #303741",
-                borderRadius: "18px",
+                borderRadius: "8px",
                 padding: "1rem",
                 color: "#9ca3af",
                 lineHeight: 1.5,

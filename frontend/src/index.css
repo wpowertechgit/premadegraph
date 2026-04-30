@@ -97,6 +97,11 @@ textarea {
   font: inherit;
 }
 
+select option {
+  background: #0d1117;
+  color: #f7f8f8;
+}
+
 button {
   border: 1px solid transparent;
   transition:

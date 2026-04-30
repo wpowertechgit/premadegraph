@@ -619,7 +619,7 @@ export default function PathfinderLabPage() {
           <div
             style={{
               ...surfaceCardStyle(),
-              borderRadius: "16px",
+              borderRadius: "8px",
               padding: "0.9rem 1rem",
               minWidth: 0,
               gridColumn: "1 / -1",
@@ -647,7 +647,7 @@ export default function PathfinderLabPage() {
               key={item.label}
               style={{
                 ...surfaceCardStyle(),
-                borderRadius: "16px",
+                borderRadius: "8px",
                 padding: "0.9rem 1rem",
                 minWidth: 0,
               }}
