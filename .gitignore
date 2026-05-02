@@ -32,4 +32,4 @@ docs/databaseproject/simple-interface/Data
 docs/databaseproject/simple-interface/obj
 *.mmd
 *.drawio
-backend/plagiarism_checker.py
+backend/plagiarism_checker.py.worktrees/
