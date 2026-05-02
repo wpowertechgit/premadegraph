@@ -3348,7 +3348,7 @@ async function computeNeurosimClusterProfiles(dataset) {
         cohesion,
         internal_edge_ratio,
         // tribal sim extensions
-        cluster_size: r.cluster_size,
+        cluster_size: Number(r.cluster_size),
         feed_risk: round4(feed_risk),
         founder_puuids,
         // sub-artifacts
