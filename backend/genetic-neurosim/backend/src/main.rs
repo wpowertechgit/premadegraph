@@ -1,5 +1,6 @@
 mod simulation;
 mod db;
+pub mod world;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
