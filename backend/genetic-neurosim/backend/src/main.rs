@@ -1,6 +1,7 @@
 mod simulation;
 mod db;
 pub mod world;
+pub mod tribes;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 

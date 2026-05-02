@@ -668,7 +668,7 @@ impl AgentStorage {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum NodeKind {
     Input,
     Bias,
@@ -676,7 +676,7 @@ enum NodeKind {
     Output,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct NodeGene {
     id: u32,
     kind: NodeKind,
@@ -684,7 +684,7 @@ struct NodeGene {
     slot: Option<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ConnectionGene {
     innovation: u64,
     from: u32,
@@ -693,13 +693,13 @@ struct ConnectionGene {
     enabled: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct CompiledEdge {
     from_idx: usize,
     weight: f32,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 struct CompiledGenome {
     ordered_indices: Vec<usize>,
     incoming: Vec<Vec<CompiledEdge>>,
@@ -707,8 +707,8 @@ struct CompiledGenome {
     complexity: usize,
 }
 
-#[derive(Clone)]
-struct Genome {
+#[derive(Clone, Debug)]
+pub struct Genome {
     nodes: Vec<NodeGene>,
     connections: Vec<ConnectionGene>,
     compiled: CompiledGenome,
@@ -745,6 +745,65 @@ impl Genome {
             for output in 0..OUTPUT_COUNT {
                 let from = input as u32;
                 let to = tracker.base_output_id(output);
+                connections.push(ConnectionGene {
+                    innovation: tracker.connection_innovation(from, to),
+                    from,
+                    to,
+                    weight: rng.random_range(-1.0..1.0),
+                    enabled: true,
+                });
+            }
+        }
+
+        let mut genome = Self {
+            nodes,
+            connections,
+            compiled: CompiledGenome::default(),
+        };
+        genome.rebuild_compiled();
+        genome
+    }
+
+    /// Create a minimal genome for an arbitrary (input_count, output_count) topology.
+    ///
+    /// Uses a fresh local `InnovationTracker` and a deterministic RNG seed so
+    /// that tribe brains are reproducible without exposing the simulation's
+    /// shared tracker.
+    pub fn new(input_count: usize, output_count: usize) -> Self {
+        use rand::SeedableRng;
+        let mut rng = SmallRng::seed_from_u64(42);
+        let mut tracker = InnovationTracker::new_with_counts(input_count, output_count);
+
+        let mut nodes = Vec::with_capacity(input_count + output_count + 1);
+        for i in 0..input_count {
+            nodes.push(NodeGene {
+                id: i as u32,
+                kind: NodeKind::Input,
+                order: 0.0,
+                slot: Some(i),
+            });
+        }
+        // Bias node
+        nodes.push(NodeGene {
+            id: input_count as u32,
+            kind: NodeKind::Bias,
+            order: 0.0,
+            slot: None,
+        });
+        for o in 0..output_count {
+            nodes.push(NodeGene {
+                id: tracker.base_output_id_n(input_count, o),
+                kind: NodeKind::Output,
+                order: 1.0,
+                slot: Some(o),
+            });
+        }
+
+        let mut connections = Vec::new();
+        for i in 0..=input_count {
+            for o in 0..output_count {
+                let from = i as u32;
+                let to = tracker.base_output_id_n(input_count, o);
                 connections.push(ConnectionGene {
                     innovation: tracker.connection_innovation(from, to),
                     from,
@@ -1076,8 +1135,23 @@ impl InnovationTracker {
         }
     }
 
+    /// Create a tracker for an arbitrary topology (used by `Genome::new`).
+    fn new_with_counts(input_count: usize, output_count: usize) -> Self {
+        Self {
+            next_node_id: (input_count + 1 + output_count) as u32,
+            next_innovation: 0,
+            connection_map: HashMap::new(),
+            split_map: HashMap::new(),
+        }
+    }
+
     fn base_output_id(&self, output_slot: usize) -> u32 {
         (INPUT_COUNT + 1 + output_slot) as u32
+    }
+
+    /// Variant of `base_output_id` for arbitrary input/output counts.
+    fn base_output_id_n(&self, input_count: usize, output_slot: usize) -> u32 {
+        (input_count + 1 + output_slot) as u32
     }
 
     fn connection_innovation(&mut self, from: u32, to: u32) -> u64 {
