@@ -11,6 +11,8 @@ const CLUSTER_TYPE_RUST_PATHFINDING: &str = "rust_pathfinding";
 const CLUSTER_ALGORITHM: &str = "strong_components";
 const MIN_CLUSTER_EDGE_WEIGHT: u32 = 2;
 const MAX_SNAPSHOT_CLUSTER_NODES: usize = 10;
+const MAX_SNAPSHOT_VISITED_NODES: usize = 200;
+const MAX_PREVIEW_CLUSTER_NODES: usize = 12;
 const MIN_LANDMARKS: usize = 8;
 const MAX_LANDMARKS: usize = 64;
 const WEIGHT_COST_SCALE: usize = 1_000_000;
@@ -1268,7 +1270,7 @@ pub(super) fn pathfinder_snapshot(
     for node_id in path_nodes {
         preferred_nodes.insert(node_id.clone());
     }
-    for node_id in visited_nodes {
+    for node_id in visited_nodes.iter().take(MAX_SNAPSHOT_VISITED_NODES) {
         preferred_nodes.insert(node_id.clone());
     }
 
@@ -1421,7 +1423,27 @@ fn interpolated_path_y(start: f64, end: f64, index: usize, total: usize) -> f64 
 }
 
 pub(super) fn population_snapshot(graph: &GraphState) -> GraphSnapshot {
-    graph.population_snapshot.clone()
+    let mut visible: HashSet<String> = HashSet::new();
+    for summary in &graph.cluster_summaries {
+        for node_id in select_cluster_nodes(graph, &summary.cluster_id, &HashSet::new(), MAX_PREVIEW_CLUSTER_NODES) {
+            visible.insert(node_id);
+        }
+    }
+    let nodes: Vec<GraphNode> = graph
+        .population_snapshot
+        .nodes
+        .iter()
+        .filter(|n| visible.contains(&n.id))
+        .cloned()
+        .collect();
+    let edges: Vec<GraphEdge> = graph
+        .population_snapshot
+        .edges
+        .iter()
+        .filter(|e| visible.contains(&e.from) && visible.contains(&e.to))
+        .cloned()
+        .collect();
+    GraphSnapshot { nodes, edges }
 }
 
 pub(super) fn global_view_snapshot(graph: &GraphState) -> GraphSnapshot {

@@ -188,9 +188,9 @@ function parseMarkdown(content: string): MarkdownBlock[] {
   return blocks;
 }
 
-function renderInline(text: string) {
+function renderInline(text: string, onWikiLink?: (target: string) => void, resolveWikiLink?: (target: string) => string | null) {
   const nodes: React.ReactNode[] = [];
-  const pattern = /(`[^`]+`)|\[([^\]]+)\]\(([^)]+)\)/gu;
+  const pattern = /(`[^`]+`)|\[([^\]]+)\]\(([^)]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/gu;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -200,11 +200,27 @@ function renderInline(text: string) {
     }
     if (match[1]) {
       nodes.push(<code key={`${match.index}-code`}>{match[1].slice(1, -1)}</code>);
-    } else {
+    } else if (match[2]) {
       nodes.push(
         <a key={`${match.index}-link`} href={match[3]} target={match[3].startsWith("http") ? "_blank" : undefined} rel="noreferrer">
           {match[2]}
         </a>,
+      );
+    } else if (match[4]) {
+      const target = match[4].trim();
+      const label = (match[5] || target).trim();
+      const resolvedPath = resolveWikiLink?.(target);
+      nodes.push(
+        <button
+          key={`${match.index}-wiki`}
+          type="button"
+          className="documentation-wikilink"
+          disabled={!resolvedPath}
+          onClick={() => resolvedPath && onWikiLink?.(resolvedPath)}
+          title={resolvedPath || `Unresolved note: ${target}`}
+        >
+          {label}
+        </button>,
       );
     }
     lastIndex = pattern.lastIndex;
@@ -216,7 +232,15 @@ function renderInline(text: string) {
   return nodes;
 }
 
-function MarkdownRenderer({ content }: { content: string }) {
+function MarkdownRenderer({
+  content,
+  onWikiLink,
+  resolveWikiLink,
+}: {
+  content: string;
+  onWikiLink?: (target: string) => void;
+  resolveWikiLink?: (target: string) => string | null;
+}) {
   const blocks = useMemo(() => parseMarkdown(content), [content]);
 
   return (
@@ -224,17 +248,17 @@ function MarkdownRenderer({ content }: { content: string }) {
       {blocks.map((block, index) => {
         if (block.type === "heading") {
           const Tag = `h${Math.min(block.level + 1, 6)}` as keyof JSX.IntrinsicElements;
-          return <Tag key={index}>{renderInline(block.text)}</Tag>;
+          return <Tag key={index}>{renderInline(block.text, onWikiLink, resolveWikiLink)}</Tag>;
         }
         if (block.type === "paragraph") {
-          return <p key={index}>{renderInline(block.text)}</p>;
+          return <p key={index}>{renderInline(block.text, onWikiLink, resolveWikiLink)}</p>;
         }
         if (block.type === "list") {
           const Tag = block.ordered ? "ol" : "ul";
           return (
             <Tag key={index}>
               {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInline(item)}</li>
+                <li key={itemIndex}>{renderInline(item, onWikiLink, resolveWikiLink)}</li>
               ))}
             </Tag>
           );
@@ -247,7 +271,7 @@ function MarkdownRenderer({ content }: { content: string }) {
           );
         }
         if (block.type === "blockquote") {
-          return <blockquote key={index}>{renderInline(block.text)}</blockquote>;
+          return <blockquote key={index}>{renderInline(block.text, onWikiLink, resolveWikiLink)}</blockquote>;
         }
         return (
           <div key={index} className="documentation-table-wrap">
@@ -255,7 +279,7 @@ function MarkdownRenderer({ content }: { content: string }) {
               <thead>
                 <tr>
                   {block.headers.map((header, headerIndex) => (
-                    <th key={headerIndex}>{renderInline(header)}</th>
+                    <th key={headerIndex}>{renderInline(header, onWikiLink, resolveWikiLink)}</th>
                   ))}
                 </tr>
               </thead>
@@ -263,7 +287,7 @@ function MarkdownRenderer({ content }: { content: string }) {
                 {block.rows.map((row, rowIndex) => (
                   <tr key={rowIndex}>
                     {row.map((cell, cellIndex) => (
-                      <td key={cellIndex}>{renderInline(cell)}</td>
+                      <td key={cellIndex}>{renderInline(cell, onWikiLink, resolveWikiLink)}</td>
                     ))}
                   </tr>
                 ))}
@@ -290,6 +314,39 @@ function normalizeManifest(value: unknown): DocumentationManifest {
 
 const BUNDLED_MANIFEST = normalizeManifest(generatedManifest);
 
+function requireDocuments(payload: DocumentationManifest, source: string) {
+  if (!payload.documents.length) {
+    throw new Error(`${source} returned an empty documentation manifest.`);
+  }
+  return payload;
+}
+
+function documentLabel(document: DocumentationEntry) {
+  if (document.path === "docs/chapter-evidence-map.md") {
+    return "Chapter Evidence Map";
+  }
+  const chapterMatch = document.path.match(/docs\/evidence\/chapter-(\d+)-(.+)\.md$/u);
+  if (chapterMatch) {
+    return `Chapter ${Number(chapterMatch[1])}`;
+  }
+  return fileNameFromPath(document.path);
+}
+
+function sortDocuments(left: DocumentationEntry, right: DocumentationEntry) {
+  const leftChapter = left.path.match(/docs\/evidence\/chapter-(\d+)-/u);
+  const rightChapter = right.path.match(/docs\/evidence\/chapter-(\d+)-/u);
+  if (left.path === "docs/chapter-evidence-map.md") {
+    return -1;
+  }
+  if (right.path === "docs/chapter-evidence-map.md") {
+    return 1;
+  }
+  if (leftChapter && rightChapter) {
+    return Number(leftChapter[1]) - Number(rightChapter[1]);
+  }
+  return left.path.localeCompare(right.path);
+}
+
 export default function DocumentationPage() {
   const [manifest, setManifest] = useState<DocumentationManifest>(BUNDLED_MANIFEST);
   const [selectedPath, setSelectedPath] = useState<string>("");
@@ -307,7 +364,9 @@ export default function DocumentationPage() {
   useEffect(() => {
     let cancelled = false;
     setLoadingManifest(true);
-    const bundledPreferred = BUNDLED_MANIFEST.documents.find((document) => document.path === "docs/DOCUMENT_MAP.md") ?? BUNDLED_MANIFEST.documents[0];
+    const bundledPreferred = BUNDLED_MANIFEST.documents.find((document) => document.path === "docs/chapter-evidence-map.md")
+      ?? BUNDLED_MANIFEST.documents.find((document) => document.path === "docs/DOCUMENT_MAP.md")
+      ?? BUNDLED_MANIFEST.documents[0];
     setSelectedPath((current) => current || bundledPreferred?.path || "");
 
     const loadManifest = () => fetch(STATIC_DOCUMENTATION_MANIFEST_URL, { cache: "no-store" })
@@ -316,6 +375,9 @@ export default function DocumentationPage() {
           throw new Error("Static documentation manifest is unavailable.");
         }
         return response.json() as Promise<DocumentationManifest>;
+      })
+      .then((payload) => {
+        return requireDocuments(normalizeManifest(payload), "Static documentation manifest");
       });
 
     fetch(DOCUMENTATION_SYNC_URL, { method: "POST", cache: "no-store" })
@@ -325,13 +387,21 @@ export default function DocumentationPage() {
         }
         return response.json() as Promise<DocumentationManifest & { ok?: boolean }>;
       })
+      .then((payload) => {
+        if (payload.ok === false) {
+          throw new Error("Documentation sync endpoint failed.");
+        }
+        return requireDocuments(normalizeManifest(payload), "Documentation sync endpoint");
+      })
       .catch(() => loadManifest())
       .then((payload) => {
         if (cancelled) {
           return;
         }
         setManifest(payload);
-        const preferred = payload.documents.find((document) => document.path === "docs/DOCUMENT_MAP.md") ?? payload.documents[0];
+        const preferred = payload.documents.find((document) => document.path === "docs/chapter-evidence-map.md")
+          ?? payload.documents.find((document) => document.path === "docs/DOCUMENT_MAP.md")
+          ?? payload.documents[0];
         setSelectedPath(preferred?.path ?? "");
         setError(null);
       })
@@ -342,12 +412,15 @@ export default function DocumentationPage() {
           }
           return response.json() as Promise<DocumentationManifest>;
         })
+        .then((payload) => requireDocuments(normalizeManifest(payload), "Backend documentation manifest"))
         .then((payload) => {
           if (cancelled) {
             return;
           }
           setManifest(payload);
-          const preferred = payload.documents.find((document) => document.path === "docs/DOCUMENT_MAP.md") ?? payload.documents[0];
+          const preferred = payload.documents.find((document) => document.path === "docs/chapter-evidence-map.md")
+            ?? payload.documents.find((document) => document.path === "docs/DOCUMENT_MAP.md")
+            ?? payload.documents[0];
           setSelectedPath(preferred?.path ?? "");
           setError(null);
         }))
@@ -457,9 +530,28 @@ export default function DocumentationPage() {
       group.push(document);
       groups.set(document.group, group);
     }
-    return Array.from(groups.entries());
+    return Array.from(groups.entries())
+      .map(([group, documents]) => [group, [...documents].sort(sortDocuments)] as const)
+      .sort(([leftGroup], [rightGroup]) => {
+        if (leftGroup === "Chapter Evidence") {
+          return -1;
+        }
+        if (rightGroup === "Chapter Evidence") {
+          return 1;
+        }
+        return leftGroup.localeCompare(rightGroup);
+      });
   }, [filteredDocuments]);
 
+  const chapterEvidenceDocuments = useMemo(
+    () => manifest.documents
+      .filter((document) => document.path === "docs/chapter-evidence-map.md" || document.path.startsWith("docs/evidence/chapter-"))
+      .sort(sortDocuments),
+    [manifest.documents],
+  );
+  const chapterCount = chapterEvidenceDocuments.filter((document) => document.path.startsWith("docs/evidence/chapter-")).length;
+  const sourceNoteCount = manifest.documents.filter((document) => document.path.startsWith("docs/") && !document.path.startsWith("docs/evidence/")).length;
+  const codeEvidenceCount = markdown.match(/\]\(\.\.\/\.\.\//gu)?.length ?? 0;
   const selectedDocument = manifest.documents.find((document) => document.path === selectedPath) ?? null;
   const selectedFileName = selectedDocument ? fileNameFromPath(selectedDocument.path) : "No document selected";
   const pdfPageNumber = Math.max(1, Number.parseInt(pdfPage, 10) || 1);
@@ -467,6 +559,21 @@ export default function DocumentationPage() {
   const pdfSrc = manifest.thesisPdf
     ? `${pdfBaseUrl}#page=${pdfPageNumber}&zoom=${encodeURIComponent(pdfZoom)}`
     : "";
+  const resolveWikiLink = (target: string) => {
+    const normalizedTarget = target.replace(/\.md$/iu, "");
+    const candidates = [
+      `${normalizedTarget}.md`,
+      `docs/${normalizedTarget}.md`,
+      `docs/${normalizedTarget}/README.md`,
+      `docs/evidence/${normalizedTarget}.md`,
+    ];
+    const direct = manifest.documents.find((document) => candidates.includes(document.path));
+    if (direct) {
+      return direct.path;
+    }
+    const byBasename = manifest.documents.find((document) => fileNameFromPath(document.path).replace(/\.md$/iu, "") === normalizedTarget);
+    return byBasename?.path ?? null;
+  };
 
   return (
     <div className="documentation-page" style={pageShellStyle()}>
@@ -485,7 +592,7 @@ export default function DocumentationPage() {
             style={inputStyle()}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter markdown"
+            placeholder="Filter evidence, code, docs"
           />
         </label>
 
@@ -542,6 +649,43 @@ export default function DocumentationPage() {
 
       {error ? <div className="documentation-alert">{error}</div> : null}
 
+      <section className="documentation-evidence-rail" aria-label="Thesis chapter evidence">
+        <div className="documentation-evidence-rail__summary">
+          <div style={sectionLabelStyle()}>Thesis Proof Graph</div>
+          <h2>Chapter evidence trail</h2>
+          <p>
+            Each chapter note links the thesis text to markdown sources, code paths, diagrams, datasets, and bibliography keys.
+          </p>
+        </div>
+        <div className="documentation-evidence-rail__stats">
+          <div>
+            <strong>{chapterCount}</strong>
+            <span>Chapter notes</span>
+          </div>
+          <div>
+            <strong>{sourceNoteCount}</strong>
+            <span>Source docs</span>
+          </div>
+          <div>
+            <strong>{codeEvidenceCount}</strong>
+            <span>Code links here</span>
+          </div>
+        </div>
+        <div className="documentation-chapter-strip">
+          {chapterEvidenceDocuments.map((document) => (
+            <button
+              key={document.path}
+              type="button"
+              className={`documentation-chapter-chip${document.path === selectedPath ? " is-active" : ""}`}
+              onClick={() => setSelectedPath(document.path)}
+              title={document.path}
+            >
+              {documentLabel(document)}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="documentation-workspace">
         <article className="documentation-reader">
           <div className="documentation-reader__bar">
@@ -561,7 +705,7 @@ export default function DocumentationPage() {
             {loadingMarkdown ? (
               <div className="documentation-muted">Loading markdown...</div>
             ) : markdown ? (
-              <MarkdownRenderer content={markdown} />
+              <MarkdownRenderer content={markdown} onWikiLink={setSelectedPath} resolveWikiLink={resolveWikiLink} />
             ) : (
               <div className="documentation-muted">Select a markdown file from the index.</div>
             )}

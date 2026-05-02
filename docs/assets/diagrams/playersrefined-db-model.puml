@@ -1,0 +1,67 @@
+@startuml
+hide circle
+skinparam linetype ortho
+skinparam entity {
+  BackgroundColor #F8F8F8
+  BorderColor #333333
+}
+
+title playersrefined.db Relational Model
+
+entity "players" as players {
+  * puuid : TEXT <<PK>>
+  --
+  names : TEXT
+  feedscore : REAL
+  opscore : REAL
+  country : TEXT
+  match_count : INTEGER
+}
+
+entity "clusters" as clusters {
+  * cluster_id : TEXT <<PK>>
+  --
+  cluster_type : TEXT
+  algorithm : TEXT
+  size : INTEGER
+  best_op : TEXT
+  worst_feed : TEXT
+  summary_json : TEXT
+  center_x : REAL
+  center_y : REAL
+  build_version : TEXT
+  updated_at : TEXT
+}
+
+entity "cluster_members" as cluster_members {
+  * cluster_id : TEXT <<PK, FK>>
+  * puuid : TEXT <<PK, FK>>
+  --
+  is_bridge : INTEGER
+  is_star : INTEGER
+  is_best_op : INTEGER
+  is_worst_feed : INTEGER
+  role_json : TEXT
+}
+
+clusters ||--o{ cluster_members : contains
+players ||--o{ cluster_members : belongs_to
+
+note right of cluster_members
+Composite primary key:
+(cluster_id, puuid)
+
+These two columns behave as logical foreign keys to
+clusters.cluster_id and players.puuid.
+The current SQLite schema stores the relation but does
+not declare FOREIGN KEY constraints.
+end note
+
+note bottom of clusters
+best_op and worst_feed store player PUUID references
+to notable players inside the cluster.
+In the current schema these are not declared as
+foreign keys either.
+end note
+
+@enduml

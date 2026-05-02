@@ -1,0 +1,82 @@
+@startuml
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultTextAlignment center
+
+rectangle "players" as players
+rectangle "clusters" as clusters
+rectangle "cluster_members" as cluster_members
+
+hexagon "belongs_to" as belongs_to
+hexagon "contains" as contains
+hexagon "best_op" as best_op
+hexagon "worst_feed" as worst_feed
+
+usecase "puuid" as players_puuid
+usecase "names" as players_names
+usecase "feedscore" as players_feedscore
+usecase "opscore" as players_opscore
+usecase "country" as players_country
+usecase "match_count" as players_match_count
+
+usecase "cluster_id" as clusters_cluster_id
+usecase "cluster_type" as clusters_cluster_type
+usecase "algorithm" as clusters_algorithm
+usecase "size" as clusters_size
+usecase "best_op" as clusters_best_op
+usecase "worst_feed" as clusters_worst_feed
+usecase "summary_json" as clusters_summary_json
+usecase "center_x" as clusters_center_x
+usecase "center_y" as clusters_center_y
+usecase "build_version" as clusters_build_version
+usecase "updated_at" as clusters_updated_at
+
+usecase "cluster_id" as members_cluster_id
+usecase "puuid" as members_puuid
+usecase "is_bridge" as members_is_bridge
+usecase "is_star" as members_is_star
+usecase "is_best_op" as members_is_best_op
+usecase "is_worst_feed" as members_is_worst_feed
+usecase "role_json" as members_role_json
+
+players -- players_puuid
+players -- players_names
+players -- players_feedscore
+players -- players_opscore
+players -- players_country
+players -- players_match_count
+
+clusters -- clusters_cluster_id
+clusters -- clusters_cluster_type
+clusters -- clusters_algorithm
+clusters -- clusters_size
+clusters -- clusters_best_op
+clusters -- clusters_worst_feed
+clusters -- clusters_summary_json
+clusters -- clusters_center_x
+clusters -- clusters_center_y
+clusters -- clusters_build_version
+clusters -- clusters_updated_at
+
+cluster_members -- members_cluster_id
+cluster_members -- members_puuid
+cluster_members -- members_is_bridge
+cluster_members -- members_is_star
+cluster_members -- members_is_best_op
+cluster_members -- members_is_worst_feed
+cluster_members -- members_role_json
+
+players -1- belongs_to
+belongs_to -M- cluster_members
+
+clusters -1- contains
+contains -M- cluster_members
+
+clusters -1- best_op
+best_op -M- players
+
+clusters -1- worst_feed
+worst_feed -M- players
+
+@enduml

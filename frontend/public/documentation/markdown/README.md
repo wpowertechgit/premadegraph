@@ -4,76 +4,89 @@
 
 [English](README.md) | [Magyar](README.hu.md)
 
-![Thesis](https://img.shields.io/badge/focus-thesis%20project-1f6feb?style=flat-square)
+![Thesis](https://img.shields.io/badge/focus-research%20%2B%20systems%20thesis-1f6feb?style=flat-square)
 ![Frontend](https://img.shields.io/badge/ui-React%20%2B%20Vite-0f766e?style=flat-square)
 ![Backend](https://img.shields.io/badge/backend-Node%20%2B%20Rust-7c3aed?style=flat-square)
-![Analytics](https://img.shields.io/badge/analytics-signed%20graphs%20%2F%20pathfinding-c2410c?style=flat-square)
+![Analytics](https://img.shields.io/badge/analytics-assortativity%20%2F%20Brandes%20centrality-c2410c?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-111827?style=flat-square)
 
-**Premade Graph** is a League of Legends player-network thesis project for collecting match history, building repeated co-play graphs, analyzing signed relationships, and exploring the result through a polished interactive frontend.
+**Premade Graph** is a League of Legends thesis project that collects match-history data, builds repeated player co-presence graphs, and analyzes the resulting networks through a Node/Express API, a Rust graph-analytics runtime, and a React/Vite frontend.
 
-![Match analysis surface](docs/assets/demo_shots/match-analysis-page.png)
+The current thesis scope is intentionally narrower and more defensible:
 
-![3D bird's-eye sphere](docs/assets/demo_shots/birds-eye-current-state.png)
+- expand and document the `flexset` and `soloq` datasets
+- interpret `flexset` as an associative core-periphery player graph
+- compare Flex Queue and SoloQ without overstating social meaning
+- measure `opscore` and `feedscore` assortativity on graph edges
+- compute weighted Brandes betweenness centrality in Rust with Rayon
+- keep Genetic NeuroSim v2 as future work seeded from validated graph/player profiles
 
-It combines:
+Signed Balance / Structural Balance still exists in code as a diagnostic, but it is retired from the thesis-facing product narrative. See [Signed Balance Methodological Retirement](docs/signed-balance-methodological-retirement.md).
 
-- match collection and player normalization
-- Python graph generation and clustering
-- SQLite-backed cluster persistence
-- a Node/Express API layer
-- a Rust runtime for exact pathfinding and graph analytics
-- a React/Vite frontend for immersive exploration
+## Current UI
 
-## Why This Project Is Interesting
+The frontend has moved from a simple graph viewer into a research cockpit: dataset controls, pathfinding playback, Graph V2 exports, evidence documentation, and Rust-backed analytics pages all sit in one interface.
 
-This repository is not just a static network viewer. It is a research-and-systems playground built around an unusual dataset: a **signed social graph** where repeated ally and enemy interactions can both be analyzed.
+![Flexset associative graph](docs/assets/demo_shots/flexset_associative_graph.png)
 
-The current project direction emphasizes:
+![Assortativity readout](docs/assets/demo_shots/f-assortavity-socialpath-readout.png)
 
-- interpretable graph analytics
-- reproducible Rust-side computation
-- thesis-friendly experiments
-- visually strong interactive demos
-
-## Recent UI And Analytics Upgrades
-
-The current build now includes a much richer 3D graph presentation and analysis flow:
-
-- a precomputed **full 3D graph sphere** for large-scale exploration
-- a **lit globe / gas-giant style shell** so the sphere stays readable from far away
-- a **background star field** for cleaner spatial depth
-- **denser cluster rendering** with soft outline shells for visual separation
-- **zoom-reactive edge visibility** so actual match links become more legible up close
-- a **collapsible info card** in the sphere view, tucked behind an info icon
-- Rust-backed **signed structural-balance analysis**
-- cluster-aware pathfinding views with BFS, Dijkstra, Bidirectional search, and exact A*
-
-## Frontend Experience
-
-| Surface | What it is for |
-| --- | --- |
-| `Pathfinder Lab` | interactive shortest-path exploration with playback and algorithm comparison |
-| `Full 3D Graph Sphere` | bird's-eye exploration of the whole named-player network |
-| `Signed Balance` | structural-balance experiment over ally/enemy relationships |
-| player focus / global graph views | runtime graph inspection from the Rust engine |
-
-The current frontend includes both analysis-heavy data surfaces and more visual graph exploration views:
+![Brandes centrality result](docs/assets/demo_shots/brandes-result.png)
 
 ![Pathfinder replay panel](docs/assets/demo_shots/pathfinder-replay-panel.png)
 
+![Full 3D graph sphere](docs/assets/demo_shots/birds-eye-current-state.png)
+
+## What The System Does
+
+| Area | Current role |
+| --- | --- |
+| Dataset collection | Riot API match collection with dataset-specific presets for Apex Flex Queue and Master SoloQ |
+| Player scoring | role-aware `opscore` / `feedscore` style metrics used as node attributes |
+| Graph construction | repeated co-presence projection into ally/enemy relationship evidence and Graph V2 artifacts |
+| Assortativity | numeric Pearson-style edge correlation for `opscore` and `feedscore` |
+| Brandes centrality | weighted node betweenness centrality using `1 / strength` edge costs, with serial/parallel modes |
+| Pathfinder Lab | BFS, Dijkstra, Bidirectional search, exact A*, replay, and algorithm comparison |
+| Documentation panel | synced Obsidian-style docs, thesis PDF preview, and chapter evidence/provenance notes |
+
+## Evidence Trail
+
+The repository now includes an explicit proof map for thesis defense:
+
+- [Chapter Evidence Map](docs/chapter-evidence-map.md) links every thesis chapter to its supporting markdown notes, code paths, diagrams, datasets, and bibliography keys.
+- [Document Map](docs/DOCUMENT_MAP.md) is the agent-readable index for the documentation vault.
+- `docs/evidence/` contains one evidence note per thesis chapter.
+- The frontend Documentation page surfaces the chapter evidence notes as first-class material.
+
+The point is simple: claims in the thesis should point back to concrete sources and implementation artifacts.
+
 ## Architecture Snapshot
+
+```text
+frontend/ React + Vite UI
+    |
+    | HTTP JSON
+    v
+backend/server.js Express API shell
+    |
+    | SQLite, collector orchestration, Rust process bridge
+    v
+backend/pathfinder-rust Rust runtime
+    |
+    | GraphState, search, Graph V2, assortativity, centrality
+    v
+datasets / SQLite / generated graph artifacts
+```
 
 | Layer | Responsibility |
 | --- | --- |
-| Python pipeline | match-derived graph building, clustering, export workflows |
-| SQLite | shared persistence for clusters and enriched player metadata |
-| Node/Express backend | API shell, orchestration, frontend-facing endpoints |
-| Rust runtime | exact pathfinding, runtime graph views, signed-balance analysis |
-| React/Vite frontend | graph UI, controls, overlays, 3D exploration |
+| Python scripts | match collection, legacy graph-building, enrichment helpers |
+| SQLite | player metadata, scores, clusters, replay persistence, dataset-local databases |
+| Node/Express | API shell, dataset registry, runtime keys, collector lifecycle, Rust bridge |
+| Rust | canonical runtime graph projection, pathfinding, Graph V2 exports, analytics |
+| React/Vite | dataset controls, graph exploration, analytics pages, pathfinder playback, documentation reader |
 
-<details open>
-<summary><strong>Quick Start</strong></summary>
+## Quick Start
 
 ### Local development
 
@@ -86,23 +99,25 @@ npm run dev
 
 This starts:
 
-- frontend on `http://localhost:5173`
-- backend on `http://localhost:3001`
+- frontend: `http://localhost:5173`
+- backend: `http://localhost:3001`
 
 ### Docker
-
-If Docker Desktop is running:
 
 ```bash
 docker compose up --build
 ```
 
-</details>
+Docker runs the backend, frontend, and database explorer service. The frontend uses the bundled documentation manifest when repo-root `docs/` is not mounted into the frontend container.
 
-<details>
-<summary><strong>Main Workflows</strong></summary>
+## Main Workflows
 
-### 1. Collect match data
+### 1. Collect Match Data
+
+Collector presets live in [backend/collector_configs](backend/collector_configs):
+
+- [apex-flex-collector.json](backend/collector_configs/apex-flex-collector.json)
+- [master-soloq-eune-collector.json](backend/collector_configs/master-soloq-eune-collector.json)
 
 Run from `backend/`:
 
@@ -110,202 +125,145 @@ Run from `backend/`:
 python match_collector.py
 ```
 
-Important script-level knobs include:
-
-- `MATCHES_PER_PLAYER`
-- `MAX_ITERATIONS`
-- `QUEUE_TYPE`
-- Riot API pacing / rate-limit controls
-
-### 2. Add and normalize players
-
-Run from `backend/`:
+### 2. Normalize Players
 
 ```bash
+cd backend
 node add_new_players.js
 node normalize_players_by_puuid.js
 ```
 
-### 3. Generate the filtered graph
+### 3. Run Rust Analytics
 
-Run from `backend/`:
-
-```bash
-python new_build_graph.py --connected-only --min-weight 2
-```
-
-This will:
-
-- build the co-presence graph from real matches
-- enrich players from `playersrefined.db`
-- detect communities
-- write JSON artifacts into `backend/clusters/`
-- persist `python_population` clusters into SQLite
-- generate `backend/output/premade_network.html`
-
-### 4. Country-prediction pipeline
-
-Optional scripts in `backend/`:
-
-```bash
-python fetch_clusters.py
-python assign_countries.py
-```
-
-### 5. Rust runtime commands
-
-Run from `backend/pathfinder-rust/`:
+From `backend/pathfinder-rust/`:
 
 ```bash
 cargo run -- options
 ```
 
-Example search run:
+Assortativity:
+
+```bash
+echo '{"minEdgeSupport":1,"includeClusterBreakdown":true}' | cargo run -- assortativity
+```
+
+Betweenness centrality:
+
+```bash
+echo '{"pathMode":"battle-path","weightedMode":true,"parallel":true,"runSerialBaseline":true}' | cargo run -- betweenness-centrality
+```
+
+Pathfinding:
 
 ```bash
 echo '{"sourcePlayerId":"...","targetPlayerId":"...","algorithm":"astar","pathMode":"social-path","weightedMode":true,"options":{"includeTrace":false,"maxSteps":5000}}' | cargo run -- run
 ```
 
-Signed structural-balance analysis:
-
-```bash
-echo '{"minEdgeSupport":2,"tiePolicy":"exclude","maxTopNodes":10,"includeClusterSummaries":true}' | cargo run -- signed-balance
-```
-
-Signed-balance sensitivity sweep:
-
-```bash
-echo '{"minEdgeSupports":[1,2,3,4],"tiePolicies":["exclude","ally","enemy"],"includeClusterSummaries":false}' | cargo run -- balance-sweep
-```
-
-Assortativity significance against a permutation baseline:
-
-```bash
-echo '{"graphModes":["social-path","battle-path"],"metrics":["opscore","feedscore"],"permutationCount":100,"seed":42}' | cargo run -- assortativity-significance
-```
-
-Backend endpoint:
+Backend routes:
 
 ```text
-POST /api/pathfinder-rust/signed-balance
-POST /api/pathfinder-rust/balance-sweep
+POST /api/pathfinder-rust/assortativity
 POST /api/pathfinder-rust/assortativity-significance
+POST /api/pathfinder-rust/betweenness-centrality
+POST /api/pathfinder-rust/run
+POST /api/pathfinder-rust/compare
 ```
 
-</details>
+Signed-balance routes still exist for diagnostic reruns, but they should not be presented as a main empirical result unless the scope is explicitly reopened.
 
-<details>
-<summary><strong>Repository Map</strong></summary>
+## Repository Map
 
 ### Root
 
-- `package.json`: root development entrypoint
-- `docker-compose.yml`: frontend/backend container setup
-- `playersrefined.db`: enriched SQLite database
-- `docs/`: technical notes and architecture writeups
+- [AGENTS.md](AGENTS.md): active scope and future-work rules
+- [CLAUDE.md](CLAUDE.md): structural map for Claude/Codex sessions
+- [README.hu.md](README.hu.md): Hungarian README
+- [docker-compose.yml](docker-compose.yml): backend/frontend/database explorer services
+- [playersrefined.db](playersrefined.db): root refined player database
+- [docs/](docs): thesis notes, evidence notes, diagrams, and PDF sources
 
 ### Backend
 
-- `backend/server.js`: Express API shell
-- `backend/build_graph.py`: original graph builder
-- `backend/new_build_graph.py`: modularity/community-based graph builder
-- `backend/cluster_persistence.py`: shared cluster persistence helper
-- `backend/match_collector.py`: Riot crawler
-- `backend/add_new_players.js`: raw player ingestion
-- `backend/normalize_players_by_puuid.js`: player normalization
-- `backend/pathfinder/`: Node pathfinder and Rust bridge
-- `backend/pathfinder-rust/`: Rust graph runtime and analytics
-- `backend/data/`: raw match JSON files
-- `backend/clusters/`: exported cluster JSON files
-- `backend/output/`: generated HTML/network artifacts
+- [backend/server.js](backend/server.js): Express API, dataset registry, collector/runtime orchestration
+- [backend/match_collector.py](backend/match_collector.py): Riot API collector
+- [backend/scoring_config.js](backend/scoring_config.js): scoring configuration
+- [backend/cluster_persistence.py](backend/cluster_persistence.py): cluster persistence helper
+- [backend/pathfinder/rustBridge.js](backend/pathfinder/rustBridge.js): Node-to-Rust process bridge
+- [backend/pathfinder-rust](backend/pathfinder-rust): Rust graph runtime and analytics crate
+
+### Rust Runtime
+
+- [engine/graph.rs](backend/pathfinder-rust/src/engine/graph.rs): `GraphState` construction and relationship projection
+- [engine/search.rs](backend/pathfinder-rust/src/engine/search.rs): BFS, Dijkstra, Bidirectional search, exact A*
+- [engine/assortativity.rs](backend/pathfinder-rust/src/engine/assortativity.rs): numeric graph assortativity
+- [engine/centrality.rs](backend/pathfinder-rust/src/engine/centrality.rs): weighted Brandes betweenness centrality
+- [engine/graph_v2.rs](backend/pathfinder-rust/src/engine/graph_v2.rs): Graph V2 exports
+- [engine/birdseye.rs](backend/pathfinder-rust/src/engine/birdseye.rs): 3D graph artifact exports
+- [engine/signed_balance.rs](backend/pathfinder-rust/src/engine/signed_balance.rs): retired signed-balance diagnostic
 
 ### Frontend
 
-- `frontend/`: React + Vite application
-- `frontend/src/PathfinderLabPage.tsx`: pathfinder experience
-- `frontend/src/GraphSpherePage.tsx`: full 3D graph sphere
-- `frontend/src/SignedBalancePage.tsx`: signed-balance UI
+- [frontend/src/App.tsx](frontend/src/App.tsx): route tree and shell
+- [frontend/src/GraphSpherePage.tsx](frontend/src/GraphSpherePage.tsx): 3D global graph sphere
+- [frontend/src/PathfinderLabPage.tsx](frontend/src/PathfinderLabPage.tsx): pathfinding lab and replay surface
+- [frontend/src/AssortativityPage.tsx](frontend/src/AssortativityPage.tsx): performance-metric assortativity UI
+- [frontend/src/BetweennessCentralityPage.tsx](frontend/src/BetweennessCentralityPage.tsx): Brandes centrality UI
+- [frontend/src/DocumentationPage.tsx](frontend/src/DocumentationPage.tsx): synced markdown/PDF evidence reader
 
-</details>
+## Screenshots
 
-## Graph And Cluster Model
+### Dataset Graphs
 
-The project stores clusters as first-class database entities.
+![Flexset associative graph clusters](docs/assets/demo_shots/flexset_associative_graph_clusters.png)
 
-Two cluster families coexist:
+![SoloQ associative graph](docs/assets/demo_shots/soloq_associative_graph.png)
 
-- `python_population`
-  - produced by the Python pipeline
-  - used for population analysis and country inference
-- `rust_pathfinding`
-  - produced by the Rust runtime
-  - used for runtime graph structure, player focus, and heuristic support
+### Assortativity
 
-Persistence tables:
+![Flexset assortativity controls](docs/assets/demo_shots/assortavity-controls.png)
 
-- `clusters`
-- `cluster_members`
+![Flexset battle-path assortativity](docs/assets/demo_shots/f-assortavity-battle-path-opfeedscore.png)
 
-Weak one-off noise is filtered by repeated-tie thresholds, currently centered on `weight >= 2`.
+![SoloQ layman takeaways](docs/assets/demo_shots/sq-assortavity-layman-takeaways.png)
 
-## Pathfinder Model
+### Betweenness Centrality
 
-Supported path modes:
+![Brandes configuration](docs/assets/demo_shots/brandes-config.png)
 
-- `social-path`
-  - ally-only traversal
-- `battle-path`
-  - traversal across ally and enemy relationships
+![Graph broker highlighted in yellow](docs/assets/demo_shots/graph-brandes-brokerinyellow.png)
 
-Weighted mode makes stronger repeated relationships cheaper to traverse.
+### Pathfinder
 
-Rust A* currently uses:
+![A* weighted test run](docs/assets/demo_shots/pathfinder-astar-weighted-testrun.png)
 
-- landmark-based lower bounds
-- cluster-hop lower bounds
-- layout distance only as a tie-break
-
-## Environment Variables
-
-Useful variables across the project:
-
-- `RIOT_API_KEY`
-- `GRAPH_DB_PATH`
-- `DB_PATH`
-- `OPENROUTER_API_KEY`
-- `PATHFINDER_MATCH_DIR`
-- `PATHFINDER_RUST_BIN`
+![Replay overlay](docs/assets/demo_shots/pathfinder_replay_overlay.png)
 
 ## Documentation
 
-The documentation set is intentionally cross-linked so the project can later be lifted into a thesis-style LaTeX structure with minimal reshuffling.
+Recommended starting points:
 
-- start from [New GUI Overview](docs/new-gui-overview.md) for the frontend narrative
-- use [Route Transition Overlay](docs/route-transition-overlay.md) for the motion-system subsection
-- use [Bird's-Eye 3D Sphere](docs/birdseye-3d-sphere.md) for the global 3D visualization subsection
-- use [Signed Balance Theory And Implementation](docs/signed-balance-theory.md) for the signed-network experiment subsection
-- use [Experiment Runners For Signed-Balance Sensitivity And Assortativity Significance](docs/experiment-runners.md) for the reproducible experiment layer
-- use [Mock Datasets And Chaos Design](docs/mock-datasets-and-chaos-design.md) for synthetic evaluation and demo methodology
-- use [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md) for storage/runtime architecture
-- use [Pathfinder Backend Prototype Notes](docs/pathfinder-backend-prototype.md) for backend migration history
+- [Chapter Evidence Map](docs/chapter-evidence-map.md)
+- [Document Map](docs/DOCUMENT_MAP.md)
+- [Project Feasibility Review And Additions](docs/project-feasibility-review-and-additions.md)
+- [Flexset Associative Graph Interpretation](docs/flexset-associative-graph-interpretation.md)
+- [SoloQ Associative Graph Interpretation](docs/soloq-associative-graph-interpretation.md)
+- [Assortativity Analysis](docs/assortativity-analysis.md)
+- [Parallel Brandes Implementation Plan](docs/parallel-brandes-implementation-plan.md)
+- [Graph V2 Claude Analysis Report](docs/graph-v2-claude-analysis-report.md)
+- [Signed Balance Methodological Retirement](docs/signed-balance-methodological-retirement.md)
 
-- [New GUI Overview](docs/new-gui-overview.md)
-- [Route Transition Overlay](docs/route-transition-overlay.md)
-- [Bird's-Eye 3D Sphere](docs/birdseye-3d-sphere.md)
-- [Signed Balance Theory And Implementation](docs/signed-balance-theory.md)
-- [Experiment Runners For Signed-Balance Sensitivity And Assortativity Significance](docs/experiment-runners.md)
-- [Mock Datasets And Chaos Design](docs/mock-datasets-and-chaos-design.md)
-- [Rust Backend Prototype Notes](docs/pathfinder-backend-prototype.md)
-- [Unified Cluster Persistence And Exact A*](docs/unified-cluster-persistence-and-astar.md)
+## Current Non-Goals
+
+- Contraction Hierarchies
+- Temporal consistency / player stability analysis
+- community cohesion vs performance dashboards
+- treating enemy edges as reliable negative social ties
+- presenting Signed Balance as a main empirical result
+- data-driven `opscore` recalibration before the evidence pipeline is mature
+- performance claims without benchmarks
+- causal social or psychological claims that the data cannot support
 
 ## License
 
 This repository is licensed under the [MIT License](LICENSE).
 
-## Conclusions
-
-At this stage, the repository is best understood as a combined research and systems project:
-
-- the Rust runtime carries the algorithmic core
-- the frontend turns that core into a coherent interactive experience
-- the analytics and mock layers make the system easier to validate, explain, and later adapt into thesis chapters

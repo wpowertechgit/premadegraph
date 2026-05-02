@@ -1,0 +1,92 @@
+@startuml
+title Match Collector State Flow -- Rate Limits, Checkpoints, Seed Expansion, and Queue Filtering
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam wrapWidth 150
+skinparam maxMessageSize 70
+skinparam defaultTextAlignment center
+skinparam state {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  StartColor black
+  EndColor black
+}
+
+[*] --> Configure
+
+Configure : Select collector config
+Configure : Flex, SoloQ, or custom JSON
+Configure : Resolve dataset, queue, limits, and seeds
+
+Configure --> CheckpointDecision
+
+state "Checkpoint exists?" as CheckpointDecision <<choice>>
+CheckpointDecision --> RestoreRun : yes
+CheckpointDecision --> StartFresh : no
+
+RestoreRun : Restore frontier and processed players
+RestoreRun : Continue from saved checkpoint
+
+StartFresh : Create initial frontier from seed players
+StartFresh : Write first checkpoint
+
+RestoreRun --> Collecting
+StartFresh --> Collecting
+
+Collecting : Base collection state
+Collecting : Take next player from frontier
+Collecting : Fetch match ids and match details
+Collecting : Respect Riot API rate limits
+
+Collecting --> ApiDecision
+
+state "API / data result?" as ApiDecision <<choice>>
+ApiDecision --> RateLimited : HTTP 429
+ApiDecision --> RecoverableError : temporary error or invalid payload
+ApiDecision --> QueueFilter : match data received
+ApiDecision --> Finish : frontier empty, limit reached, or stop requested
+
+RateLimited : Wait Retry-After or configured delay
+RateLimited : Keep current progress
+RateLimited --> Collecting
+
+RecoverableError : Log error
+RecoverableError : Skip or quarantine invalid item
+RecoverableError : Write checkpoint if needed
+RecoverableError --> Collecting
+
+QueueFilter : Accept only configured queue
+QueueFilter : Flex 440 or SoloQ 420
+QueueFilter : Reject duplicate or incomplete matches
+
+QueueFilter --> SaveDecision
+
+state "Match accepted?" as SaveDecision <<choice>>
+SaveDecision --> SaveMatch : yes
+SaveDecision --> Collecting : no
+
+SaveMatch : Save raw match JSON
+SaveMatch : Update player stub
+SaveMatch : Write periodic checkpoint
+
+SaveMatch --> ExpandDecision
+
+state "Expand frontier?" as ExpandDecision <<choice>>
+ExpandDecision --> ExpandFrontier : yes
+ExpandDecision --> Collecting : no
+
+ExpandFrontier : Add newly discovered players
+ExpandFrontier : Avoid processed, queued, or invalid PUUIDs
+ExpandFrontier : Write checkpoint
+ExpandFrontier --> Collecting
+
+Finish : Write final checkpoint
+Finish : Write collection metadata
+Finish : Dataset ready for normalization and graph building
+
+Finish --> [*]
+
+@enduml

@@ -6,9 +6,9 @@ use crate::models::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
-const MAX_TRACE_STEPS_RESPONSE: usize = 900;
-const MAX_TRACE_FRONTIER_IDS: usize = 60;
-const MAX_TRACE_VISITED_IDS: usize = 160;
+const MAX_TRACE_STEPS_RESPONSE: usize = 500;
+const MAX_TRACE_FRONTIER_IDS: usize = 40;
+const MAX_TRACE_VISITED_IDS: usize = 60;
 
 #[derive(Debug, Clone)]
 pub(super) struct SearchResult {
@@ -128,14 +128,15 @@ impl PartialOrd for AStarState {
     }
 }
 
-fn traversal_cost(request: &PathfinderRequest, neighbor: &super::graph::Neighbor) -> usize {
-    let weight = neighbor.weight_for_mode(&request.path_mode) as usize;
-    if !request.weighted_mode {
-        return 1000;
-    }
+const WEIGHT_COST_SCALE: usize = 1_000_000;
 
+fn traversal_cost(request: &PathfinderRequest, neighbor: &super::graph::Neighbor) -> usize {
+    if !request.weighted_mode {
+        return WEIGHT_COST_SCALE;
+    }
+    let weight = neighbor.weight_for_mode(&request.path_mode) as usize;
     let safe = weight.max(1);
-    (1000 + safe - 1) / safe
+    (WEIGHT_COST_SCALE + safe - 1) / safe
 }
 
 pub(super) fn search_bfs(graph: &GraphState, request: &PathfinderRequest) -> SearchResult {

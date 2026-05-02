@@ -3,7 +3,10 @@
     "allow": [
       "Bash(python3 -)",
       "Bash(npm --prefix frontend run build)",
-      "Bash(git -C /c/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph log --oneline -20 -- frontend/src/PlayerDetailPage.tsx frontend/src/PlayerLookupField.tsx frontend/src/components/PlayerPerformanceCard.tsx)"
+      "Bash(git -C /c/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph log --oneline -20 -- frontend/src/PlayerDetailPage.tsx frontend/src/PlayerLookupField.tsx frontend/src/components/PlayerPerformanceCard.tsx)",
+      "Bash(cargo build *)",
+      "Bash(java -version)",
+      "Bash(where java *)"
     ]
   }
 }

@@ -31,6 +31,8 @@ const PROJECT_ROOT = path.resolve(__dirname, "..");
 const DOCUMENTATION_ROOT = path.join(PROJECT_ROOT, "docs");
 const DOCUMENTATION_TMP_ROOT = path.join(PROJECT_ROOT, "tmp", "documentation-viewer");
 const DOCUMENTATION_ROOT_MARKDOWN = new Set([
+  "AGENTS.md",
+  "CLAUDE.md",
   "README.md",
   "README.hu.md",
   "DESIGN.md",
@@ -1488,7 +1490,7 @@ app.use("/db-explorer", (req, res) => {
 
   req.pipe(proxyRequest);
 });
-app.use(bodyParser.json({ limit: "25mb" }));
+app.use(bodyParser.json({ limit: "100mb" }));
 app.use('/graph-view', express.static(path.join(__dirname, 'output')));
 const backendDir = __dirname;
 const replayDbPath = path.resolve(__dirname, "pathfinder_replays.db");

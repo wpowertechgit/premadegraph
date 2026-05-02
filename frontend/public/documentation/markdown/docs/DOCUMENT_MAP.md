@@ -102,6 +102,39 @@ Forward-looking integration docs. Out of active scope unless owner reopens.
 
 ---
 
+## Evidence & Provenance
+
+Chapter-level proof map for thesis defense, Obsidian graph navigation, and agent traceability.
+
+| Note | Path | Description | Tags |
+|------|------|-------------|------|
+| [[chapter-evidence-map]] | `chapter-evidence-map.md` | Master chapter-to-source provenance index — links each thesis chapter to source notes, code evidence, diagrams, datasets, and external citation keys | `evidence` `provenance` `thesis` `agent-reference` |
+| [[evidence/chapter-01-bevezetes]] | `evidence/chapter-01-bevezetes.md` | Evidence node for Chapter 1 — project overview, screenshots, and scope proof | `evidence` `chapter-01` |
+| [[evidence/chapter-02-problemafelvetes-es-motivacio]] | `evidence/chapter-02-problemafelvetes-es-motivacio.md` | Evidence node for Chapter 2 — motivation, scope rationale, and non-goals | `evidence` `chapter-02` |
+| [[evidence/chapter-03-szakirodalmi-hatter]] | `evidence/chapter-03-szakirodalmi-hatter.md` | Evidence node for Chapter 3 — bibliography and graph-theory references | `evidence` `chapter-03` |
+| [[evidence/chapter-04-riot-api-adatforrasok-es-adatgyujtesi-strategia]] | `evidence/chapter-04-riot-api-adatforrasok-es-adatgyujtesi-strategia.md` | Evidence node for Chapter 4 — Riot API, collector configs, and collection code | `evidence` `chapter-04` |
+| [[evidence/chapter-05-korai-rendszer-es-eredeti-pipeline]] | `evidence/chapter-05-korai-rendszer-es-eredeti-pipeline.md` | Evidence node for Chapter 5 — legacy Python and early pipeline proof | `evidence` `chapter-05` |
+| [[evidence/chapter-06-rendszerarchitektura-evolucioja]] | `evidence/chapter-06-rendszerarchitektura-evolucioja.md` | Evidence node for Chapter 6 — architecture docs, diagrams, and runtime split | `evidence` `chapter-06` |
+| [[evidence/chapter-07-tobb-adatkeszletes-architektura]] | `evidence/chapter-07-tobb-adatkeszletes-architektura.md` | Evidence node for Chapter 7 — dataset registry and dataset separation | `evidence` `chapter-07` |
+| [[evidence/chapter-08-sqlite-perzisztencia-es-klasztermodellezes]] | `evidence/chapter-08-sqlite-perzisztencia-es-klasztermodellezes.md` | Evidence node for Chapter 8 — SQLite persistence and cluster model | `evidence` `chapter-08` |
+| [[evidence/chapter-09-opscore-teljesitmenymetrika]] | `evidence/chapter-09-opscore-teljesitmenymetrika.md` | Evidence node for Chapter 9 — opscore docs and scoring code | `evidence` `chapter-09` |
+| [[evidence/chapter-10-grafepites-klaszterezes-es-perzisztencia]] | `evidence/chapter-10-grafepites-klaszterezes-es-perzisztencia.md` | Evidence node for Chapter 10 — graph builders and Graph V2 artifacts | `evidence` `chapter-10` |
+| [[evidence/chapter-11-orszag-es-regioelemzes-korabbi-modul]] | `evidence/chapter-11-orszag-es-regioelemzes-korabbi-modul.md` | Evidence node for Chapter 11 — retired country/region module | `evidence` `chapter-11` |
+| [[evidence/chapter-12-rust-futtatokornyezet-es-utvonalkereses]] | `evidence/chapter-12-rust-futtatokornyezet-es-utvonalkereses.md` | Evidence node for Chapter 12 — Rust runtime and pathfinding code | `evidence` `chapter-12` |
+| [[evidence/chapter-13-pathfinder-lab-es-algoritmus-osszehasonlitas]] | `evidence/chapter-13-pathfinder-lab-es-algoritmus-osszehasonlitas.md` | Evidence node for Chapter 13 — pathfinder UI, replay, and algorithm comparison | `evidence` `chapter-13` |
+| [[evidence/chapter-14-3d-birdseye-sphere-es-globalis-vizualizacio]] | `evidence/chapter-14-3d-birdseye-sphere-es-globalis-vizualizacio.md` | Evidence node for Chapter 14 — 3D graph sphere and artifact pipeline | `evidence` `chapter-14` |
+| [[evidence/chapter-15-strukturalis-egyensuly-modszertani-hatareset]] | `evidence/chapter-15-strukturalis-egyensuly-modszertani-hatareset.md` | Evidence node for Chapter 15 — signed balance as methodological boundary case | `evidence` `chapter-15` |
+| [[evidence/chapter-16-asszortativitasi-elemzes]] | `evidence/chapter-16-asszortativitasi-elemzes.md` | Evidence node for Chapter 16 — assortativity design and implementation | `evidence` `chapter-16` |
+| [[evidence/chapter-17-parhuzamos-brandes-betweenness-centralitas]] | `evidence/chapter-17-parhuzamos-brandes-betweenness-centralitas.md` | Evidence node for Chapter 17 — Brandes centrality and Rayon implementation | `evidence` `chapter-17` |
+| [[evidence/chapter-18-kiserleti-futtatasok-validacio-es-eredmenyek]] | `evidence/chapter-18-kiserleti-futtatasok-validacio-es-eredmenyek.md` | Evidence node for Chapter 18 — experiment runners and validation outputs | `evidence` `chapter-18` |
+| [[evidence/chapter-19-rendszerszintu-ertekeles-es-megvitatasa]] | `evidence/chapter-19-rendszerszintu-ertekeles-es-megvitatasa.md` | Evidence node for Chapter 19 — system evaluation and limitations | `evidence` `chapter-19` |
+| [[evidence/chapter-20-flexset-versus-soloq-empirikus-osszehasonlitas]] | `evidence/chapter-20-flexset-versus-soloq-empirikus-osszehasonlitas.md` | Evidence node for Chapter 20 — Flex/SoloQ comparison proof | `evidence` `chapter-20` |
+| [[evidence/chapter-21-osszegzes]] | `evidence/chapter-21-osszegzes.md` | Evidence node for Chapter 21 — conclusion and scope synthesis | `evidence` `chapter-21` |
+| [[evidence/chapter-22-databaseproject-kiegeszito-alprojekt]] | `evidence/chapter-22-databaseproject-kiegeszito-alprojekt.md` | Evidence node for Chapter 22 — databaseproject coursework and C# browser | `evidence` `chapter-22` |
+| [[evidence/chapter-23-jovobeli-fejlesztesek]] | `evidence/chapter-23-jovobeli-fejlesztesek.md` | Evidence node for Chapter 23 — future work, deferred scope, and retired features | `evidence` `chapter-23` |
+
+---
+
 ## Database Project (Coursework)
 
 Hungarian university database course deliverables. Separate from main thesis scope.

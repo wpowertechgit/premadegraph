@@ -9,12 +9,15 @@ Premade Graph is a League of Legends thesis project that collects match data, bu
 The current thesis direction is research-and-systems oriented:
 
 - expand and document datasets first
-- analyze signed ally/enemy graph structure with Structural Balance Theory
+- interpret `flexset` as an associative core-periphery player graph
+- compare Flex Queue and SoloQ datasets without overstating social meaning
 - measure performance-metric assortativity on graph edges
 - compute betweenness centrality with Rust Brandes + Rayon
 - later seed Genetic NeuroSim v2 from validated graph/player profiles
 
 Contraction Hierarchies, temporal consistency/player stability, and community cohesion vs performance are out of scope unless the owner explicitly reopens them.
+
+Signed Balance / Structural Balance Theory is retired from the thesis-facing product narrative. Keep existing backend/Rust/frontend code as an experimental diagnostic if useful, but do not present Signed Balance as a main empirical result or visible workflow. The authoritative scope note is `docs/signed-balance-methodological-retirement.md`.
 
 ## High-Level Architecture
 
@@ -41,7 +44,7 @@ Main responsibility split:
 - Python scripts: match collection, older graph-building and clustering workflows, country/enrichment helpers.
 - SQLite databases: player metadata, raw/refined scores, clusters, pathfinder replays.
 - Node/Express: frontend-facing API, dataset registry, collector orchestration, runtime key management, Rust process bridge.
-- Rust: canonical runtime graph projection, exact pathfinding, signed balance, assortativity, betweenness centrality, 3D graph bundle exports.
+- Rust: canonical runtime graph projection, exact pathfinding, assortativity, betweenness centrality, 3D graph bundle exports, and retired signed-balance diagnostics.
 - React/Vite: analysis pages, graph exploration, pathfinder playback, dataset/key controls.
 
 ## Root Files
@@ -103,7 +106,7 @@ Engine modules:
 
 - `engine/graph.rs`: builds `GraphState` from match data and SQLite rows. Owns adjacency, signed pair relations, player rows, clusters, landmarks, and snapshots.
 - `engine/search.rs`: BFS, Dijkstra, bidirectional search, and exact A*.
-- `engine/signed_balance.rs`: Structural Balance Theory analysis over signed triads.
+- `engine/signed_balance.rs`: retired Structural Balance diagnostic over signed triads; do not promote as active thesis workflow.
 - `engine/assortativity.rs`: numeric assortativity for `opscore` and `feedscore`.
 - `engine/centrality.rs`: weighted Brandes betweenness centrality with serial/parallel modes.
 - `engine/experiments.rs`: sensitivity/permutation-style experiment runners.
@@ -171,10 +174,10 @@ Main pages:
 - `PlayerDetailPage`: player detail surface.
 - `GraphSpherePage` / `GraphSphereScene`: full 3D graph sphere.
 - `PathfinderLabPage`: shortest-path lab with playback and comparisons.
-- `SignedBalancePage`: Structural Balance UI.
+- `SignedBalancePage`: retired signed-balance diagnostic UI; do not treat as thesis-facing without explicit scope reopening.
 - `AssortativityPage`: assortativity UI.
 - `BetweennessCentralityPage`: betweenness centrality UI.
-- `DualAnalyticsView`: signed balance + assortativity combined analytics.
+- `DualAnalyticsView`: legacy combined analytics view; avoid promoting signed balance as a main result.
 
 Shared frontend helpers:
 
@@ -213,11 +216,15 @@ When touching research features, preserve these boundaries:
 
 Current active research modules:
 
-- Signed Balance: `engine/signed_balance.rs`, `SignedBalancePage.tsx`, docs in `docs/signed-balance-theory.md` and `docs/thesis-framework-signed-balance-and-assortativity.md`.
+- Dataset expansion: `backend/collector_configs/`, `backend/match_collector.py`, docs in `docs/apex-flex-collection-strategy.md`, `docs/master-soloq-eune-collection-strategy.md`, and `docs/multi-dataset-architecture.md`.
+- Flex/SoloQ graph interpretation: docs in `docs/flexset-associative-graph-interpretation.md`, `docs/soloq-associative-graph-interpretation.md`, and `docs/graph-v2-claude-analysis-report.md`.
 - Assortativity: `engine/assortativity.rs`, `engine/experiments.rs`, `AssortativityPage.tsx`, docs in `docs/assortativity-analysis.md`.
 - Betweenness Centrality: `engine/centrality.rs`, `BetweennessCentralityPage.tsx`, docs in `docs/parallel-brandes-implementation-plan.md`.
-- Dataset expansion: `backend/collector_configs/`, `backend/match_collector.py`, docs in `docs/apex-flex-collection-strategy.md`, `docs/master-soloq-eune-collection-strategy.md`, and `docs/multi-dataset-architecture.md`.
 - Genetic NeuroSim v2 planning: docs in `docs/premadegraph-x-genetic-neurosim-integration-plan.md`.
+
+Retired diagnostic module:
+
+- Signed Balance: `engine/signed_balance.rs`, `SignedBalancePage.tsx`, docs in `docs/signed-balance-methodological-retirement.md`, `docs/signed-balance-theory.md`, and `docs/thesis-framework-signed-balance-and-assortativity.md`. Read the retirement note first.
 
 ## Development Commands
 
@@ -257,10 +264,11 @@ cargo run -- spec
 Example Rust analysis commands:
 
 ```bash
-echo '{"minEdgeSupport":2,"tiePolicy":"exclude","maxTopNodes":10,"includeClusterSummaries":true}' | cargo run -- signed-balance
 echo '{"minEdgeSupport":1,"includeClusterBreakdown":true}' | cargo run -- assortativity
 echo '{"pathMode":"battle-path","weightedMode":true,"parallel":true,"runSerialBaseline":true}' | cargo run -- betweenness-centrality
 ```
+
+Signed-balance commands still exist for diagnostic reruns, but they are not part of the active thesis-facing workflow unless the project owner explicitly reopens that scope.
 
 ## Before Editing
 
@@ -278,8 +286,7 @@ echo '{"pathMode":"battle-path","weightedMode":true,"parallel":true,"runSerialBa
 - Need graph semantics? Start in `backend/pathfinder-rust/src/engine/graph.rs`.
 - Need request/response contracts? Start in `backend/pathfinder-rust/src/models.rs` and the matching `frontend/src/*Types.ts`.
 - Need pathfinding behavior? Start in `engine/search.rs` and `PathfinderLabPage.tsx`.
-- Need signed balance? Start in `engine/signed_balance.rs` and `SignedBalancePage.tsx`.
+- Need retired signed-balance diagnostics? Read `docs/signed-balance-methodological-retirement.md` first, then inspect `engine/signed_balance.rs` and `SignedBalancePage.tsx`.
 - Need assortativity? Start in `engine/assortativity.rs`, `engine/experiments.rs`, and `AssortativityPage.tsx`.
 - Need centrality? Start in `engine/centrality.rs` and `BetweennessCentralityPage.tsx`.
 - Need 3D graph artifacts? Start in `engine/birdseye.rs`, `engine/graph_v2.rs`, `GraphSpherePage.tsx`, and `GraphV2Scene.tsx`.
-

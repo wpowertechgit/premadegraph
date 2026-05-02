@@ -14,7 +14,9 @@ Ez a mappa a jelenlegi Premade Graph szakdolgozati projekt alapján készült ad
 - `sample_data.sql` - mintaadatok, legalább 10 sor táblánként.
 - `views_queries.sql` - 2 nézet és 20 különböző lekérdezés.
 - `procedures_triggers.sql` - 5 tárolt eljárás, rekurzív függvény és 2 trigger.
-- `er_diagram.png` - ER diagram kép, amelyet a LaTeX dokumentáció is beilleszt.
+- `sqlite-project-er-diagram.puml` - PlantUML ER diagram forrás a tényleges SQLite projektadatbázishoz.
+- `sqlite-project-er-diagram.png` - a PlantUML forrásból generált ER diagram kép, amelyet a LaTeX dokumentáció beilleszt.
+- `er_diagram.png` - korábbi ER diagram kép.
 - `premadegraph_database.drawio.png` - exportált adatbázisdiagram kép.
 - `simple-interface/` - ASP.NET Core adatbázis-böngésző, amely a backend valódi SQLite adatbázisaiból generált projektadatbázist olvassa.
 

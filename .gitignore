@@ -13,11 +13,9 @@ backend/pathfinder-rust/target/
 backend/pathfinder-rust/Cargo.lock
 *.pyc
 __pycache__
-AGENTS.md
 *.db-shm
 *.db-wal
 *.sqlite
-*.puml
 *.u32
 *.f32
 backend/pathfinder-rust/cache
@@ -34,3 +32,4 @@ docs/databaseproject/simple-interface/Data
 docs/databaseproject/simple-interface/obj
 *.mmd
 *.drawio
+backend/plagiarism_checker.py

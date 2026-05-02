@@ -1,0 +1,62 @@
+@startuml thesis_validation_pipeline
+skinparam monochrome true
+skinparam shadowing false
+skinparam DefaultFontName "Courier New"
+skinparam ArrowColor black
+skinparam ActivityBorderColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityDiamondBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam PartitionBorderColor black
+skinparam PartitionBackgroundColor white
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+skinparam TitleFontStyle bold
+skinparam TitleFontSize 14
+
+title Thesis Evidence Validation Pipeline
+
+start
+
+partition "Validation Inputs" {
+  :Dataset Registry\n//backend/data/  —  active dataset selector//;
+  :Match JSON Files\n//backend/data/<dataset>/matches/*.json//;
+  :playersrefined.db\n//root-level refined player + score database//;
+  :Graph V2 Artifacts\n//*.graphv2.json  /  birdseye-3d bundles//;
+}
+
+partition "Verification Commands" {
+  fork
+    :**[Rust]** cargo check && cargo test\n//static analysis + unit suite//;
+  fork again
+    :**[Rust]** cargo run -- assortativity\n//opscore + feedscore r-values//;
+  fork again
+    :**[Rust]** cargo run -- betweenness-centrality\n//parallel Brandes + serial baseline//;
+  fork again
+    :**[Rust]** cargo run -- graph-v2-export\n//serialize full graph artifact//;
+  fork again
+    :**[Node]** npm --prefix frontend run build\n//TypeScript compile + Vite bundle//;
+  fork again
+    :**[LaTeX]** pdflatex mainraw.tex (x2)\n//compile thesis PDF//;
+  end fork
+}
+
+partition "Output Groups" {
+  fork
+    :**Dataset Readiness**\n* registry loads without error\n* match count above collection threshold\n* player rows present in db;
+  fork again
+    :**Graph Artifact Validity**\n* graph-v2 node/edge counts logged\n* birdseye bundle file size > 0\n* adjacency JSON serialises cleanly;
+  fork again
+    :**Rust Analytics Validity**\n* assortativity r in [-1.0, 1.0]\n* betweenness scores sum > 0\n* parallel delta < epsilon vs serial;
+  fork again
+    :**Frontend Route Presence**\n* /assortativity renders\n* /betweenness-centrality renders\n* /graph-v2 and /graph-sphere render;
+  fork again
+    :**Thesis PDF Build**\n* pdflatex exits 0\n* no undefined references\n* figures and tables embedded;
+  end fork
+}
+
+:**Validated Thesis Evidence Pipeline**;
+
+stop
+
+@enduml

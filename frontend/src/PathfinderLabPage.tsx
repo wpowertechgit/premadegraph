@@ -90,6 +90,10 @@ function buildReplayTitle(sourceLabel: string, targetLabel: string, datasetPlaye
 
 const ALL_ALGORITHMS: AlgorithmId[] = ["bfs", "dijkstra", "bidirectional", "astar"];
 
+function stripGraphSnapshot(run: PathfinderRunResponse): PathfinderRunResponse {
+  return { ...run, graphSnapshot: { nodes: [], edges: [] } };
+}
+
 function createComparisonRowsFromRuns(runs: PathfinderRunResponse[]): ComparisonRow[] {
   const runByAlgorithm = new Map(runs.map((run) => [run.request.algorithm, run] as const));
   return ALL_ALGORITHMS.map((algorithm) => {
@@ -183,11 +187,13 @@ export default function PathfinderLabPage() {
   };
 
   const snapshot = useMemo(
-    () =>
-      run?.graphSnapshot ??
-      (usingFrontendReplay
+    () => {
+      const runSnapshot = run?.graphSnapshot;
+      if (runSnapshot?.nodes?.length) return runSnapshot;
+      return usingFrontendReplay
         ? getMockGraphSnapshot(pathMode, sourcePlayerId || "a", targetPlayerId || "f")
-        : backendOptions?.previewSnapshot ?? { nodes: [], edges: [] }),
+        : backendOptions?.previewSnapshot ?? { nodes: [], edges: [] };
+    },
     [backendOptions, pathMode, run, sourcePlayerId, targetPlayerId, usingFrontendReplay],
   );
 
@@ -420,7 +426,7 @@ export default function PathfinderLabPage() {
 	              weightedMode: refreshedReplay.weightedMode,
 	              selectedAlgorithm: refreshedReplay.selectedAlgorithm,
 	              comparisonRows: refreshedReplay.comparisonRows,
-	              algorithmRuns: refreshedReplay.algorithmRuns,
+	              algorithmRuns: refreshedReplay.algorithmRuns.map(stripGraphSnapshot),
 	            }).catch((error) => {
 	              console.error("Failed to refresh traced replay run:", error);
 	            });
@@ -450,7 +456,7 @@ export default function PathfinderLabPage() {
             weightedMode: updatedReplay.weightedMode,
             selectedAlgorithm: updatedReplay.selectedAlgorithm,
             comparisonRows: updatedReplay.comparisonRows,
-            algorithmRuns: updatedReplay.algorithmRuns,
+            algorithmRuns: updatedReplay.algorithmRuns.map(stripGraphSnapshot),
           }).catch((error) => {
             console.error("Failed to refresh saved replay selection:", error);
           });
@@ -507,7 +513,7 @@ export default function PathfinderLabPage() {
         weightedMode: nextWeightedMode,
         selectedAlgorithm: nextAlgorithm,
         comparisonRows: nextComparisonRows,
-        algorithmRuns,
+        algorithmRuns: algorithmRuns.map(stripGraphSnapshot),
       };
       const savedReplay = await savePathfinderReplay(replayDraft);
       replayCacheRef.current.set(savedReplay.cacheKey, savedReplay);

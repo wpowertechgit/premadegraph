@@ -45,6 +45,9 @@ function documentationSyncPlugin(): Plugin {
 
         try {
           const manifest = syncDocumentation();
+          if (!manifest.documents.length) {
+            throw new Error("Documentation sync produced an empty manifest.");
+          }
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");
           res.end(JSON.stringify({ ok: true, ...manifest }));
@@ -68,6 +71,9 @@ function documentationSyncPlugin(): Plugin {
         try {
           const compile = await runTectonicCompile();
           const manifest = syncDocumentation();
+          if (!manifest.documents.length) {
+            throw new Error("Documentation sync produced an empty manifest.");
+          }
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");
           res.end(JSON.stringify({

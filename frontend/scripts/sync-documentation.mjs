@@ -9,6 +9,8 @@ export const publicRoot = path.join(frontendRoot, "public", "documentation");
 export const markdownPublicRoot = path.join(publicRoot, "markdown");
 const generatedManifestPath = path.join(frontendRoot, "src", "documentationManifest.generated.json");
 const rootMarkdown = [
+  "AGENTS.md",
+  "CLAUDE.md",
   "README.md",
   "README.hu.md",
   "DESIGN.md",
@@ -62,6 +64,9 @@ function titleFromFolderName(folderName) {
 
 function groupDocsMarkdown(relativePath) {
   const pathParts = relativePath.split("/");
+  if (relativePath === "docs/chapter-evidence-map.md" || relativePath.startsWith("docs/evidence/")) {
+    return "Chapter Evidence";
+  }
   if (pathParts.length > 2) {
     return titleFromFolderName(pathParts[1]);
   }
@@ -175,6 +180,64 @@ function copyMarkdownDocument(sourcePath, relativePath, group) {
   };
 }
 
+function manifestFromExistingPublicMarkdown() {
+  if (!fs.existsSync(markdownPublicRoot)) {
+    return [];
+  }
+
+  const collect = (currentDir, prefix = "") => {
+    const documents = [];
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    for (const entry of entries) {
+      const sourcePath = path.join(currentDir, entry.name);
+      const relativePath = toPortablePath(path.join(prefix, entry.name));
+      if (entry.isDirectory()) {
+        documents.push(...collect(sourcePath, relativePath));
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) {
+        continue;
+      }
+
+      const content = fs.readFileSync(sourcePath, "utf-8");
+      const stats = fs.statSync(sourcePath);
+      documents.push({
+        id: relativePath,
+        path: relativePath,
+        title: path.basename(relativePath),
+        summary: readMarkdownSummary(content),
+        group: relativePath.startsWith("docs/") ? groupDocsMarkdown(relativePath) : "Project",
+        size: stats.size,
+        updatedAt: stats.mtime.toISOString(),
+        contentUrl: publicMarkdownUrl(relativePath),
+        content,
+      });
+    }
+    return documents;
+  };
+
+  return collect(markdownPublicRoot);
+}
+
+function readExistingManifest() {
+  for (const manifestPath of [generatedManifestPath, path.join(publicRoot, "manifest.json")]) {
+    if (!fs.existsSync(manifestPath)) {
+      continue;
+    }
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      if (Array.isArray(manifest.documents) && manifest.documents.length > 0) {
+        return manifest;
+      }
+    } catch {
+      // Ignore malformed generated manifests and continue to the next fallback.
+    }
+  }
+  return null;
+}
+
 function collectDocsMarkdown(currentDir, prefix = "docs") {
   if (!fs.existsSync(currentDir)) {
     return [];
@@ -214,6 +277,36 @@ export function syncDocumentation() {
     ...projectDocuments,
     ...collectDocsMarkdown(docsRoot),
   ].sort((left, right) => left.path.localeCompare(right.path));
+
+  if (documents.length === 0) {
+    const existingManifest = readExistingManifest();
+    if (existingManifest) {
+      return existingManifest;
+    }
+
+    const publicDocuments = manifestFromExistingPublicMarkdown()
+      .sort((left, right) => left.path.localeCompare(right.path));
+    if (publicDocuments.length > 0) {
+      const publicManifest = {
+        documents: publicDocuments,
+        thesisPdf: fs.existsSync(path.join(publicRoot, "thesis.pdf"))
+          ? {
+              title: "Compiled Thesis PDF",
+              sourcePath: "docs/mainraw.pdf",
+              url: "/documentation/thesis.pdf",
+              size: fs.statSync(path.join(publicRoot, "thesis.pdf")).size,
+              updatedAt: fs.statSync(path.join(publicRoot, "thesis.pdf")).mtime.toISOString(),
+            }
+          : null,
+      };
+      fs.writeFileSync(path.join(publicRoot, "manifest.json"), `${JSON.stringify(publicManifest, null, 2)}\n`);
+      fs.writeFileSync(generatedManifestPath, `${JSON.stringify(publicManifest, null, 2)}\n`);
+      return publicManifest;
+    }
+
+    console.warn(`Documentation sync found no markdown documents. Checked project root ${projectRoot} and docs root ${docsRoot}.`);
+    return { documents: [], thesisPdf: null };
+  }
 
   const thesisSource = path.join(docsRoot, "mainraw.pdf");
   let thesisPdf = null;
