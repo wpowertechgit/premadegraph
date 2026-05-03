@@ -617,6 +617,7 @@ impl TribeSimulation {
         if let Some(v) = patch.food_spawn_rate { self.config.food_spawn_rate = v; }
         if let Some(v) = patch.energy_decay { self.config.energy_decay = v; }
         if let Some(v) = patch.tick_rate { self.config.tick_rate = v; }
+        if let Some(v) = patch.world_seed { self.config.world_seed = v; }
     }
 
     pub fn status(&self) -> StatusResponse {
