@@ -2,6 +2,23 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   Box, Typography, Slider, Button, Stack, Paper, Chip
 } from "@mui/material";
+import {
+  tileIdToAxial,
+  axialToPixel,
+  drawHexPath,
+  computeHexSize,
+  hexCanvasDims,
+} from "../neurosimHex";
+
+// ─── E1: Protocol version constants ─────────────────────────────────────────
+// Current frame is V0 (legacy binary, no envelope header).
+// Planned envelope: u16 protocol_version | u16 message_type | u32 payload_len | u64 tick | payload
+export const PROTOCOL_VERSION = 1;
+export const MESSAGE_TRIBE_FRAME_V0 = 0x0000; // legacy frame, no header
+export const MESSAGE_WORLD_SNAPSHOT_V1 = 0x0001;
+export const MESSAGE_TILE_DELTA_V1 = 0x0002;
+export const MESSAGE_TRIBE_DELTA_V1 = 0x0003;
+// ─────────────────────────────────────────────────────────────────────────────
 
 const GRID_W = 40;
 const GRID_H = 40;
@@ -66,6 +83,32 @@ interface SimFrame {
   foodTiles: Array<{ index: number; food: number }>;
 }
 
+// ─── E3: World snapshot types ─────────────────────────────────────────────
+interface WorldTile {
+  biome: number;
+  max_food: number;
+}
+
+interface WorldSnapshot {
+  width: number;
+  height: number;
+  seed: number;
+  tiles: WorldTile[];
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── E5: Tile ownership types ─────────────────────────────────────────────
+interface TileOwner {
+  tile_id: number;
+  owner_tribe_id: number | null;
+  contested: boolean;
+}
+
+interface TileOwnershipSnapshot {
+  tiles: TileOwner[];
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function parseFrame(buf: ArrayBuffer): SimFrame {
   const view = new DataView(buf);
   let offset = 0;
@@ -108,6 +151,57 @@ function parseFrame(buf: ArrayBuffer): SimFrame {
   return { tick, generation, tribes, foodTiles };
 }
 
+// ─── E3: Fetch world snapshot (biomes), graceful fallback to all-plains ──────
+async function fetchWorldSnapshot(
+  biomeRef: React.MutableRefObject<Uint8Array>,
+  gridWRef: React.MutableRefObject<number>,
+  gridHRef: React.MutableRefObject<number>,
+): Promise<void> {
+  try {
+    const res = await fetch("/api/neurosim/api/world-snapshot");
+    if (!res.ok) return; // endpoint not yet implemented — keep plains fallback
+    const snap: WorldSnapshot = await res.json();
+    gridWRef.current = snap.width;
+    gridHRef.current = snap.height;
+    const total = snap.width * snap.height;
+    const biomes = new Uint8Array(total);
+    for (let i = 0; i < Math.min(total, snap.tiles.length); i++) {
+      biomes[i] = snap.tiles[i].biome;
+    }
+    biomeRef.current = biomes;
+  } catch {
+    // backend not running or endpoint missing — retain all-plains default
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── E5: Fetch tile ownership, populate tribeTerritory and tribeColors ───────
+async function fetchTileOwnership(
+  tribeTerritory: React.MutableRefObject<Map<number, number>>,
+  tribeColors: React.MutableRefObject<Map<number, string>>,
+): Promise<void> {
+  try {
+    const res = await fetch("/api/neurosim/api/tile-ownership");
+    if (!res.ok) return; // endpoint not yet implemented
+    const snap: TileOwnershipSnapshot = await res.json();
+    const territory = new Map<number, number>();
+    for (const t of snap.tiles) {
+      if (t.owner_tribe_id !== null) {
+        territory.set(t.tile_id, t.owner_tribe_id);
+        // assign stable color if not already assigned
+        if (!tribeColors.current.has(t.owner_tribe_id)) {
+          const hue = (t.owner_tribe_id * 137) % 360; // golden angle spread
+          tribeColors.current.set(t.owner_tribe_id, `hsla(${hue},65%,55%,0.35)`);
+        }
+      }
+    }
+    tribeTerritory.current = territory;
+  } catch {
+    // endpoint missing — leave territory map empty
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function TribalSimulationPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -115,6 +209,9 @@ export default function TribalSimulationPage() {
   const biomeRef = useRef<Uint8Array>(new Uint8Array(GRID_W * GRID_H).fill(0));
   const tribeTerritory = useRef<Map<number, number>>(new Map()); // tileIdx -> tribeId
   const tribeColors = useRef<Map<number, string>>(new Map());
+  // E3/E5: dynamic grid dims from world snapshot (fallback: 40x40)
+  const gridWRef = useRef<number>(GRID_W);
+  const gridHRef = useRef<number>(GRID_H);
   const [frame, setFrame] = useState<SimFrame | null>(null);
   const [connected, setConnected] = useState(false);
   const [tickRate, setTickRate] = useState(20);
@@ -129,53 +226,78 @@ export default function TribalSimulationPage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Draw tiles
-    for (let y = 0; y < GRID_H; y++) {
-      for (let x = 0; x < GRID_W; x++) {
-        const idx = y * GRID_W + x;
-        const biome = biomeRef.current[idx];
-        const food = foodRef.current[idx];
-        const px = x * TILE_PX;
-        const py = y * TILE_PX;
+    // F2: hex rendering — use dynamic grid dims from world snapshot if available
+    const gw = gridWRef.current;
+    const gh = gridHRef.current;
+    const hexSize = computeHexSize(gw, gh, CANVAS_SIZE);
+    const { w: canvasW, h: canvasH, originX, originY } = hexCanvasDims(gw, gh, hexSize);
+
+    // Resizing clears the canvas
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+
+    // Draw hex tiles: biome fill → food overlay → territory tint
+    for (let row = 0; row < gh; row++) {
+      for (let col = 0; col < gw; col++) {
+        const idx = row * gw + col;
+        const biome = biomeRef.current[idx] ?? 0;
+        const food = foodRef.current[idx] ?? 0.5;
+        const { q, r } = tileIdToAxial(idx, gw);
+        const { x, y } = axialToPixel(q, r, hexSize);
+        const hx = x + originX;
+        const hy = y + originY;
 
         ctx.fillStyle = BIOME_COLORS[biome] || "#8BC34A";
-        ctx.fillRect(px, py, TILE_PX, TILE_PX);
+        drawHexPath(ctx, hx, hy, hexSize);
+        ctx.fill();
 
-        // Food overlay (greenish alpha)
-        ctx.fillStyle = `rgba(0,200,0,${food * 0.3})`;
-        ctx.fillRect(px, py, TILE_PX, TILE_PX);
+        if (food > 0.05) {
+          ctx.fillStyle = `rgba(0,200,0,${food * 0.3})`;
+          drawHexPath(ctx, hx, hy, hexSize);
+          ctx.fill();
+        }
 
-        // Territory tint
+        // E5: territory tint from ownership snapshot
         const tribeId = tribeTerritory.current.get(idx);
         if (tribeId !== undefined) {
-          const color = tribeColors.current.get(tribeId) || "rgba(255,255,255,0.2)";
-          ctx.fillStyle = color;
-          ctx.fillRect(px, py, TILE_PX, TILE_PX);
+          ctx.fillStyle = tribeColors.current.get(tribeId) || "rgba(255,255,255,0.2)";
+          drawHexPath(ctx, hx, hy, hexSize);
+          ctx.fill();
         }
       }
     }
 
-    // Draw tribe home tile markers
+    // Draw tribe home tile markers at hex centers
     for (const tribe of f.tribes) {
-      const tx = tribe.homeTile % GRID_W;
-      const ty = Math.floor(tribe.homeTile / GRID_W);
-      const px = tx * TILE_PX;
-      const py = ty * TILE_PX;
+      const { q, r } = tileIdToAxial(tribe.homeTile, gw);
+      const { x, y } = axialToPixel(q, r, hexSize);
+      const hx = x + originX;
+      const hy = y + originY;
 
       // Behavior dot
       ctx.fillStyle = BEHAVIOR_COLORS[tribe.behavior] || "#fff";
       ctx.beginPath();
-      ctx.arc(px + TILE_PX / 2, py + TILE_PX / 2, 5, 0, Math.PI * 2);
+      ctx.arc(hx, hy, 4, 0, Math.PI * 2);
       ctx.fill();
 
       // Population label (tiny)
       ctx.fillStyle = "#fff";
-      ctx.font = "8px monospace";
-      ctx.fillText(String(tribe.population), px + 2, py + TILE_PX - 2);
+      ctx.font = "7px monospace";
+      ctx.fillText(String(tribe.population), hx - 3, hy + hexSize - 2);
     }
   }, []);
 
   useEffect(() => {
+    // E3: fetch world snapshot on mount — populates biomes and grid dims
+    fetchWorldSnapshot(biomeRef, gridWRef, gridHRef);
+
+    // E5: poll tile ownership every 2 s — populates tribeTerritory + colors
+    const ownershipInterval = setInterval(() => {
+      fetchTileOwnership(tribeTerritory, tribeColors);
+    }, 2000);
+    // initial fetch
+    fetchTileOwnership(tribeTerritory, tribeColors);
+
     const ws = new WebSocket(`ws://${window.location.hostname}:3001/api/neurosim/ws/tribal-simulation`);
     wsRef.current = ws;
     ws.binaryType = "arraybuffer";
@@ -190,14 +312,28 @@ export default function TribalSimulationPage() {
 
       // Update food tile cache
       for (const ft of f.foodTiles) {
-        foodRef.current[ft.index] = ft.food;
+        if (ft.index < foodRef.current.length) {
+          foodRef.current[ft.index] = ft.food;
+        }
+      }
+
+      // E5: assign stable colors for tribes seen in live frame (fallback when
+      // tile-ownership endpoint is not yet available)
+      for (const tribe of f.tribes) {
+        if (!tribeColors.current.has(tribe.id)) {
+          const hue = (tribe.id * 137) % 360;
+          tribeColors.current.set(tribe.id, `hsla(${hue},65%,55%,0.35)`);
+        }
       }
 
       setFrame(f);
       draw(f);
     };
 
-    return () => ws.close();
+    return () => {
+      ws.close();
+      clearInterval(ownershipInterval);
+    };
   }, [draw]);
 
   const sendConfig = (patch: Record<string, unknown>) => {
@@ -218,14 +354,15 @@ export default function TribalSimulationPage() {
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h5" gutterBottom>Tribal Simulation</Typography>
+      <Typography variant="caption" sx={{ color: "text.disabled", display: "block", mb: 1 }}>
+        Prototype: territory, logs, replay, and neural inspection are redesign targets
+      </Typography>
 
       <Stack direction="row" spacing={2} alignItems="flex-start">
         {/* Canvas */}
         <Box>
           <canvas
             ref={canvasRef}
-            width={CANVAS_SIZE}
-            height={CANVAS_SIZE}
             style={{ border: "1px solid #333", display: "block" }}
           />
         </Box>

@@ -9,7 +9,7 @@ chapter_title: "Kiserleti futtatasok, validacio es eredmenyek"
 
 ## Thesis Sections
 
-- `docs/mainraw.tex` lines 2460-2560
+- `docs/mainraw.tex` lines 2619-2724
 
 ## Source Notes
 
@@ -26,11 +26,15 @@ chapter_title: "Kiserleti futtatasok, validacio es eredmenyek"
 - [frontend/src/analyticsState.ts](../../frontend/src/analyticsState.ts)
 - [frontend/src/analyticsComponents.tsx](../../frontend/src/analyticsComponents.tsx)
 
+## Figure Evidence
+
+- [docs/assets/diagrams/validation_pipeline.pdf](../assets/diagrams/validation_pipeline.pdf)
+- [docs/assets/diagrams/thesis-validation-pipeline.puml](../assets/diagrams/thesis-validation-pipeline.puml)
+
 ## External References
 
 - `sandve2013`
 
 ## Claim Supported
 
-The validation chapter is supported by experiment-runner code, mock/demo datasets, and Graph V2 analysis reports.
-
+The validation chapter is supported by experiment-runner code, mock/demo datasets, Graph V2 analysis reports, and the thesis validation pipeline diagram.

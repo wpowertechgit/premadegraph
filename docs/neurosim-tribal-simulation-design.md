@@ -1,5 +1,10 @@
 # NeuroSim Tribal Simulation — Design Document
 
+> **Superseded for future work.** This design describes the current prototype.
+> The critical redesign supersedes it for any new implementation work:
+> - `docs/neurosim-tribal-simulation-critical-redesign.md`
+> - `docs/superpowers/plans/2026-05-03-neurosim-tribal-simulation-agent-tasks.md`
+
 ## 1. What We Are Building
 
 A dataset-driven tribal evolutionary simulation where every graph cluster from the current premadegraph dataset becomes a living tribe competing inside a procedurally structured sandbox world.

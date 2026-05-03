@@ -20,7 +20,9 @@
       "Bash(git merge feature/neurosim-tribal-simulation --no-ff -m 'feat\\(neurosim\\): tribal simulation — WorldGrid, TribeSimulation, Canvas2D frontend *)",
       "Bash(git worktree *)",
       "Bash(node --check backend/server.js)",
-      "Bash(node --check backend/neurosim-bridge.js)"
+      "Bash(node --check backend/neurosim-bridge.js)",
+      "Bash(cargo test *)",
+      "Bash(npm --prefix \"c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\frontend\" run build)"
     ]
   }
 }

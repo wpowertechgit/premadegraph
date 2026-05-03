@@ -99,6 +99,8 @@ Forward-looking integration docs. Out of active scope unless owner reopens.
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
 | [[premadegraph-x-genetic-neurosim-integration-plan]] | `premadegraph-x-genetic-neurosim-integration-plan.md` | Integration plan — seed Genetic NeuroSim v2 from validated player cluster profiles | `thesis` `genetic-neurosim` `planning` `graph-theory` |
+| [[neurosim-tribal-simulation-critical-redesign]] | `neurosim-tribal-simulation-critical-redesign.md` | Critical redesign proposal — current tribal page is a prototype; this doc supersedes the design and implementation docs for future work | `genetic-neurosim` `planning` `architecture` `frontend` `backend` |
+| [[superpowers/plans/2026-05-03-neurosim-tribal-simulation-agent-tasks]] | `superpowers/plans/2026-05-03-neurosim-tribal-simulation-agent-tasks.md` | Agent task plan — narrow vertical slices for implementing the critical redesign, one task per session | `genetic-neurosim` `planning` `agent-reference` |
 
 ---
 

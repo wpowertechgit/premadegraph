@@ -9,7 +9,7 @@ chapter_title: "A 3D bird's-eye sphere es globalis halozati vizualizacio"
 
 ## Thesis Sections
 
-- `docs/mainraw.tex` lines 1871-2118
+- `docs/mainraw.tex` lines 1871-2134
 
 ## Source Notes
 
@@ -30,6 +30,8 @@ chapter_title: "A 3D bird's-eye sphere es globalis halozati vizualizacio"
 ## Visual Evidence
 
 - [docs/assets/demo_shots/birds-eye-current-state.png](../assets/demo_shots/birds-eye-current-state.png)
+- [docs/assets/diagrams/graph artifact components.pdf](../assets/diagrams/graph%20artifact%20components.pdf)
+- [docs/assets/diagrams/graph-v2-artifact-structure.puml](../assets/diagrams/graph-v2-artifact-structure.puml)
 
 ## External References
 
@@ -37,5 +39,4 @@ chapter_title: "A 3D bird's-eye sphere es globalis halozati vizualizacio"
 
 ## Claim Supported
 
-The 3D visualization chapter is supported by Rust artifact export code, frontend Three.js rendering code, and Graph V2 interpretation notes.
-
+The 3D visualization chapter is supported by Rust artifact export code, frontend Three.js rendering code, Graph V2 interpretation notes, and artifact-structure diagrams.

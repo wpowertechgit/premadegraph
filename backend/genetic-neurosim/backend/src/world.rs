@@ -7,6 +7,56 @@ pub const GRID_W: usize = 40;
 pub const GRID_H: usize = 40;
 pub const TOTAL_TILES: usize = GRID_W * GRID_H; // 1600
 
+// ─── WorldGenerationConfig ────────────────────────────────────────────────────
+
+/// Drives dynamic map sizing. `min_tiles` defaults to TOTAL_TILES so the
+/// current 40x40 behaviour is preserved unless a larger world is needed.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorldGenerationConfig {
+    pub seed: u64,
+    pub tribe_count: usize,
+    pub total_initial_population: u32,
+    pub target_tiles_per_tribe: usize,
+    pub target_population_density: f32,
+    pub min_tiles: usize,
+}
+
+impl WorldGenerationConfig {
+    /// Derive a config from a cluster slice. Sums cluster_size for population;
+    /// falls back to 50 members per tribe when cluster_size is zero.
+    pub fn from_clusters(seed: u64, clusters: &[crate::simulation::ClusterProfile]) -> Self {
+        let tribe_count = clusters.len();
+        let total_initial_population = clusters
+            .iter()
+            .map(|c| c.cluster_size)
+            .sum::<u32>()
+            .max(tribe_count as u32 * 50);
+        Self {
+            seed,
+            tribe_count,
+            total_initial_population,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        }
+    }
+
+    /// Compute (grid_w, grid_h) so the map is large enough for all tribes.
+    /// Formula: target = max(min_tiles, tribe_count * target_tiles_per_tribe,
+    ///                       total_initial_population / target_population_density)
+    pub fn derive_grid_dims(&self) -> (usize, usize) {
+        let by_tribes = (self.tribe_count * self.target_tiles_per_tribe).max(1);
+        let by_pop =
+            (self.total_initial_population as f32 / self.target_population_density).ceil() as usize;
+        let target = self.min_tiles.max(by_tribes).max(by_pop);
+        let side = (target as f32).sqrt().ceil() as usize;
+        let h = (target + side - 1) / side;
+        (side, h)
+    }
+}
+
+// ─── Biome ────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum Biome {
@@ -79,26 +129,31 @@ pub struct BiomeTile {
     pub disease_rate: f32,
 }
 
+// ─── WorldGrid ────────────────────────────────────────────────────────────────
+
 pub struct WorldGrid {
-    pub tiles: Vec<BiomeTile>, // length TOTAL_TILES, row-major [y * GRID_W + x]
+    pub grid_w: usize,
+    pub grid_h: usize,
+    pub total_tiles: usize,
+    pub tiles: Vec<BiomeTile>,
     last_sent_food: Vec<f32>,
 }
 
 impl WorldGrid {
-    pub fn new(seed: u64, n_tribes: usize) -> WorldGrid {
-        let mut rng = SmallRng::seed_from_u64(seed);
+    pub fn new(config: &WorldGenerationConfig) -> WorldGrid {
+        let (grid_w, grid_h) = config.derive_grid_dims();
+        let total_tiles = grid_w * grid_h;
 
-        let n_centroids = n_tribes.max(6).min(30);
+        let mut rng = SmallRng::seed_from_u64(config.seed);
+        let n_centroids = config.tribe_count.max(6).min(30);
 
-        // Pick random centroid tile positions
         let mut centroid_coords: Vec<(usize, usize)> = Vec::with_capacity(n_centroids);
         for _ in 0..n_centroids {
-            let cx = rng.random_range(0..GRID_W);
-            let cy = rng.random_range(0..GRID_H);
+            let cx = rng.random_range(0..grid_w);
+            let cy = rng.random_range(0..grid_h);
             centroid_coords.push((cx, cy));
         }
 
-        // Assign centroid biomes (0..5 excludes River=5)
         let centroid_biomes: Vec<Biome> = (0..n_centroids)
             .map(|_| {
                 let b: u8 = rng.random_range(0u8..5u8);
@@ -113,9 +168,10 @@ impl WorldGrid {
             .collect();
 
         // Voronoi: assign each tile to nearest centroid by Manhattan distance
-        let mut biome_map: Vec<Biome> = Vec::with_capacity(TOTAL_TILES);
-        for i in 0..TOTAL_TILES {
-            let (tx, ty) = WorldGrid::tile_xy(i);
+        let mut biome_map: Vec<Biome> = Vec::with_capacity(total_tiles);
+        for i in 0..total_tiles {
+            let tx = i % grid_w;
+            let ty = i / grid_w;
             let nearest = centroid_coords
                 .iter()
                 .enumerate()
@@ -131,33 +187,29 @@ impl WorldGrid {
 
         // River pass: 2 random-walk river paths from top row downward
         for _ in 0..2 {
-            let mut rx: usize = rng.random_range(0..GRID_W);
-            for ry in 0..GRID_H {
-                let idx = WorldGrid::xy_tile(rx, ry);
+            let mut rx: usize = rng.random_range(0..grid_w);
+            for ry in 0..grid_h {
+                let idx = ry * grid_w + rx;
                 biome_map[idx] = Biome::River;
 
-                if ry < GRID_H - 1 {
+                if ry < grid_h - 1 {
                     let roll: f32 = rng.random();
                     if roll < 0.70 {
                         // move down — handled by loop increment
                     } else if roll < 0.85 {
-                        // move left
                         if rx > 0 {
                             rx -= 1;
                         }
-                    } else {
-                        // move right
-                        if rx < GRID_W - 1 {
-                            rx += 1;
-                        }
+                    } else if rx < grid_w - 1 {
+                        rx += 1;
                     }
                 }
             }
         }
 
         // Build tiles
-        let mut tiles: Vec<BiomeTile> = Vec::with_capacity(TOTAL_TILES);
-        for i in 0..TOTAL_TILES {
+        let mut tiles: Vec<BiomeTile> = Vec::with_capacity(total_tiles);
+        for i in 0..total_tiles {
             let biome = biome_map[i];
             let stats = biome.stats();
             if biome == Biome::River {
@@ -184,9 +236,12 @@ impl WorldGrid {
             }
         }
 
-        let last_sent_food = vec![0.0f32; TOTAL_TILES];
+        let last_sent_food = vec![0.0f32; total_tiles];
 
         WorldGrid {
+            grid_w,
+            grid_h,
+            total_tiles,
             tiles,
             last_sent_food,
         }
@@ -203,7 +258,6 @@ impl WorldGrid {
     }
 
     /// Return tiles whose food changed by more than 0.05 since last call.
-    /// Updates the internal snapshot for returned tiles.
     pub fn changed_food_tiles(&mut self) -> Vec<(u16, f32)> {
         let mut result = Vec::new();
         for (i, tile) in self.tiles.iter().enumerate() {
@@ -216,13 +270,13 @@ impl WorldGrid {
     }
 
     /// Convert a flat tile index to (x, y) coordinates.
-    pub fn tile_xy(index: usize) -> (usize, usize) {
-        (index % GRID_W, index / GRID_W)
+    pub fn tile_xy(&self, index: usize) -> (usize, usize) {
+        (index % self.grid_w, index / self.grid_w)
     }
 
     /// Convert (x, y) coordinates to a flat tile index.
-    pub fn xy_tile(x: usize, y: usize) -> usize {
-        y * GRID_W + x
+    pub fn xy_tile(&self, x: usize, y: usize) -> usize {
+        y * self.grid_w + x
     }
 
     /// Return `n` distinct spawn tile indices spread across the grid.
@@ -231,14 +285,10 @@ impl WorldGrid {
             return Vec::new();
         }
 
-        // Divide grid into n zones; pick a random non-river tile from each.
-        let zone_w = GRID_W;
-        let zone_h = GRID_H;
         let cols = (n as f32).sqrt().ceil() as usize;
         let rows = (n + cols - 1) / cols;
-
-        let col_size = (zone_w + cols - 1) / cols;
-        let row_size = (zone_h + rows - 1) / rows;
+        let col_size = (self.grid_w + cols - 1) / cols;
+        let row_size = (self.grid_h + rows - 1) / rows;
 
         let mut result: Vec<u16> = Vec::with_capacity(n);
         let mut used: std::collections::HashSet<u16> = std::collections::HashSet::new();
@@ -248,15 +298,14 @@ impl WorldGrid {
             let row = zone_idx / cols;
 
             let x_start = col * col_size;
-            let x_end = ((col + 1) * col_size).min(GRID_W);
+            let x_end = ((col + 1) * col_size).min(self.grid_w);
             let y_start = row * row_size;
-            let y_end = ((row + 1) * row_size).min(GRID_H);
+            let y_end = ((row + 1) * row_size).min(self.grid_h);
 
-            // Collect non-river candidates in this zone
             let mut candidates: Vec<u16> = Vec::new();
             for ty in y_start..y_end {
                 for tx in x_start..x_end {
-                    let idx = WorldGrid::xy_tile(tx, ty) as u16;
+                    let idx = self.xy_tile(tx, ty) as u16;
                     if self.tiles[idx as usize].biome != Biome::River && !used.contains(&idx) {
                         candidates.push(idx);
                     }
@@ -271,7 +320,7 @@ impl WorldGrid {
             }
 
             // Fallback: any unused tile
-            for i in 0..TOTAL_TILES {
+            for i in 0..self.total_tiles {
                 let idx = i as u16;
                 if !used.contains(&idx) {
                     used.insert(idx);
@@ -285,23 +334,74 @@ impl WorldGrid {
     }
 
     /// Return up to 4 adjacent tile indices (N/S/E/W), clamped to grid bounds.
-    pub fn adjacent_tiles(index: usize) -> Vec<usize> {
-        let (x, y) = WorldGrid::tile_xy(index);
+    pub fn adjacent_tiles(&self, index: usize) -> Vec<usize> {
+        let (x, y) = self.tile_xy(index);
         let mut neighbors = Vec::with_capacity(4);
 
         if y > 0 {
-            neighbors.push(WorldGrid::xy_tile(x, y - 1)); // North
+            neighbors.push(self.xy_tile(x, y - 1));
         }
-        if y + 1 < GRID_H {
-            neighbors.push(WorldGrid::xy_tile(x, y + 1)); // South
+        if y + 1 < self.grid_h {
+            neighbors.push(self.xy_tile(x, y + 1));
         }
         if x > 0 {
-            neighbors.push(WorldGrid::xy_tile(x - 1, y)); // West
+            neighbors.push(self.xy_tile(x - 1, y));
         }
-        if x + 1 < GRID_W {
-            neighbors.push(WorldGrid::xy_tile(x + 1, y)); // East
+        if x + 1 < self.grid_w {
+            neighbors.push(self.xy_tile(x + 1, y));
         }
 
         neighbors
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn derive_grid_dims_respects_min_tiles() {
+        let config = WorldGenerationConfig {
+            seed: 42,
+            tribe_count: 5,
+            total_initial_population: 100,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        };
+        let (w, h) = config.derive_grid_dims();
+        assert!(w * h >= TOTAL_TILES, "grid must be at least {TOTAL_TILES} tiles");
+    }
+
+    #[test]
+    fn derive_grid_dims_scales_with_large_tribe_count() {
+        let config = WorldGenerationConfig {
+            seed: 42,
+            tribe_count: 500,
+            total_initial_population: 0,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        };
+        let (w, h) = config.derive_grid_dims();
+        // 500 * 4 = 2000 > 1600 min — must have at least 2000 tiles
+        assert!(w * h >= 2000, "grid must scale with tribe count");
+    }
+
+    #[test]
+    fn worldgrid_new_produces_correct_tile_count() {
+        let config = WorldGenerationConfig {
+            seed: 1,
+            tribe_count: 10,
+            total_initial_population: 500,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        };
+        let grid = WorldGrid::new(&config);
+        assert_eq!(grid.tiles.len(), grid.total_tiles);
+        assert_eq!(grid.grid_w * grid.grid_h, grid.total_tiles);
     }
 }

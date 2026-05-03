@@ -9,7 +9,7 @@ chapter_title: "A ket adatkeszlet empirikus osszehasonlitasa: flexset versus sol
 
 ## Thesis Sections
 
-- `docs/mainraw.tex` lines 2673-2768
+- `docs/mainraw.tex` lines 2840-2934
 
 ## Source Notes
 
@@ -34,4 +34,3 @@ chapter_title: "A ket adatkeszlet empirikus osszehasonlitasa: flexset versus sol
 ## Claim Supported
 
 The Flex/SoloQ comparison chapter is backed by separate collection strategies, Graph V2 validation, and distinct interpretation notes.
-

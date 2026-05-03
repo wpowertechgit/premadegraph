@@ -1,5 +1,10 @@
 # NeuroSim Tribal Simulation — Implementation
 
+> **Superseded for future work.** The current implementation is a backend streaming prototype.
+> The critical redesign and agent task plan define the next implementation pass:
+> - `docs/neurosim-tribal-simulation-critical-redesign.md`
+> - `docs/superpowers/plans/2026-05-03-neurosim-tribal-simulation-agent-tasks.md`
+
 **Branch merged:** `feature/neurosim-tribal-simulation` → `main`  
 **Date:** 2026-05-03
 

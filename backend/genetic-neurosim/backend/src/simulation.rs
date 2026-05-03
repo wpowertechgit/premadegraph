@@ -143,6 +143,22 @@ pub struct StatusResponse {
     pub generation: u32,
     pub alive_count: usize,
     pub halted: bool,
+    pub paused: bool,
+    pub world_width_tiles: usize,
+    pub world_height_tiles: usize,
+    pub total_tiles: usize,
+    pub world_seed: u64,
+}
+
+#[derive(serde::Serialize)]
+pub struct ControlResponse {
+    pub ok: bool,
+    pub status: StatusResponse,
+}
+
+#[derive(serde::Deserialize)]
+pub struct RestartSeedRequest {
+    pub world_seed: u64,
 }
 
 #[derive(serde::Serialize)]
@@ -623,6 +639,7 @@ pub struct TribeSimulation {
     generation: u32,
     rng: rand::rngs::SmallRng,
     halted: bool,
+    paused: bool,
     recordings: Vec<Recording>,
     active_replay: Option<Vec<u8>>,
     last_frame: Vec<u8>,
@@ -631,7 +648,8 @@ pub struct TribeSimulation {
 impl TribeSimulation {
     pub fn shared(config: ControlConfig) -> SharedSimulation {
         use rand::SeedableRng;
-        let world = crate::world::WorldGrid::new(config.world_seed, config.clusters.len());
+        let wgen = crate::world::WorldGenerationConfig::from_clusters(config.world_seed, &config.clusters);
+        let world = crate::world::WorldGrid::new(&wgen);
         let rng = rand::rngs::SmallRng::seed_from_u64(config.world_seed);
         let mut sim = TribeSimulation {
             config,
@@ -641,6 +659,7 @@ impl TribeSimulation {
             generation: 0,
             rng,
             halted: false,
+            paused: false,
             recordings: vec![],
             active_replay: None,
             last_frame: vec![],
@@ -663,6 +682,36 @@ impl TribeSimulation {
 
     pub fn is_halted(&self) -> bool {
         self.halted
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn pause(&mut self) {
+        self.paused = true;
+    }
+
+    pub fn resume(&mut self) {
+        self.paused = false;
+    }
+
+    pub fn step_once_when_paused(&mut self) -> Option<Vec<u8>> {
+        if !self.paused || self.halted {
+            return None;
+        }
+        Some(self.step())
+    }
+
+    pub fn reset_same_seed(&mut self) {
+        self.paused = false;
+        self.reinitialize();
+    }
+
+    pub fn restart_with_seed(&mut self, seed: u64) {
+        self.config.world_seed = seed;
+        self.paused = false;
+        self.reinitialize();
     }
 
     pub fn config(&self) -> &ControlConfig {
@@ -688,7 +737,8 @@ impl TribeSimulation {
         self.tick = 0;
         self.generation = 0;
         self.halted = false;
-        self.world = crate::world::WorldGrid::new(self.config.world_seed, self.config.clusters.len());
+        let wgen = crate::world::WorldGenerationConfig::from_clusters(self.config.world_seed, &self.config.clusters);
+        self.world = crate::world::WorldGrid::new(&wgen);
         self.rng = rand::rngs::SmallRng::seed_from_u64(self.config.world_seed);
         self.tribes = vec![];
         self.initialize_tribes();
@@ -700,6 +750,11 @@ impl TribeSimulation {
             generation: self.generation,
             alive_count: self.tribes.iter().filter(|t| t.alive).count(),
             halted: self.halted,
+            paused: self.paused,
+            world_width_tiles: self.world.grid_w,
+            world_height_tiles: self.world.grid_h,
+            total_tiles: self.world.total_tiles,
+            world_seed: self.config.world_seed,
         }
     }
 
@@ -895,7 +950,7 @@ impl TribeSimulation {
         for (i, other) in self.tribes.iter().enumerate() {
             if i == tribe_idx || !other.alive { continue; }
             for &tile in &other.territory {
-                let adjacent = crate::world::WorldGrid::adjacent_tiles(tile as usize);
+                let adjacent = self.world.adjacent_tiles(tile as usize);
                 if adjacent.iter().any(|&a| my_tiles.contains(&(a as u16))) {
                     return true;
                 }

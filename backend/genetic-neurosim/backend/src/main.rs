@@ -2,6 +2,7 @@ mod simulation;
 mod db;
 pub mod world;
 pub mod tribes;
+pub mod events;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -18,8 +19,9 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::Serialize;
 use simulation::{
-    ConfigPatch, ControlConfig, GodModeResponse, RecordingSummary, ReplayRecordingRequest,
-    SaveRecordingRequest, SharedSimulation, TribeSimulation, StatusResponse,
+    ConfigPatch, ControlConfig, ControlResponse, GodModeResponse, RecordingSummary,
+    ReplayRecordingRequest, RestartSeedRequest, SaveRecordingRequest, SharedSimulation,
+    TribeSimulation, StatusResponse,
 };
 use db::Database;
 use tokio::sync::broadcast;
@@ -77,6 +79,11 @@ async fn main() {
         .route("/api/recordings", get(list_recordings))
         .route("/api/recordings/save", post(save_recording))
         .route("/api/recordings/replay", post(replay_recording))
+        .route("/api/control/pause", post(control_pause))
+        .route("/api/control/resume", post(control_resume))
+        .route("/api/control/step-tick", post(control_step_tick))
+        .route("/api/control/reset", post(control_reset))
+        .route("/api/control/restart-seed", post(control_restart_seed))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -120,9 +127,9 @@ async fn simulation_loop(state: Arc<AppState>) {
     let mut final_frame_sent = false;
 
     loop {
-        let (packet, tick_rate, halted) = {
+        let (packet, tick_rate, idle) = {
             let mut simulation = state.simulation.write();
-            if simulation.is_halted() {
+            if simulation.is_halted() || simulation.is_paused() {
                 let packet = if final_frame_sent {
                     simulation.current_packet()
                 } else {
@@ -139,7 +146,7 @@ async fn simulation_loop(state: Arc<AppState>) {
 
         let _ = state.frame_tx.send(Arc::new(packet));
 
-        let sleep_for = if halted {
+        let sleep_for = if idle {
             Duration::from_millis(250)
         } else {
             let tick_rate = tick_rate.max(1);
@@ -217,6 +224,39 @@ async fn replay_recording(
         .replay_recording(&request.recording_id)
         .map(Json)
         .map_err(|error| (StatusCode::BAD_REQUEST, error))
+}
+
+async fn control_pause(State(state): State<Arc<AppState>>) -> Json<ControlResponse> {
+    let mut simulation = state.simulation.write();
+    simulation.pause();
+    Json(ControlResponse { ok: true, status: simulation.status() })
+}
+
+async fn control_resume(State(state): State<Arc<AppState>>) -> Json<ControlResponse> {
+    let mut simulation = state.simulation.write();
+    simulation.resume();
+    Json(ControlResponse { ok: true, status: simulation.status() })
+}
+
+async fn control_step_tick(State(state): State<Arc<AppState>>) -> Json<ControlResponse> {
+    let mut simulation = state.simulation.write();
+    simulation.step_once_when_paused();
+    Json(ControlResponse { ok: true, status: simulation.status() })
+}
+
+async fn control_reset(State(state): State<Arc<AppState>>) -> Json<ControlResponse> {
+    let mut simulation = state.simulation.write();
+    simulation.reset_same_seed();
+    Json(ControlResponse { ok: true, status: simulation.status() })
+}
+
+async fn control_restart_seed(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<RestartSeedRequest>,
+) -> Json<ControlResponse> {
+    let mut simulation = state.simulation.write();
+    simulation.restart_with_seed(request.world_seed);
+    Json(ControlResponse { ok: true, status: simulation.status() })
 }
 
 async fn ws_simulation(
