@@ -4,7 +4,10 @@ const http = require("http");
 const net = require("net");
 const { spawn } = require("child_process");
 
-const NEUROSIM_PORT = 8000;
+const NEUROSIM_PORT = Number(process.env.NEUROSIM_PORT || 8000);
+const NEUROSIM_HOST = process.env.NEUROSIM_HOST || "127.0.0.1";
+// When NEUROSIM_HOST is set to a remote host (e.g. Docker service name), skip spawning.
+const NEUROSIM_MANAGED = !!process.env.NEUROSIM_HOST;
 const rustProjectDir = path.resolve(__dirname, "genetic-neurosim", "backend");
 
 let neurosimProcess = null;
@@ -26,13 +29,17 @@ function resolveNeurosimBinary() {
 }
 
 function startNeurosimBackend(envOverrides = {}) {
+  if (NEUROSIM_MANAGED) {
+    console.log(`[neurosim-bridge] managed mode — expecting neurosim at ${NEUROSIM_HOST}:${NEUROSIM_PORT}`);
+    return true;
+  }
   const binary = resolveNeurosimBinary();
   if (!binary) {
     console.warn("[neurosim-bridge] Binary not found. Build backend/genetic-neurosim/backend first.");
     return false;
   }
   if (neurosimProcess && !neurosimProcess.killed) {
-    return true; // already running
+    return true;
   }
   neurosimProcess = spawn(binary, [], {
     cwd: rustProjectDir,
@@ -70,11 +77,11 @@ function stopNeurosimBackend() {
 function proxyHttp(req, res, pathPrefix = "/api/neurosim") {
   const upstreamPath = req.url.replace(pathPrefix, "") || "/";
   const options = {
-    hostname: "127.0.0.1",
+    hostname: NEUROSIM_HOST,
     port: NEUROSIM_PORT,
     path: upstreamPath,
     method: req.method,
-    headers: { ...req.headers, host: `127.0.0.1:${NEUROSIM_PORT}` },
+    headers: { ...req.headers, host: `${NEUROSIM_HOST}:${NEUROSIM_PORT}` },
   };
 
   const upstream = http.request(options, upstreamRes => {
@@ -97,7 +104,7 @@ function proxyHttp(req, res, pathPrefix = "/api/neurosim") {
  * Call this from your HTTP server's 'upgrade' event for neurosim WS paths.
  */
 function proxyWebSocket(req, clientSocket, head, upstreamPath = "/ws/tribal-simulation") {
-  const upstream = net.createConnection(NEUROSIM_PORT, "127.0.0.1");
+  const upstream = net.createConnection(NEUROSIM_PORT, NEUROSIM_HOST);
 
   upstream.on("error", err => {
     console.error(`[neurosim-bridge][ws-proxy] upstream error: ${err.message}`);
@@ -110,7 +117,7 @@ function proxyWebSocket(req, clientSocket, head, upstreamPath = "/ws/tribal-simu
     // Replay the upgrade request to the upstream
     const headers = [
       `${req.method} ${upstreamPath} HTTP/1.1`,
-      `Host: 127.0.0.1:${NEUROSIM_PORT}`,
+      `Host: ${NEUROSIM_HOST}:${NEUROSIM_PORT}`,
       `Upgrade: websocket`,
       `Connection: Upgrade`,
     ];
