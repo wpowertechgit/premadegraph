@@ -17,6 +17,7 @@ const {
   getEngineSpec: getPrototypeEngineSpec,
 } = require("./pathfinder/prototypeEngine");
 const { executeRustCommand, executeRustCommandRaw, shutdownDaemon } = require("./pathfinder/rustBridge");
+const neurosimBridge = require("./neurosim-bridge");
 
 const DATA_ROOT = path.resolve(__dirname, "data");
 const DATASET_REGISTRY_PATH = path.join(DATA_ROOT, "datasets.json");
@@ -3383,6 +3384,11 @@ async function computeNeurosimClusterProfiles(dataset) {
   }
 }
 
+// Neurosim tribal simulation proxy
+// Note: /api/neurosim/cluster-export is handled natively below — do not override it
+app.all("/api/neurosim/health", (req, res) => neurosimBridge.proxyHttp(req, res));
+app.all("/api/neurosim/api/*", (req, res) => neurosimBridge.proxyHttp(req, res));
+
 app.get([
   "/api/neurosim/cluster-export",
   "/api/neurosim/datasets/:datasetId/cluster-export",
@@ -3404,13 +3410,21 @@ app.get([
 
 // ---------------------------------------------------------------------------
 
-app.listen(PORT, () => {
+neurosimBridge.startNeurosimBackend();
+
+const server = app.listen(PORT, () => {
   loadDatasetRegistry();
   openActiveRawDatabase();
   openActiveRefinedDatabase();
   warnAboutLegacyMatchFiles();
   console.log(`Backend listening at http://localhost:${PORT}`);
   void prewarmRustMetadata();
+});
+
+server.on("upgrade", (req, socket, head) => {
+  if (req.url === "/api/neurosim/ws/tribal-simulation") {
+    neurosimBridge.proxyWebSocket(req, socket, head);
+  }
 });
 app.get("/api/ping", (req, res) => {
   res.send("pong");
