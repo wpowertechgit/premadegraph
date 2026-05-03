@@ -677,6 +677,10 @@ impl TribeSimulation {
         if let Some(v) = patch.world_seed { self.config.world_seed = v; }
     }
 
+    pub fn set_clusters(&mut self, clusters: Vec<ClusterProfile>) {
+        self.config.clusters = clusters;
+    }
+
     pub fn status(&self) -> StatusResponse {
         StatusResponse {
             tick: self.tick,

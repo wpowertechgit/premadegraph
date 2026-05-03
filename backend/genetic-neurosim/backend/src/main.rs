@@ -63,7 +63,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
-        .route("/ws/simulation", get(ws_simulation))
+        .route("/ws/simulation", get(ws_simulation))           // kept for compat
+        .route("/ws/tribal-simulation", get(ws_simulation))    // new canonical name
         .route("/api/status", get(get_status))
         .route("/api/config", get(get_config).post(update_config))
         .route("/api/config/refresh", post(refresh_from_db))
@@ -148,26 +149,7 @@ async fn refresh_from_db(State(state): State<Arc<AppState>>) -> Result<Json<Cont
     match state.database.fetch_simulation_config().await {
         Ok(config) => {
             let mut simulation = state.simulation.write();
-            // We apply the cluster update by creating a patch
-            // Note: ConfigPatch might need an Option<Vec<ClusterProfile>> if you want to update it via API
-            // For now, we update the simulation config directly
-            let mut current_config = simulation.config().clone();
-            current_config.clusters = config.clusters;
-            
-            // To trigger a population reload in the current implementation, we patch the size
-            simulation.apply_config_patch(ConfigPatch {
-                mutation_rate: None,
-                population_size: Some(current_config.population_size), // Trigger reset
-                max_generations: None,
-                food_spawn_rate: None,
-                energy_decay: None,
-                tick_rate: None,
-                world_seed: None,
-            });
-            
-            // Update the stored config clusters
-            // In a real scenario, you'd want a specific internal method for this
-            
+            simulation.set_clusters(config.clusters);
             Ok(Json(simulation.config().clone()))
         },
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
