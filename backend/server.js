@@ -17,6 +17,7 @@ const {
   getEngineSpec: getPrototypeEngineSpec,
 } = require("./pathfinder/prototypeEngine");
 const { executeRustCommand, executeRustCommandRaw, shutdownDaemon } = require("./pathfinder/rustBridge");
+const neurosimBridge = require("./neurosim-bridge");
 
 const DATA_ROOT = path.resolve(__dirname, "data");
 const DATASET_REGISTRY_PATH = path.join(DATA_ROOT, "datasets.json");
@@ -3243,6 +3244,10 @@ app.post([
   }
 });
 
+// ---------------------------------------------------------------------------
+// Neurosim cluster-export helpers
+// ---------------------------------------------------------------------------
+
 async function computeNeurosimClusterProfiles(dataset) {
   const db = new sqlite3.Database(
     dataset.refinedDbAbsolutePath,
@@ -3264,37 +3269,125 @@ async function computeNeurosimClusterProfiles(dataset) {
            0.0
          ) / 10.0 AS opscore_stddev,
          CAST(COUNT(CASE WHEN cm.is_bridge = 1 THEN 1 END) AS REAL) / MAX(c.size, 1) AS bridge_ratio,
-         c.size AS cluster_size
+         c.size AS cluster_size,
+         SUM(p.artifact_combat_impact * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS artifact_combat_wa,
+         SUM(p.artifact_risk_discipline * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS artifact_risk_wa,
+         SUM(p.artifact_resource_tempo * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS artifact_resource_wa,
+         SUM(p.artifact_map_objective_control * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS artifact_map_wa,
+         SUM(p.artifact_team_enablement * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS artifact_team_wa,
+         SUM(p.feedscore * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS feedscore_wa,
+         GROUP_CONCAT(p.puuid ORDER BY p.matches_processed DESC) AS puuids_ordered
        FROM clusters c
        LEFT JOIN cluster_members cm ON c.cluster_id = cm.cluster_id
        LEFT JOIN players p ON cm.puuid = p.puuid
        GROUP BY c.cluster_id
-       HAVING c.size >= 3
+       HAVING c.size >= 2
        ORDER BY c.size DESC`,
       [total],
     );
 
-    const clusters = rows.map((r) => ({
-      id: r.id,
-      size_ratio: Math.round(r.size_ratio * 10000) / 10000,
-      mean_opscore: Math.round(r.mean_opscore * 10000) / 10000,
-      opscore_stddev: Math.round(r.opscore_stddev * 10000) / 10000,
-      cohesion: Math.round((1.0 - r.bridge_ratio) * 10000) / 10000,
-      internal_edge_ratio:
-        Math.round(Math.max(0, 1.0 - Math.min(1, r.opscore_stddev * 2)) * 10000) / 10000,
-    }));
+    // Artifact primary cap: each primary artifact column is scored 0–5 in the refined DB.
+    const PRIMARY_CAP = 5.0;
+
+    const clusters = rows.map((r) => {
+      // --- existing 6 fields ---
+      const size_ratio = Math.round(r.size_ratio * 10000) / 10000;
+      const mean_opscore = Math.round(r.mean_opscore * 10000) / 10000;
+      const opscore_stddev = Math.round(r.opscore_stddev * 10000) / 10000;
+      const cohesion = Math.round((1.0 - r.bridge_ratio) * 10000) / 10000;
+      const internal_edge_ratio =
+        Math.round(Math.max(0, 1.0 - Math.min(1, r.opscore_stddev * 2)) * 10000) / 10000;
+
+      // --- weighted artifact averages (raw, 0–5 scale) ---
+      const combat_wa     = r.artifact_combat_wa     || 0;
+      const risk_wa       = r.artifact_risk_wa       || 0;
+      const resource_wa   = r.artifact_resource_wa   || 0;
+      const map_wa        = r.artifact_map_wa        || 0;
+      const team_wa       = r.artifact_team_wa       || 0;
+      const feedscore_wa  = r.feedscore_wa           || 0;
+
+      // --- sub-artifacts (each primary splits evenly into 2 sub-artifacts) ---
+      // combat_impact → fight_conversion + damage_pressure
+      const fight_conversion  = combat_wa / PRIMARY_CAP;
+      const damage_pressure   = combat_wa / PRIMARY_CAP;
+      // risk_discipline → death_cost + survival_quality
+      const death_cost         = risk_wa / PRIMARY_CAP;
+      const survival_quality   = risk_wa / PRIMARY_CAP;
+      // resource_tempo → economy + tempo
+      const economy            = resource_wa / PRIMARY_CAP;
+      const tempo              = resource_wa / PRIMARY_CAP;
+      // map_objective_control → objective_conversion + vision_control
+      const objective_conversion = map_wa / PRIMARY_CAP;
+      const vision_control       = map_wa / PRIMARY_CAP;
+      // team_enablement → setup_control + protection_support
+      const setup_control        = team_wa / PRIMARY_CAP;
+      const protection_support   = team_wa / PRIMARY_CAP;
+
+      // --- primary artifacts (average of their 2 sub-artifacts = same as normalised wa) ---
+      const a_combat        = (fight_conversion + damage_pressure) / 2;
+      const a_risk          = (death_cost + survival_quality) / 2;
+      const a_resource      = (economy + tempo) / 2;
+      const a_map_objective = (objective_conversion + vision_control) / 2;
+      const a_team          = (setup_control + protection_support) / 2;
+
+      // --- feed_risk: higher feedscore → higher risk (feedscore 0–10 scale) ---
+      const feed_risk = Math.max(0, Math.min(1, feedscore_wa / 10.0));
+
+      // --- founder_puuids: top-3 by matches_processed (via pre-sorted GROUP_CONCAT) ---
+      const founder_puuids = r.puuids_ordered
+        ? r.puuids_ordered.split(",").filter(Boolean).slice(0, 3)
+        : [];
+
+      const round4 = (v) => Math.round(v * 10000) / 10000;
+
+      return {
+        // existing 6 fields
+        id: r.id,
+        size_ratio,
+        mean_opscore,
+        opscore_stddev,
+        cohesion,
+        internal_edge_ratio,
+        // tribal sim extensions
+        cluster_size: Number(r.cluster_size),
+        feed_risk: round4(feed_risk),
+        founder_puuids,
+        // sub-artifacts
+        fight_conversion:      round4(fight_conversion),
+        damage_pressure:       round4(damage_pressure),
+        death_cost:            round4(death_cost),
+        survival_quality:      round4(survival_quality),
+        economy:               round4(economy),
+        tempo:                 round4(tempo),
+        objective_conversion:  round4(objective_conversion),
+        vision_control:        round4(vision_control),
+        setup_control:         round4(setup_control),
+        protection_support:    round4(protection_support),
+        // primary artifacts (normalised 0–1)
+        a_combat:        round4(a_combat),
+        a_risk:          round4(a_risk),
+        a_resource:      round4(a_resource),
+        a_map_objective: round4(a_map_objective),
+        a_team:          round4(a_team),
+      };
+    });
 
     return {
       datasetId: dataset.id,
       clusterCount: clusters.length,
       totalMembersInClusters: total,
-      minClusterSize: 3,
+      minClusterSize: 2,
       clusters,
     };
   } finally {
     db.close();
   }
 }
+
+// Neurosim tribal simulation proxy
+// Note: /api/neurosim/cluster-export is handled natively below — do not override it
+app.all("/api/neurosim/health", (req, res) => neurosimBridge.proxyHttp(req, res));
+app.all("/api/neurosim/api/*", (req, res) => neurosimBridge.proxyHttp(req, res));
 
 app.get([
   "/api/neurosim/cluster-export",
@@ -3315,13 +3408,23 @@ app.get([
   }
 });
 
-app.listen(PORT, () => {
+// ---------------------------------------------------------------------------
+
+neurosimBridge.startNeurosimBackend();
+
+const server = app.listen(PORT, () => {
   loadDatasetRegistry();
   openActiveRawDatabase();
   openActiveRefinedDatabase();
   warnAboutLegacyMatchFiles();
   console.log(`Backend listening at http://localhost:${PORT}`);
   void prewarmRustMetadata();
+});
+
+server.on("upgrade", (req, socket, head) => {
+  if (req.url === "/api/neurosim/ws/tribal-simulation") {
+    neurosimBridge.proxyWebSocket(req, socket, head);
+  }
 });
 app.get("/api/ping", (req, res) => {
   res.send("pong");

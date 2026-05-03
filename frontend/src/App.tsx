@@ -14,6 +14,7 @@ const AssortativityPage = lazy(() => import("./AssortativityPage"));
 const BetweennessCentralityPage = lazy(() => import("./BetweennessCentralityPage"));
 const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
 const DocumentationPage = lazy(() => import("./DocumentationPage"));
+const TribalSimulationPage = lazy(() => import("./pages/TribalSimulationPage"));
 
 const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
 const NAV_WIDTH_MIN = 280;
@@ -140,6 +141,14 @@ function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
               element={(
                 <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
                   <DocumentationPage />
+                </Suspense>
+              )}
+            />
+            <Route
+              path="/tribal-simulation"
+              element={(
+                <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+                  <TribalSimulationPage />
                 </Suspense>
               )}
             />

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --space-black: #000000;
+  --spectral-white: #f0f0fa;
+  --ghost-bg: rgba(240, 240, 250, 0.1);
+  --ghost-border: rgba(240, 240, 250, 0.35);
+  --dark-overlay: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Barlow', 'D-DIN', Arial, Verdana, sans-serif;
+  background: #000000;
+  color: #f0f0fa;
+}
+
+* {
+  box-sizing: border-box;
+}
