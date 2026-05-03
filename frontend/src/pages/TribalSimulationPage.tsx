@@ -109,6 +109,54 @@ interface TileOwnershipSnapshot {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── H2: Tribe snapshot type ──────────────────────────────────────────────
+interface TribeSnapshotStats {
+  a_combat: number;
+  a_risk: number;
+  a_resource: number;
+  a_map_objective: number;
+  a_team: number;
+  feed_risk: number;
+  fight_conversion: number;
+  damage_pressure: number;
+  death_cost: number;
+  survival_quality: number;
+  economy: number;
+  tempo: number;
+  vision_control: number;
+  objective_conversion: number;
+  setup_control: number;
+  protection_support: number;
+}
+
+interface TribeSnapshot {
+  id: number;
+  cluster_id: string;
+  population: number;
+  max_population: number;
+  food_stores: number;
+  behavior: string; // serde serializes BehaviorState enum as string name
+  territory_count: number;
+  target_tribe: number | null;
+  ally_tribe: number | null;
+  stats: TribeSnapshotStats;
+  last_inputs: number[];
+  last_outputs: number[];
+  input_labels?: string[];
+  output_labels?: string[];
+  generation: number;
+  ticks_alive: number;
+  alive: boolean;
+}
+
+// Fallback labels used when backend doesn't include labels in snapshot
+const INPUT_LABELS = [
+  "food ratio", "pop ratio", "territory", "feed risk",
+  "combat", "resource", "nearest enemy", "nearest ally",
+];
+const OUTPUT_LABELS = ["aggression", "resource drive", "goal drive"];
+// ─────────────────────────────────────────────────────────────────────────────
+
 function parseFrame(buf: ArrayBuffer): SimFrame {
   const view = new DataView(buf);
   let offset = 0;
@@ -216,6 +264,22 @@ export default function TribalSimulationPage() {
   const [connected, setConnected] = useState(false);
   const [tickRate, setTickRate] = useState(20);
   const [status, setStatus] = useState("Disconnected");
+
+  // C3: Panel visibility state
+  const [showControls, setShowControls] = useState(true);
+  const [showEvents, setShowEvents] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
+
+  // C4: Pause state synced from backend
+  const [paused, setPaused] = useState(false);
+
+  // H2: Selected tribe and dossier panel
+  const [showTribe, setShowTribe] = useState(false);
+  const [selectedTribeId, setSelectedTribeId] = useState<number | null>(null);
+  const [tribeSnapshot, setTribeSnapshot] = useState<TribeSnapshot | null>(null);
+  // I4: Brain tab inside Tribe panel: "dossier" | "brain"
+  const [tribeTab, setTribeTab] = useState<"dossier" | "brain">("dossier");
 
   // strToHue is used indirectly via tribeColors; keep reference stable
   const _strToHue = strToHue;
@@ -348,6 +412,85 @@ export default function TribalSimulationPage() {
     fetch("/api/neurosim/api/god-mode", { method: "POST" }).catch(console.error);
   };
 
+  // J4: typed intervention helper
+  const sendIntervention = (type: string, extra: Record<string, unknown> = {}) => {
+    fetch("/api/neurosim/api/interventions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, ...extra }),
+    }).catch(console.error);
+  };
+
+  // C4/C5: generic control POST + status refresh
+  const sendControl = async (endpoint: string) => {
+    try {
+      await fetch(`/api/neurosim/api/control/${endpoint}`, { method: "POST" });
+      const res = await fetch("/api/neurosim/api/status");
+      if (res.ok) {
+        const s = await res.json();
+        setPaused(s.paused ?? false);
+      }
+    } catch {
+      // backend unreachable — ignore
+    }
+  };
+
+  // C4: status polling to keep paused badge in sync
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch("/api/neurosim/api/status");
+        if (res.ok) {
+          const s = await res.json();
+          setPaused(s.paused ?? false);
+        }
+      } catch {
+        // ignore
+      }
+    }, 2000);
+    return () => clearInterval(poll);
+  }, []);
+
+  // H2: Fetch tribe snapshot whenever selectedTribeId changes, refresh every 1s
+  useEffect(() => {
+    if (selectedTribeId === null) { setTribeSnapshot(null); return; }
+    let cancelled = false;
+    const fetchSnap = async () => {
+      try {
+        const res = await fetch(`/api/neurosim/api/tribes/${selectedTribeId}`);
+        if (!res.ok || cancelled) return;
+        setTribeSnapshot(await res.json());
+      } catch { /* backend unreachable */ }
+    };
+    fetchSnap();
+    const iv = setInterval(fetchSnap, 1000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [selectedTribeId]);
+
+  // H2: Canvas click — select nearest tribe home marker
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !frame) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const gw = gridWRef.current;
+    const hexSize = computeHexSize(gw, gridHRef.current, CANVAS_SIZE);
+    const { originX, originY } = hexCanvasDims(gw, gridHRef.current, hexSize);
+    let bestId = -1;
+    let bestDist = Infinity;
+    for (const tribe of frame.tribes) {
+      const { q, r } = tileIdToAxial(tribe.homeTile, gw);
+      const { x, y } = axialToPixel(q, r, hexSize);
+      const dist = Math.hypot(mx - (x + originX), my - (y + originY));
+      if (dist < bestDist) { bestDist = dist; bestId = tribe.id; }
+    }
+    if (bestId >= 0 && bestDist < hexSize * 3) {
+      setSelectedTribeId(bestId);
+      setShowTribe(true);
+    }
+  }, [frame]);
+
   // suppress unused warning for _strToHue — it's kept for future tribe-color seeding
   void _strToHue;
 
@@ -358,62 +501,273 @@ export default function TribalSimulationPage() {
         Prototype: territory, logs, replay, and neural inspection are redesign targets
       </Typography>
 
+      {/* C3: Panel toggle toolbar */}
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        {([
+          ["Controls",  showControls,  setShowControls],
+          ["Tribe",     showTribe,     setShowTribe],
+          ["Events",    showEvents,    setShowEvents],
+          ["Analytics", showAnalytics, setShowAnalytics],
+          ["Sessions",  showSessions,  setShowSessions],
+        ] as [string, boolean, React.Dispatch<React.SetStateAction<boolean>>][]).map(([label, active, toggle]) => (
+          <Button
+            key={label}
+            variant={active ? "contained" : "outlined"}
+            size="small"
+            onClick={() => toggle((v) => !v)}
+            sx={{ textTransform: "uppercase", letterSpacing: 1, fontSize: "0.7rem" }}
+          >
+            {label}
+          </Button>
+        ))}
+      </Stack>
+
       <Stack direction="row" spacing={2} alignItems="flex-start">
         {/* Canvas */}
         <Box>
           <canvas
             ref={canvasRef}
-            style={{ border: "1px solid #333", display: "block" }}
+            style={{ border: "1px solid #333", display: "block", cursor: "pointer" }}
+            onClick={handleCanvasClick}
           />
         </Box>
 
-        {/* Controls */}
-        <Paper sx={{ p: 2, minWidth: 220 }}>
-          <Stack spacing={2}>
-            <Chip
-              label={status}
-              color={connected ? "success" : "default"}
-              size="small"
-            />
-
-            {frame && (
-              <>
-                <Typography variant="body2">Tick: {frame.tick}</Typography>
-                <Typography variant="body2">Generation: {frame.generation}</Typography>
-                <Typography variant="body2">Tribes alive: {frame.tribes.length}</Typography>
-              </>
-            )}
-
-            <Typography variant="caption">Tick Rate</Typography>
-            <Slider
-              min={1} max={60} value={tickRate}
-              onChange={(_, v) => {
-                setTickRate(v as number);
-                sendConfig({ tick_rate: v });
-              }}
-              valueLabelDisplay="auto"
-              size="small"
-            />
-
-            <Button
-              variant="outlined"
-              color="error"
-              size="small"
-              onClick={handleGodMode}
-            >
-              God Mode (Kill Half)
-            </Button>
-
-            {/* Legend */}
-            <Typography variant="caption" sx={{ mt: 1 }}>States:</Typography>
-            {Object.entries(BEHAVIOR_LABELS).map(([k, label]) => (
-              <Stack key={k} direction="row" spacing={1} alignItems="center">
-                <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: BEHAVIOR_COLORS[Number(k)] }} />
-                <Typography variant="caption">{label}</Typography>
+        {/* C3: Controls panel gated by showControls */}
+        {showControls && (
+          <Paper sx={{ p: 2, minWidth: 220 }}>
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip
+                  label={status}
+                  color={connected ? "success" : "default"}
+                  size="small"
+                />
+                {paused && <Chip label="PAUSED" color="warning" size="small" />}
               </Stack>
-            ))}
-          </Stack>
-        </Paper>
+
+              {frame && (
+                <>
+                  <Typography variant="body2">Tick: {frame.tick}</Typography>
+                  <Typography variant="body2">Generation: {frame.generation}</Typography>
+                  <Typography variant="body2">Tribes alive: {frame.tribes.length}</Typography>
+                </>
+              )}
+
+              {/* C4: Pause / Resume */}
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => sendControl(paused ? "resume" : "pause")}
+                >
+                  {paused ? "Resume" : "Pause"}
+                </Button>
+                {/* C5: Step Tick (only meaningful when paused) */}
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={!paused}
+                  onClick={() => sendControl("step-tick")}
+                >
+                  Step
+                </Button>
+              </Stack>
+
+              {/* C5: Reset */}
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => sendControl("reset")}
+              >
+                Reset Same Seed
+              </Button>
+
+              <Typography variant="caption">Tick Rate</Typography>
+              <Slider
+                min={1} max={60} value={tickRate}
+                onChange={(_, v) => {
+                  setTickRate(v as number);
+                  sendConfig({ tick_rate: v });
+                }}
+                valueLabelDisplay="auto"
+                size="small"
+              />
+
+              {/* J4: Intervention menu */}
+              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Interventions
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  onClick={() => sendIntervention("cull_population", { scope: "global", percent: 0.5 })}
+                >
+                  Cull 50%
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  size="small"
+                  onClick={() => sendIntervention("spawn_food", { scope: "global", amount: 0.5 })}
+                >
+                  Spawn Food
+                </Button>
+              </Stack>
+              <Button
+                variant="text"
+                color="inherit"
+                size="small"
+                sx={{ fontSize: "0.65rem", color: "text.disabled" }}
+                onClick={handleGodMode}
+              >
+                Legacy: Kill Half
+              </Button>
+
+              {/* Legend */}
+              <Typography variant="caption" sx={{ mt: 1 }}>States:</Typography>
+              {Object.entries(BEHAVIOR_LABELS).map(([k, label]) => (
+                <Stack key={k} direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: BEHAVIOR_COLORS[Number(k)] }} />
+                  <Typography variant="caption">{label}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Paper>
+        )}
+
+        {/* H2 / I4: Tribe dossier + Brain tab panel */}
+        {showTribe && (
+          <Paper sx={{ p: 2, minWidth: 240, maxWidth: 300 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1, display: "block", mb: 0.5 }}>
+              Tribe {selectedTribeId !== null ? `#${selectedTribeId}` : "— click map to select"}
+            </Typography>
+            {/* I4: Tab bar */}
+            <Stack direction="row" spacing={0.5} sx={{ mb: 1 }}>
+              {(["dossier", "brain"] as const).map((tab) => (
+                <Button
+                  key={tab}
+                  size="small"
+                  variant={tribeTab === tab ? "contained" : "outlined"}
+                  onClick={() => setTribeTab(tab)}
+                  sx={{ textTransform: "uppercase", letterSpacing: 1, fontSize: "0.6rem", minWidth: 60, py: 0.25 }}
+                >
+                  {tab}
+                </Button>
+              ))}
+            </Stack>
+            {tribeSnapshot ? (
+              <>
+                {tribeTab === "dossier" && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption">Cluster: {tribeSnapshot.cluster_id}</Typography>
+                    <Typography variant="caption">State: {tribeSnapshot.behavior}</Typography>
+                    <Typography variant="caption">
+                      Pop: {tribeSnapshot.population} / {tribeSnapshot.max_population}
+                    </Typography>
+                    <Typography variant="caption">Food: {tribeSnapshot.food_stores.toFixed(1)}</Typography>
+                    <Typography variant="caption">Territory: {tribeSnapshot.territory_count} tiles</Typography>
+                    <Typography variant="caption">Generation: {tribeSnapshot.generation}</Typography>
+                    <Typography variant="caption">Ticks alive: {tribeSnapshot.ticks_alive}</Typography>
+                    {tribeSnapshot.target_tribe !== null && (
+                      <Typography variant="caption">Target: #{tribeSnapshot.target_tribe}</Typography>
+                    )}
+                    {tribeSnapshot.ally_tribe !== null && (
+                      <Typography variant="caption">Ally: #{tribeSnapshot.ally_tribe}</Typography>
+                    )}
+                    <Typography variant="caption" sx={{ mt: 0.5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Stats
+                    </Typography>
+                    {(["a_combat","a_risk","a_resource","a_map_objective","a_team","feed_risk"] as const).map(k => (
+                      <Stack key={k} direction="row" justifyContent="space-between">
+                        <Typography variant="caption" sx={{ color: "text.secondary" }}>{k}</Typography>
+                        <Typography variant="caption">{tribeSnapshot.stats[k].toFixed(3)}</Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                )}
+
+                {/* I4: Brain tab — inputs, outputs, dominant drive highlight */}
+                {tribeTab === "brain" && (
+                  <Stack spacing={0.5}>
+                    <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Neural Inputs ({tribeSnapshot.last_inputs.length})
+                    </Typography>
+                    {tribeSnapshot.last_inputs.map((v, i) => {
+                      const label = (tribeSnapshot.input_labels ?? INPUT_LABELS)[i] ?? String(i);
+                      return (
+                        <Stack key={i} direction="row" justifyContent="space-between">
+                          <Typography variant="caption" sx={{ color: "text.secondary" }}>{label}</Typography>
+                          <Typography variant="caption">{v.toFixed(3)}</Typography>
+                        </Stack>
+                      );
+                    })}
+                    <Typography variant="caption" sx={{ mt: 0.5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Neural Outputs ({tribeSnapshot.last_outputs.length})
+                    </Typography>
+                    {(() => {
+                      const maxOut = Math.max(...tribeSnapshot.last_outputs);
+                      return tribeSnapshot.last_outputs.map((v, i) => {
+                        const label = (tribeSnapshot.output_labels ?? OUTPUT_LABELS)[i] ?? String(i);
+                        const isDominant = v === maxOut;
+                        return (
+                          <Stack key={i} direction="row" justifyContent="space-between" alignItems="center">
+                            <Typography variant="caption" sx={{ color: isDominant ? "primary.main" : "text.secondary" }}>
+                              {label}{isDominant ? " ▶" : ""}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontWeight: isDominant ? "bold" : "normal" }}>
+                              {v.toFixed(3)}
+                            </Typography>
+                          </Stack>
+                        );
+                      });
+                    })()}
+                    <Typography variant="caption" sx={{ mt: 0.5, color: "text.disabled" }}>
+                      gen {tribeSnapshot.generation} · {tribeSnapshot.ticks_alive} ticks
+                    </Typography>
+                  </Stack>
+                )}
+              </>
+            ) : (
+              <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                {selectedTribeId !== null ? "Loading…" : "Click a tribe marker on the map"}
+              </Typography>
+            )}
+          </Paper>
+        )}
+
+        {/* C3: Events / Analytics / Sessions placeholders (collapsed unless toggled) */}
+        {showEvents && (
+          <Paper sx={{ p: 2, minWidth: 200 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+              Events
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ color: "text.disabled", mt: 1 }}>
+              Event log — pending G4 endpoint
+            </Typography>
+          </Paper>
+        )}
+        {showAnalytics && (
+          <Paper sx={{ p: 2, minWidth: 200 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+              Analytics
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ color: "text.disabled", mt: 1 }}>
+              Live metrics — pending M1
+            </Typography>
+          </Paper>
+        )}
+        {showSessions && (
+          <Paper sx={{ p: 2, minWidth: 200 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+              Sessions
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ color: "text.disabled", mt: 1 }}>
+              Saved sessions — pending M3
+            </Typography>
+          </Paper>
+        )}
       </Stack>
     </Box>
   );

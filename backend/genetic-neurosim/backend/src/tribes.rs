@@ -114,8 +114,8 @@ pub struct TribeState {
     #[serde(skip_serializing)]
     pub founders: Vec<FounderTag>,
     pub ticks_alive: u64,
-    pub last_inputs: [f32; 8],
-    pub last_outputs: [f32; 3],
+    pub last_inputs: [f32; crate::simulation::INPUT_COUNT],
+    pub last_outputs: [f32; crate::simulation::OUTPUT_COUNT],
     pub alive: bool,
 }
 
@@ -159,8 +159,8 @@ impl TribeState {
             lineage: vec![],
             founders,
             ticks_alive: 0,
-            last_inputs: [0.0; 8],
-            last_outputs: [0.0; 3],
+            last_inputs: [0.0; crate::simulation::INPUT_COUNT],
+            last_outputs: [0.0; crate::simulation::OUTPUT_COUNT],
             alive: true,
         }
     }

@@ -9,7 +9,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Path, State,
     },
     http::StatusCode,
     response::IntoResponse,
@@ -19,9 +19,10 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde::Serialize;
 use simulation::{
-    ConfigPatch, ControlConfig, ControlResponse, GodModeResponse, RecordingSummary,
-    ReplayRecordingRequest, RestartSeedRequest, SaveRecordingRequest, SharedSimulation,
-    TribeSimulation, StatusResponse,
+    ConfigPatch, ControlConfig, ControlResponse, GodModeResponse, InterventionRequest,
+    InterventionResponse, RecordingSummary, ReplayRecordingRequest, RestartSeedRequest,
+    SaveRecordingRequest, SharedSimulation, TribeSimulation, StatusResponse,
+    TribeSnapshotResponse, WorldSnapshotResponse, TileOwnershipResponse,
 };
 use db::Database;
 use tokio::sync::broadcast;
@@ -84,6 +85,10 @@ async fn main() {
         .route("/api/control/step-tick", post(control_step_tick))
         .route("/api/control/reset", post(control_reset))
         .route("/api/control/restart-seed", post(control_restart_seed))
+        .route("/api/world-snapshot", get(get_world_snapshot))
+        .route("/api/tile-ownership", get(get_tile_ownership))
+        .route("/api/tribes/:id", get(get_tribe_snapshot))
+        .route("/api/interventions", post(handle_intervention))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -257,6 +262,37 @@ async fn control_restart_seed(
     let mut simulation = state.simulation.write();
     simulation.restart_with_seed(request.world_seed);
     Json(ControlResponse { ok: true, status: simulation.status() })
+}
+
+async fn get_world_snapshot(State(state): State<Arc<AppState>>) -> Json<WorldSnapshotResponse> {
+    Json(state.simulation.read().world_snapshot())
+}
+
+async fn get_tile_ownership(State(state): State<Arc<AppState>>) -> Json<TileOwnershipResponse> {
+    Json(state.simulation.read().tile_ownership_snapshot())
+}
+
+async fn get_tribe_snapshot(
+    Path(id): Path<usize>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<TribeSnapshotResponse>, (StatusCode, String)> {
+    state
+        .simulation
+        .read()
+        .tribe_snapshot(id)
+        .map(Json)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("tribe {id} not found")))
+}
+
+async fn handle_intervention(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<InterventionRequest>,
+) -> Result<Json<InterventionResponse>, (StatusCode, String)> {
+    let mut simulation = state.simulation.write();
+    simulation
+        .apply_intervention(request)
+        .map(Json)
+        .map_err(|msg| (StatusCode::NOT_IMPLEMENTED, msg))
 }
 
 async fn ws_simulation(

@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::Arc,
 };
 
@@ -12,6 +12,23 @@ pub type SharedSimulation = Arc<RwLock<TribeSimulation>>;
 
 pub const INPUT_COUNT: usize = 8;
 pub const OUTPUT_COUNT: usize = 3;
+
+pub const INPUT_LABELS: [&str; INPUT_COUNT] = [
+    "food_ratio",
+    "pop_ratio",
+    "territory",
+    "feed_risk",
+    "combat",
+    "resource",
+    "nearest_enemy",
+    "nearest_ally",
+];
+
+pub const OUTPUT_LABELS: [&str; OUTPUT_COUNT] = [
+    "aggression",
+    "resource_drive",
+    "goal_drive",
+];
 
 // ─── ClusterProfile ──────────────────────────────────────────────────────────
 
@@ -164,6 +181,95 @@ pub struct RestartSeedRequest {
 #[derive(serde::Serialize)]
 pub struct GodModeResponse {
     pub killed: u32,
+}
+
+// ─── Intervention types ───────────────────────────────────────────────────────
+
+/// Target scope for an intervention — global or a single tribe.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InterventionScope {
+    Global,
+    Tribe { tribe_id: usize },
+}
+
+/// Typed intervention request dispatched through POST /api/interventions.
+/// Variants `Drought` and `MutationPulse` exist as documented shapes but
+/// return HTTP 501 until implemented.
+#[derive(serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InterventionRequest {
+    CullPopulation { scope: InterventionScope, percent: f32 },
+    SpawnFood { scope: InterventionScope, amount: f32 },
+    Drought,
+    MutationPulse { severity: f32 },
+}
+
+#[derive(serde::Serialize)]
+pub struct InterventionResponse {
+    pub ok: bool,
+    pub message: String,
+}
+
+// ─── WorldSnapshotResponse ────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct TileSnapshot {
+    pub biome: u8,
+    pub food: f32,
+    pub max_food: f32,
+    pub move_cost: f32,
+    pub defense_bonus: f32,
+    pub disease_rate: f32,
+}
+
+#[derive(serde::Serialize)]
+pub struct WorldSnapshotResponse {
+    pub width: usize,
+    pub height: usize,
+    pub seed: u64,
+    pub tiles: Vec<TileSnapshot>,
+}
+
+// ─── TribeSnapshotResponse ───────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct TribeSnapshotResponse {
+    pub id: usize,
+    pub cluster_id: String,
+    pub population: u32,
+    pub max_population: u32,
+    pub food_stores: f32,
+    pub behavior: crate::tribes::BehaviorState,
+    pub territory_count: usize,
+    pub target_tribe: Option<usize>,
+    pub ally_tribe: Option<usize>,
+    pub stats: crate::tribes::TribeStats,
+    pub last_inputs: [f32; INPUT_COUNT],
+    pub last_outputs: [f32; OUTPUT_COUNT],
+    pub input_labels: &'static [&'static str],
+    pub output_labels: &'static [&'static str],
+    pub generation: u32,
+    pub ticks_alive: u64,
+    pub alive: bool,
+}
+
+// ─── TileOwnershipResponse ────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct TileOwnerRecord {
+    pub tile_id: u32,
+    /// None means unowned neutral tile.
+    pub owner_tribe_id: Option<u32>,
+    /// Reserved for contested-tile logic; always false until that mechanic exists.
+    pub contested: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct TileOwnershipResponse {
+    pub width: usize,
+    pub height: usize,
+    pub owners: Vec<TileOwnerRecord>,
 }
 
 // ─── Vec2 ─────────────────────────────────────────────────────────────────────
@@ -510,9 +616,12 @@ impl Genome {
         &self.compiled
     }
 
-    /// Stub mutation — real per-weight perturbation will be wired in a later task.
+    /// Mutate genome weights/topology. Always ends with `rebuild_compiled` so the
+    /// cached activation plan stays valid regardless of what this method does.
     pub fn mutate(&mut self, _rng: &mut rand::rngs::SmallRng, _rate: f32) {
         // TODO: real weight/topology mutation
+        // rebuild_compiled is called below so inference never uses a stale plan
+        self.rebuild_compiled();
     }
 
     pub fn rebuild_compiled(&mut self) {
@@ -631,6 +740,11 @@ impl InnovationTracker {
 
 // ─── TribeSimulation ─────────────────────────────────────────────────────────
 
+/// Max events retained in the global ring buffer.
+pub const MAX_GLOBAL_EVENTS: usize = 1000;
+/// Max events retained per-tribe journal.
+pub const MAX_TRIBE_EVENTS: usize = 200;
+
 pub struct TribeSimulation {
     config: ControlConfig,
     world: crate::world::WorldGrid,
@@ -643,6 +757,13 @@ pub struct TribeSimulation {
     recordings: Vec<Recording>,
     active_replay: Option<Vec<u8>>,
     last_frame: Vec<u8>,
+    /// Monotonic event id counter.
+    next_event_id: u64,
+    /// Global bounded ring buffer of recent events.
+    global_events: VecDeque<crate::events::SimulationEvent>,
+    /// Per-tribe bounded event journals (indexed by tribe id). Persists after
+    /// tribe extinction so logs remain queryable.
+    tribe_events: HashMap<usize, VecDeque<crate::events::SimulationEvent>>,
 }
 
 impl TribeSimulation {
@@ -663,6 +784,9 @@ impl TribeSimulation {
             recordings: vec![],
             active_replay: None,
             last_frame: vec![],
+            next_event_id: 0,
+            global_events: VecDeque::new(),
+            tribe_events: HashMap::new(),
         };
         sim.initialize_tribes();
         Arc::new(RwLock::new(sim))
@@ -678,6 +802,20 @@ impl TribeSimulation {
         }).collect();
         // Build the initial cached frame (no food changes on tick 0)
         self.last_frame = self.build_frame(&[]);
+
+        // Emit spawn events for every tribe
+        let tick = self.tick;
+        let gen = self.generation;
+        let ids: Vec<u32> = (0..self.tribes.len()).map(|i| i as u32).collect();
+        for tribe_id in ids {
+            let ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::TribeSpawned,
+                crate::events::EventSeverity::Info,
+                tribe_id,
+            );
+            self.push_event(ev);
+        }
     }
 
     pub fn is_halted(&self) -> bool {
@@ -741,6 +879,18 @@ impl TribeSimulation {
         self.world = crate::world::WorldGrid::new(&wgen);
         self.rng = rand::rngs::SmallRng::seed_from_u64(self.config.world_seed);
         self.tribes = vec![];
+        // Clear global buffer; keep per-tribe journals so extinct runs stay queryable
+        self.global_events.clear();
+
+        // Emit reset event before spawn events
+        let reset_ev = crate::events::SimulationEvent::new(
+            0, 0, 0,
+            crate::events::EventType::SimulationReset,
+            crate::events::EventSeverity::Important,
+            crate::events::NO_TRIBE,
+        );
+        self.push_event(reset_ev);
+
         self.initialize_tribes();
     }
 
@@ -758,8 +908,119 @@ impl TribeSimulation {
         }
     }
 
+    /// Push an event into the global ring buffer and both tribe journals
+    /// (tribe_id and other_tribe_id if set).
+    pub fn push_event(&mut self, mut event: crate::events::SimulationEvent) {
+        event.event_id = self.next_event_id;
+        self.next_event_id += 1;
+
+        // Both-tribe indexing
+        let a = event.tribe_id;
+        let b = event.other_tribe_id;
+
+        if a != crate::events::NO_TRIBE {
+            let journal = self.tribe_events.entry(a as usize).or_default();
+            if journal.len() >= MAX_TRIBE_EVENTS {
+                journal.pop_front();
+            }
+            journal.push_back(event.clone());
+        }
+        if b != crate::events::NO_TRIBE && b != a {
+            let journal = self.tribe_events.entry(b as usize).or_default();
+            if journal.len() >= MAX_TRIBE_EVENTS {
+                journal.pop_front();
+            }
+            journal.push_back(event.clone());
+        }
+
+        if self.global_events.len() >= MAX_GLOBAL_EVENTS {
+            self.global_events.pop_front();
+        }
+        self.global_events.push_back(event);
+    }
+
+    /// Return the most recent global events (up to `limit`).
+    pub fn recent_events(&self, limit: usize) -> Vec<&crate::events::SimulationEvent> {
+        self.global_events.iter().rev().take(limit).collect()
+    }
+
+    /// Return events for a specific tribe (most recent first).
+    pub fn tribe_event_log(&self, tribe_id: usize) -> Vec<&crate::events::SimulationEvent> {
+        match self.tribe_events.get(&tribe_id) {
+            Some(journal) => journal.iter().rev().collect(),
+            None => vec![],
+        }
+    }
+
+    pub fn world_snapshot(&self) -> WorldSnapshotResponse {
+        WorldSnapshotResponse {
+            width: self.world.grid_w,
+            height: self.world.grid_h,
+            seed: self.config.world_seed,
+            tiles: self.world.tiles.iter().map(|t| TileSnapshot {
+                biome: t.biome as u8,
+                food: t.food,
+                max_food: t.max_food,
+                move_cost: t.move_cost,
+                defense_bonus: t.defense_bonus,
+                disease_rate: t.disease_rate,
+            }).collect(),
+        }
+    }
+
+    pub fn tribe_snapshot(&self, id: usize) -> Option<TribeSnapshotResponse> {
+        let t = self.tribes.get(id)?;
+        Some(TribeSnapshotResponse {
+            id: t.id,
+            cluster_id: t.cluster_id.clone(),
+            population: t.population,
+            max_population: t.max_population,
+            food_stores: t.food_stores,
+            behavior: t.behavior,
+            territory_count: t.territory.len(),
+            target_tribe: t.target_tribe,
+            ally_tribe: t.ally_tribe,
+            stats: t.stats.clone(),
+            last_inputs: t.last_inputs,
+            last_outputs: t.last_outputs,
+            input_labels: &INPUT_LABELS,
+            output_labels: &OUTPUT_LABELS,
+            generation: t.generation,
+            ticks_alive: t.ticks_alive,
+            alive: t.alive,
+        })
+    }
+
+    pub fn tile_ownership_snapshot(&self) -> TileOwnershipResponse {
+        let total = self.world.total_tiles;
+        let mut owners: Vec<Option<u32>> = vec![None; total];
+
+        for tribe in &self.tribes {
+            if !tribe.alive { continue; }
+            for &tile_idx in &tribe.territory {
+                let idx = tile_idx as usize;
+                if idx < total {
+                    owners[idx] = Some(tribe.id as u32);
+                }
+            }
+        }
+
+        TileOwnershipResponse {
+            width: self.world.grid_w,
+            height: self.world.grid_h,
+            owners: owners.into_iter().enumerate().map(|(i, owner)| TileOwnerRecord {
+                tile_id: i as u32,
+                owner_tribe_id: owner,
+                contested: false,
+            }).collect(),
+        }
+    }
+
     pub fn step(&mut self) -> Vec<u8> {
         self.tick += 1;
+
+        // Snapshot for extinction detection (alive before this tick)
+        let was_alive: Vec<bool> = self.tribes.iter().map(|t| t.alive).collect();
 
         // 1. Regenerate food on world tiles
         self.world.tick_food();
@@ -823,6 +1084,22 @@ impl TribeSimulation {
             self.halted = true;
         }
 
+        // Emit TribeExtinct for any tribe that died this tick
+        let tick = self.tick;
+        let gen = self.generation;
+        let extinct_ids: Vec<u32> = was_alive.iter().zip(self.tribes.iter())
+            .filter_map(|(&was, t)| if was && !t.alive { Some(t.id as u32) } else { None })
+            .collect();
+        for tribe_id in extinct_ids {
+            let ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::TribeExtinct,
+                crate::events::EventSeverity::Important,
+                tribe_id,
+            );
+            self.push_event(ev);
+        }
+
         // 10. Pack and return current frame
         self.pack_current_frame()
     }
@@ -870,7 +1147,10 @@ impl TribeSimulation {
             tribe.last_outputs = [agg, res, goal];
         }
 
-        // Transition logic
+        // Transition logic — collect behavior changes for event emission after loop
+        // (tribe_id, old_behavior as u8, new_behavior as u8, dominant output drive)
+        let mut behavior_changes: Vec<(u32, u8, u8, f32)> = Vec::new();
+
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
             let (aggression, _resource, goal) = drives[i];
@@ -936,11 +1216,32 @@ impl TribeSimulation {
             } else { next };
 
             if next != current {
+                let max_drive = self.tribes[i].last_outputs
+                    .iter()
+                    .cloned()
+                    .fold(f32::NEG_INFINITY, f32::max);
+                behavior_changes.push((self.tribes[i].id as u32, current as u8, next as u8, max_drive));
                 self.tribes[i].behavior = next;
                 self.tribes[i].ticks_in_state = 0;
             } else {
                 self.tribes[i].ticks_in_state += 1;
             }
+        }
+
+        // Emit BehaviorChanged events (outside the loop to avoid borrow conflict)
+        let tick = self.tick;
+        let gen = self.generation;
+        for (tribe_id, old_b, new_b, max_drive) in behavior_changes {
+            let mut ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::BehaviorChanged,
+                crate::events::EventSeverity::Info,
+                tribe_id,
+            );
+            ev.value_a = old_b as f32; // previous behavior state id
+            ev.value_b = max_drive;    // dominant output drive that triggered transition
+            ev.flags = new_b as u32;   // new behavior state id
+            self.push_event(ev);
         }
     }
 
@@ -1141,8 +1442,13 @@ impl TribeSimulation {
         let mutation_rate = self.config.mutation_rate;
         let nudge = 0.02f32;
 
+        // Collect (tribe_id, new_a_combat) for mutation events after the loop
+        let mut gen_advanced: Vec<u32> = Vec::new();
+        let mut mutation_records: Vec<(u32, f32)> = Vec::new(); // (tribe_id, new_a_combat)
+
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
+            gen_advanced.push(i as u32);
             self.tribes[i].generation += 1;
 
             // Genome mutation — extract genome, mutate, put back to avoid split borrow
@@ -1168,9 +1474,37 @@ impl TribeSimulation {
                 self.tribes[i].stats.a_resource = (self.tribes[i].stats.a_resource + 0.03).min(1.0);
             }
 
+            // Collect mutation summary (new a_combat after nudge)
+            mutation_records.push((self.tribes[i].id as u32, self.tribes[i].stats.a_combat));
+
             // Lineage log
             let gen = self.tribes[i].generation;
             self.tribes[i].lineage.push(format!("gen-{}-survived", gen));
+        }
+
+        // Emit GenerationAdvanced and GenomeMutated events
+        let tick = self.tick;
+        let gen = self.generation;
+        for tribe_id in gen_advanced {
+            let ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::GenerationAdvanced,
+                crate::events::EventSeverity::Info,
+                tribe_id,
+            );
+            self.push_event(ev);
+        }
+        // I5: mutation event — value_a = mutation_rate, value_b = new a_combat summary stat
+        for (tribe_id, new_a_combat) in mutation_records {
+            let mut ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::GenomeMutated,
+                crate::events::EventSeverity::Info,
+                tribe_id,
+            );
+            ev.value_a = mutation_rate;
+            ev.value_b = new_a_combat;
+            self.push_event(ev);
         }
     }
 
@@ -1266,6 +1600,104 @@ impl TribeSimulation {
             t.population = t.population / 2;
         }
         GodModeResponse { killed: killed as u32 }
+    }
+
+    // ─── J1/J2/J3: Typed intervention dispatch ────────────────────────────────
+
+    pub fn apply_intervention(&mut self, req: InterventionRequest) -> Result<InterventionResponse, String> {
+        match req {
+            InterventionRequest::CullPopulation { scope, percent } => {
+                Ok(self.cull_population(scope, percent))
+            }
+            InterventionRequest::SpawnFood { scope, amount } => {
+                Ok(self.spawn_food(scope, amount))
+            }
+            InterventionRequest::Drought => {
+                Err("drought intervention not yet implemented".to_string())
+            }
+            InterventionRequest::MutationPulse { .. } => {
+                Err("mutation_pulse intervention not yet implemented".to_string())
+            }
+        }
+    }
+
+    // ─── J2: Cull Population ─────────────────────────────────────────────────
+
+    fn cull_population(&mut self, scope: InterventionScope, percent: f32) -> InterventionResponse {
+        let percent = percent.clamp(0.0, 1.0);
+        let mut casualties = 0u32;
+
+        for tribe in self.tribes.iter_mut() {
+            let apply = match &scope {
+                InterventionScope::Global => tribe.alive,
+                InterventionScope::Tribe { tribe_id } => tribe.alive && tribe.id == *tribe_id,
+            };
+            if apply {
+                let kill = (tribe.population as f32 * percent) as u32;
+                tribe.population = tribe.population.saturating_sub(kill);
+                casualties += kill;
+                if tribe.population == 0 {
+                    tribe.alive = false;
+                }
+            }
+        }
+
+        let mut ev = crate::events::SimulationEvent::new(
+            0, self.tick, self.generation,
+            crate::events::EventType::InterventionApplied,
+            crate::events::EventSeverity::Important,
+            crate::events::NO_TRIBE,
+        );
+        ev.value_a = percent;
+        ev.value_b = casualties as f32;
+        ev.flags = 0; // variant id: cull_population
+        self.push_event(ev);
+
+        InterventionResponse {
+            ok: true,
+            message: format!("Culled {:.0}% — {} casualties", percent * 100.0, casualties),
+        }
+    }
+
+    // ─── J3: Spawn Food ───────────────────────────────────────────────────────
+
+    fn spawn_food(&mut self, scope: InterventionScope, amount: f32) -> InterventionResponse {
+        let amount = amount.max(0.0);
+        let changed = match &scope {
+            InterventionScope::Global => self.world.spawn_food_global(amount),
+            InterventionScope::Tribe { tribe_id } => {
+                let territory: Vec<u16> = self.tribes
+                    .get(*tribe_id)
+                    .map(|t| t.territory.clone())
+                    .unwrap_or_default();
+                let mut count = 0;
+                for tile_idx in territory {
+                    let idx = tile_idx as usize;
+                    if idx < self.world.tiles.len() {
+                        let tile = &mut self.world.tiles[idx];
+                        tile.food = (tile.food + amount).min(tile.max_food);
+                        count += 1;
+                    }
+                }
+                count
+            }
+        };
+
+        let mut ev = crate::events::SimulationEvent::new(
+            0, self.tick, self.generation,
+            crate::events::EventType::InterventionApplied,
+            crate::events::EventSeverity::Important,
+            crate::events::NO_TRIBE,
+        );
+        ev.value_a = amount;
+        ev.value_b = changed as f32;
+        ev.flags = 1; // variant id: spawn_food
+        self.push_event(ev);
+
+        InterventionResponse {
+            ok: true,
+            message: format!("Spawned food (+{:.2}) on {} tiles", amount, changed),
+        }
     }
 
     pub fn list_recordings(&self) -> Result<Vec<RecordingSummary>, String> {

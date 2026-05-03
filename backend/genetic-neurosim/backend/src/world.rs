@@ -333,6 +333,19 @@ impl WorldGrid {
         result
     }
 
+    /// Add `amount` food to every non-river tile, capped at `max_food`.
+    /// Returns the number of tiles modified.
+    pub fn spawn_food_global(&mut self, amount: f32) -> usize {
+        let mut changed = 0;
+        for tile in &mut self.tiles {
+            if tile.biome != Biome::River {
+                tile.food = (tile.food + amount).min(tile.max_food);
+                changed += 1;
+            }
+        }
+        changed
+    }
+
     /// Return up to 4 adjacent tile indices (N/S/E/W), clamped to grid bounds.
     pub fn adjacent_tiles(&self, index: usize) -> Vec<usize> {
         let (x, y) = self.tile_xy(index);
@@ -349,6 +362,32 @@ impl WorldGrid {
         }
         if x + 1 < self.grid_w {
             neighbors.push(self.xy_tile(x + 1, y));
+        }
+
+        neighbors
+    }
+
+    /// Return up to 6 hex-adjacent tile indices using odd-r offset (pointy-top).
+    /// Matches the frontend `neurosimHex.ts` coordinate convention.
+    pub fn hex_adjacent_tiles(&self, index: usize) -> Vec<usize> {
+        let (col, row) = self.tile_xy(index);
+        let mut neighbors = Vec::with_capacity(6);
+
+        // Candidate (col, row) offsets depend on whether the row is even or odd.
+        let candidates: &[(i64, i64)] = if row % 2 == 0 {
+            // even row
+            &[(-1, 0), (1, 0), (-1, -1), (0, -1), (-1, 1), (0, 1)]
+        } else {
+            // odd row
+            &[(-1, 0), (1, 0), (0, -1), (1, -1), (0, 1), (1, 1)]
+        };
+
+        for &(dc, dr) in candidates {
+            let nc = col as i64 + dc;
+            let nr = row as i64 + dr;
+            if nc >= 0 && nr >= 0 && nc < self.grid_w as i64 && nr < self.grid_h as i64 {
+                neighbors.push(self.xy_tile(nc as usize, nr as usize));
+            }
         }
 
         neighbors
@@ -388,6 +427,61 @@ mod tests {
         let (w, h) = config.derive_grid_dims();
         // 500 * 4 = 2000 > 1600 min — must have at least 2000 tiles
         assert!(w * h >= 2000, "grid must scale with tribe count");
+    }
+
+    #[test]
+    fn hex_adjacent_center_has_six_neighbors() {
+        let config = WorldGenerationConfig {
+            seed: 1,
+            tribe_count: 4,
+            total_initial_population: 0,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        };
+        let grid = WorldGrid::new(&config);
+        // Center tile should have exactly 6 neighbors
+        let center = (grid.grid_h / 2) * grid.grid_w + (grid.grid_w / 2);
+        assert_eq!(grid.hex_adjacent_tiles(center).len(), 6);
+    }
+
+    #[test]
+    fn hex_adjacent_corner_has_fewer_than_six() {
+        let config = WorldGenerationConfig {
+            seed: 1,
+            tribe_count: 4,
+            total_initial_population: 0,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        };
+        let grid = WorldGrid::new(&config);
+        // Top-left corner tile (index 0) has fewer than 6 neighbors
+        assert!(grid.hex_adjacent_tiles(0).len() < 6);
+        // All returned indices must be in-bounds
+        for &n in &grid.hex_adjacent_tiles(0) {
+            assert!(n < grid.total_tiles);
+        }
+    }
+
+    #[test]
+    fn hex_adjacent_edge_has_three_or_four_neighbors() {
+        let config = WorldGenerationConfig {
+            seed: 1,
+            tribe_count: 4,
+            total_initial_population: 0,
+            target_tiles_per_tribe: 4,
+            target_population_density: 10.0,
+            min_tiles: TOTAL_TILES,
+        };
+        let grid = WorldGrid::new(&config);
+        // Top edge, middle column (row=0, col=grid_w/2)
+        let edge = grid.grid_w / 2;
+        let n = grid.hex_adjacent_tiles(edge).len();
+        assert!(n >= 3 && n <= 4, "edge tile should have 3-4 neighbors, got {n}");
+        for &idx in &grid.hex_adjacent_tiles(edge) {
+            assert!(idx < grid.total_tiles);
+        }
     }
 
     #[test]
