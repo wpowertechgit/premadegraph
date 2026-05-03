@@ -6,7 +6,21 @@
       "Bash(git -C /c/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph log --oneline -20 -- frontend/src/PlayerDetailPage.tsx frontend/src/PlayerLookupField.tsx frontend/src/components/PlayerPerformanceCard.tsx)",
       "Bash(cargo build *)",
       "Bash(java -version)",
-      "Bash(where java *)"
+      "Bash(where java *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(type\\(d\\)\\); print\\(list\\(d.keys\\(\\)\\)[:10] if isinstance\\(d, dict\\) else str\\(d\\)[:500]\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(git check-ignore *)",
+      "PowerShell(Head -50)",
+      "PowerShell(git -C \"c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\.worktrees\\\\tribal-sim\" add \"backend/genetic-neurosim\" 2>&1)",
+      "Bash(cargo check *)",
+      "Bash(git -C \"C:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\.worktrees\\\\tribal-sim\" add backend/genetic-neurosim/backend/src/simulation.rs)",
+      "Bash(node --check \"/c/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/.worktrees/tribal-sim/backend/neurosim-bridge.js\")",
+      "Bash(node --check \"/c/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/.worktrees/tribal-sim/backend/server.js\")",
+      "Bash(npm --prefix frontend install)",
+      "Bash(git merge feature/neurosim-tribal-simulation --no-ff -m 'feat\\(neurosim\\): tribal simulation — WorldGrid, TribeSimulation, Canvas2D frontend *)",
+      "Bash(git worktree *)",
+      "Bash(node --check backend/server.js)",
+      "Bash(node --check backend/neurosim-bridge.js)"
     ]
   }
 }
