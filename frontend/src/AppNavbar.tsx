@@ -279,6 +279,14 @@ export default function AppNavbar({
       icon: <FaBookOpen />,
     },
     {
+      to: "/tribal-simulation",
+      label: language === "hu" ? "Törzsi Szimuláció" : "Tribal Simulation",
+      description: language === "hu"
+        ? "Canvas2D törzsi szimuláció valós idejű megjelenítővel"
+        : "Canvas2D tribal simulation with real-time viewer",
+      icon: <FaGlobe />,
+    },
+    {
       to: "http://localhost:3001/db-explorer/",
       label: language === "hu" ? "DB Explorer" : "DB Explorer",
       description: language === "hu"
