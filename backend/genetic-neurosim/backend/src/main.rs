@@ -19,7 +19,7 @@ use futures::{SinkExt, StreamExt};
 use serde::Serialize;
 use simulation::{
     ConfigPatch, ControlConfig, GodModeResponse, RecordingSummary, ReplayRecordingRequest,
-    SaveRecordingRequest, SharedSimulation, Simulation, StatusResponse,
+    SaveRecordingRequest, SharedSimulation, TribeSimulation, StatusResponse,
 };
 use db::Database;
 use tokio::sync::broadcast;
@@ -51,7 +51,7 @@ async fn main() {
         }
     };
 
-    let simulation = Simulation::shared(initial_config);
+    let simulation = TribeSimulation::shared(initial_config);
     let (frame_tx, _) = broadcast::channel::<Arc<Vec<u8>>>(32);
     let state = Arc::new(AppState {
         simulation,
@@ -162,6 +162,7 @@ async fn refresh_from_db(State(state): State<Arc<AppState>>) -> Result<Json<Cont
                 food_spawn_rate: None,
                 energy_decay: None,
                 tick_rate: None,
+                world_seed: None,
             });
             
             // Update the stored config clusters
