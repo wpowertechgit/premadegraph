@@ -259,6 +259,36 @@ struct CompiledGenome {
     complexity: usize,
 }
 
+impl CompiledGenome {
+    /// Forward-pass activation. Returns one f32 per output node.
+    /// Input nodes are loaded from `inputs`; bias node is clamped to 1.0.
+    fn activate(&self, inputs: &[f32]) -> Vec<f32> {
+        let n = self.ordered_indices.len();
+        let mut activations = vec![0.0f32; n];
+
+        // Seed input slots and bias (bias is the node right after the last input)
+        for (slot, &val) in inputs.iter().enumerate() {
+            if slot < n { activations[slot] = val; }
+        }
+        let bias_idx = inputs.len(); // bias node position by construction
+        if bias_idx < n { activations[bias_idx] = 1.0; }
+
+        // Topological forward pass
+        for &node_idx in &self.ordered_indices {
+            let sum: f32 = self.incoming[node_idx]
+                .iter()
+                .map(|e| activations[e.from_idx] * e.weight)
+                .sum();
+            // Only accumulate if there are incoming edges (input/bias nodes have none)
+            if !self.incoming[node_idx].is_empty() {
+                activations[node_idx] = sum.tanh();
+            }
+        }
+
+        self.output_indices.iter().map(|&i| activations[i]).collect()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Genome {
     nodes: Vec<NodeGene>,
@@ -455,6 +485,16 @@ impl Genome {
                 enabled: true,
             });
         }
+    }
+
+    /// Return a reference to the compiled genome (used by the neural activation path).
+    pub fn compile(&self) -> &CompiledGenome {
+        &self.compiled
+    }
+
+    /// Stub mutation — real per-weight perturbation will be wired in a later task.
+    pub fn mutate(&mut self, _rng: &mut rand::rngs::SmallRng, _rate: f32) {
+        // TODO: real weight/topology mutation
     }
 
     pub fn rebuild_compiled(&mut self) {
@@ -668,7 +708,16 @@ impl TribeSimulation {
             }
         }
 
-        // 3. Population dynamics: food → pop growth/decline
+        // 3. State machine transitions (Task 7)
+        self.apply_state_machine();
+
+        // 4. Combat resolution (Task 8)
+        self.apply_combat();
+
+        // 5. Alliance system (Task 9)
+        self.apply_alliances();
+
+        // 6. Population dynamics: food → pop growth/decline
         for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
             let food_per_pop = if tribe.population > 0 {
                 tribe.food_stores / tribe.population as f32
@@ -689,17 +738,401 @@ impl TribeSimulation {
             tribe.ticks_alive += 1;
         }
 
-        // 4. Check generation boundary
-        if self.tick % 1000 == 0 {
-            self.generation += 1;
+        // 7. Generation boundary (Task 10)
+        if self.tick % 1000 == 0 && self.tick > 0 {
+            self.apply_generation_boundary();
         }
 
-        // 5. Check halted (all tribes dead)
+        // 8. River crossing evolution (Task 11)
+        self.apply_river_crossing();
+
+        // 9. Check halted (all tribes dead)
         if self.tribes.iter().all(|t| !t.alive) {
             self.halted = true;
         }
 
+        // 10. Pack and return current frame
         self.pack_current_frame()
+    }
+
+    // ─── Task 7: State Machine ────────────────────────────────────────────────
+
+    fn apply_state_machine(&mut self) {
+        use crate::tribes::BehaviorState;
+
+        // Update neural net inputs for each tribe
+        for tribe in self.tribes.iter_mut() {
+            if !tribe.alive { continue; }
+            let food_ratio = if tribe.population > 0 {
+                tribe.food_stores / tribe.population as f32
+            } else { 0.0 };
+            tribe.last_inputs = [
+                food_ratio.min(1.0),
+                (tribe.population as f32 / tribe.max_population as f32).min(1.0),
+                (tribe.territory.len() as f32 / 100.0).min(1.0),
+                tribe.stats.feed_risk,
+                tribe.stats.a_combat,
+                tribe.stats.a_resource,
+                0.5, // nearest enemy distance placeholder
+                0.5, // nearest ally distance placeholder
+            ];
+        }
+
+        // Collect drives per tribe (needs immutable borrow)
+        let drives: Vec<(f32, f32, f32)> = self.tribes.iter().map(|t| {
+            if !t.alive { return (0.0, 0.0, 0.0); }
+            let genome = match &t.genome {
+                Some(g) => g,
+                None => return (0.5, 0.5, 0.5),
+            };
+            let compiled = genome.compile();
+            let outputs = compiled.activate(&t.last_inputs);
+            let aggression = (outputs[0].tanh() + 1.0) / 2.0;
+            let resource   = (outputs[1].tanh() + 1.0) / 2.0;
+            let goal       = (outputs[2].tanh() + 1.0) / 2.0;
+            (aggression, resource, goal)
+        }).collect();
+
+        // Store last_outputs
+        for (tribe, &(agg, res, goal)) in self.tribes.iter_mut().zip(drives.iter()) {
+            tribe.last_outputs = [agg, res, goal];
+        }
+
+        // Transition logic
+        for i in 0..self.tribes.len() {
+            if !self.tribes[i].alive { continue; }
+            let (aggression, _resource, goal) = drives[i];
+            let food_ratio = if self.tribes[i].population > 0 {
+                self.tribes[i].food_stores / self.tribes[i].population as f32
+            } else { 0.0 };
+
+            let current = self.tribes[i].behavior;
+            let next = match current {
+                BehaviorState::Settling => {
+                    if food_ratio < 0.3 { BehaviorState::Foraging }
+                    else if aggression > 0.7 && self.has_neighbor(i) { BehaviorState::AtWar }
+                    else { current }
+                }
+                BehaviorState::Foraging => {
+                    if food_ratio > 0.8 { BehaviorState::Settling }
+                    else if food_ratio < 0.1 { BehaviorState::Starving }
+                    else { current }
+                }
+                BehaviorState::AtWar => current, // resolved in combat step
+                BehaviorState::Occupying => {
+                    if self.tribes[i].ticks_in_state > 200 { BehaviorState::Settling }
+                    else { current }
+                }
+                BehaviorState::Peace => {
+                    if self.tribes[i].ticks_in_state > 500 { BehaviorState::Settling }
+                    else { current }
+                }
+                BehaviorState::Allied => {
+                    match self.tribes[i].ally_tribe {
+                        None => BehaviorState::Settling,
+                        Some(ally_id) => {
+                            if ally_id >= self.tribes.len() || !self.tribes[ally_id].alive {
+                                BehaviorState::Settling
+                            } else { current }
+                        }
+                    }
+                }
+                BehaviorState::Starving => {
+                    if food_ratio > 0.2 { BehaviorState::Foraging }
+                    else if self.tribes[i].ticks_in_state > 50 { BehaviorState::Desperate }
+                    else { current }
+                }
+                BehaviorState::Desperate => {
+                    if self.tribes[i].ticks_in_state > 100 { BehaviorState::Imploding }
+                    else if aggression > 0.6 && self.has_neighbor(i) { BehaviorState::AtWar }
+                    else { current }
+                }
+                BehaviorState::Imploding => {
+                    // Population shrinks rapidly each tick
+                    let decay = (self.tribes[i].population / 20).max(1);
+                    self.tribes[i].population = self.tribes[i].population.saturating_sub(decay);
+                    if self.tribes[i].population == 0 { self.tribes[i].alive = false; }
+                    current
+                }
+                BehaviorState::Migrating => current, // handled separately if needed
+            };
+
+            // Consider migration: goal_drive > 0.6, not at war
+            let next = if !matches!(next, BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Desperate)
+                && goal > 0.6 && matches!(current, BehaviorState::Settling | BehaviorState::Foraging) {
+                BehaviorState::Migrating
+            } else { next };
+
+            if next != current {
+                self.tribes[i].behavior = next;
+                self.tribes[i].ticks_in_state = 0;
+            } else {
+                self.tribes[i].ticks_in_state += 1;
+            }
+        }
+    }
+
+    fn has_neighbor(&self, tribe_idx: usize) -> bool {
+        let my_tiles: std::collections::HashSet<u16> =
+            self.tribes[tribe_idx].territory.iter().cloned().collect();
+        for (i, other) in self.tribes.iter().enumerate() {
+            if i == tribe_idx || !other.alive { continue; }
+            for &tile in &other.territory {
+                let adjacent = crate::world::WorldGrid::adjacent_tiles(tile as usize);
+                if adjacent.iter().any(|&a| my_tiles.contains(&(a as u16))) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    // ─── Task 8: Combat Resolution ────────────────────────────────────────────
+
+    fn apply_combat(&mut self) {
+        use crate::tribes::BehaviorState;
+
+        // War declaration: AtWar tribes pick a target if they don't have one
+        for i in 0..self.tribes.len() {
+            if !self.tribes[i].alive { continue; }
+            if !matches!(self.tribes[i].behavior, BehaviorState::AtWar) { continue; }
+            if self.tribes[i].target_tribe.is_some() { continue; }
+
+            let target = (0..self.tribes.len())
+                .filter(|&j| j != i && self.tribes[j].alive)
+                .min_by_key(|&j| {
+                    let my_home = self.tribes[i].home_tile as i32;
+                    let their_home = self.tribes[j].home_tile as i32;
+                    (my_home - their_home).unsigned_abs()
+                });
+            self.tribes[i].target_tribe = target;
+        }
+
+        // Combat ticks every 10 ticks
+        if self.tick % 10 != 0 { return; }
+
+        let attacker_indices: Vec<usize> = (0..self.tribes.len())
+            .filter(|&i| self.tribes[i].alive && matches!(self.tribes[i].behavior, BehaviorState::AtWar))
+            .collect();
+
+        for &attacker_idx in &attacker_indices {
+            let defender_idx = match self.tribes[attacker_idx].target_tribe {
+                Some(d) => d,
+                None => continue,
+            };
+            if !self.tribes[defender_idx].alive {
+                self.tribes[attacker_idx].target_tribe = None;
+                self.tribes[attacker_idx].behavior = BehaviorState::Settling;
+                self.tribes[attacker_idx].ticks_in_state = 0;
+                continue;
+            }
+
+            // Box-Muller normal sample for attacker
+            let u1: f32 = self.rng.random::<f32>().max(1e-7);
+            let u2: f32 = self.rng.random::<f32>();
+            let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
+
+            let attacker_strength = self.tribes[attacker_idx].population as f32
+                * self.tribes[attacker_idx].stats.a_combat
+                * (1.0 + z0 * 0.15).max(0.1);
+
+            // Box-Muller normal sample for defender
+            let u1b: f32 = self.rng.random::<f32>().max(1e-7);
+            let u2b: f32 = self.rng.random::<f32>();
+            let z1 = (-2.0 * u1b.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2b).cos();
+
+            let def_tile_bonus = self.tribes[defender_idx].territory.first()
+                .map(|&t| self.world.tiles[t as usize].defense_bonus)
+                .unwrap_or(0.0);
+            let defender_strength = self.tribes[defender_idx].population as f32
+                * (self.tribes[defender_idx].stats.a_risk + def_tile_bonus)
+                * (1.0 + z1 * 0.15).max(0.1);
+
+            let ratio = (attacker_strength / defender_strength.max(0.01)).min(5.0);
+
+            // Knuth Poisson casualties
+            let a_cas_lambda = (self.tribes[defender_idx].stats.a_combat
+                * self.tribes[attacker_idx].population as f32 * 0.02).max(0.1);
+            let a_casualties = self.knuth_poisson(a_cas_lambda);
+
+            let d_cas_lambda = (self.tribes[attacker_idx].stats.a_combat
+                * self.tribes[defender_idx].population as f32 * 0.02 * ratio).max(0.1);
+            let d_casualties = self.knuth_poisson(d_cas_lambda);
+
+            self.tribes[attacker_idx].population =
+                self.tribes[attacker_idx].population.saturating_sub(a_casualties);
+            self.tribes[defender_idx].population =
+                self.tribes[defender_idx].population.saturating_sub(d_casualties);
+
+            // Check extinction
+            if self.tribes[attacker_idx].population == 0 {
+                self.tribes[attacker_idx].alive = false;
+            }
+            if self.tribes[defender_idx].population == 0 {
+                self.tribes[defender_idx].alive = false;
+                // Absorb territory and founders
+                let absorbed_territory: Vec<u16> = self.tribes[defender_idx].territory.clone();
+                let absorbed_founders: Vec<crate::tribes::FounderTag> =
+                    self.tribes[defender_idx].founders.clone();
+                let absorbed_cluster_id = self.tribes[defender_idx].cluster_id.clone();
+                self.tribes[attacker_idx].territory.extend(absorbed_territory);
+                self.tribes[attacker_idx].founders.extend(absorbed_founders);
+                self.tribes[attacker_idx].lineage.push(absorbed_cluster_id);
+                self.tribes[attacker_idx].target_tribe = None;
+                self.tribes[attacker_idx].behavior = BehaviorState::Occupying;
+                self.tribes[attacker_idx].ticks_in_state = 0;
+            } else if self.tribes[attacker_idx].ticks_in_state > 300 {
+                // War timeout — both go to Peace
+                self.tribes[attacker_idx].behavior = BehaviorState::Peace;
+                self.tribes[attacker_idx].target_tribe = None;
+                self.tribes[attacker_idx].ticks_in_state = 0;
+                self.tribes[defender_idx].behavior = BehaviorState::Peace;
+                self.tribes[defender_idx].ticks_in_state = 0;
+            }
+        }
+    }
+
+    fn knuth_poisson(&mut self, lambda: f32) -> u32 {
+        let l = (-lambda).exp();
+        let mut k = 0u32;
+        let mut p = 1.0f32;
+        loop {
+            p *= self.rng.random::<f32>();
+            if p <= l { break; }
+            k += 1;
+            if k > 1000 { break; } // safety cap
+        }
+        k
+    }
+
+    // ─── Task 9: Alliance System ──────────────────────────────────────────────
+
+    fn apply_alliances(&mut self) {
+        use crate::tribes::BehaviorState;
+
+        // Alliance formation every 50 ticks
+        if self.tick % 50 != 0 { return; }
+
+        for i in 0..self.tribes.len() {
+            if !self.tribes[i].alive { continue; }
+            if !matches!(self.tribes[i].behavior, BehaviorState::Settling) { continue; }
+            if self.tribes[i].ticks_in_state < 100 { continue; }
+            let goal_i = self.tribes[i].last_outputs[2];
+            if goal_i <= 0.7 { continue; }
+
+            let ally = (0..self.tribes.len()).find(|&j| {
+                j != i
+                && self.tribes[j].alive
+                && matches!(self.tribes[j].behavior, BehaviorState::Settling)
+                && self.tribes[j].last_outputs[2] > 0.6
+                && self.tribes[j].ally_tribe.is_none()
+                && self.tribes[j].target_tribe.is_none()
+            });
+
+            if let Some(j) = ally {
+                self.tribes[i].behavior = BehaviorState::Allied;
+                self.tribes[i].ally_tribe = Some(j);
+                self.tribes[i].ticks_in_state = 0;
+                self.tribes[j].behavior = BehaviorState::Allied;
+                self.tribes[j].ally_tribe = Some(i);
+                self.tribes[j].ticks_in_state = 0;
+            }
+        }
+
+        // Allied food sharing every 50 ticks
+        let allied_pairs: Vec<(usize, usize)> = self.tribes.iter().enumerate()
+            .filter_map(|(i, t)| {
+                if t.alive && matches!(t.behavior, BehaviorState::Allied) {
+                    t.ally_tribe.map(|j| if i < j { (i, j) } else { (j, i) })
+                } else { None }
+            })
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter().collect();
+
+        for (i, j) in allied_pairs {
+            if !self.tribes[i].alive || !self.tribes[j].alive { continue; }
+            let transfer = (self.tribes[i].food_stores - self.tribes[j].food_stores).abs() * 0.05;
+            if self.tribes[i].food_stores > self.tribes[j].food_stores {
+                self.tribes[i].food_stores -= transfer;
+                self.tribes[j].food_stores += transfer;
+            } else {
+                self.tribes[j].food_stores -= transfer;
+                self.tribes[i].food_stores += transfer;
+            }
+        }
+    }
+
+    // ─── Task 10: Generation Boundary ────────────────────────────────────────
+
+    fn apply_generation_boundary(&mut self) {
+        self.generation += 1;
+        let mutation_rate = self.config.mutation_rate;
+        let nudge = 0.02f32;
+
+        for i in 0..self.tribes.len() {
+            if !self.tribes[i].alive { continue; }
+            self.tribes[i].generation += 1;
+
+            // Genome mutation — extract genome, mutate, put back to avoid split borrow
+            if let Some(mut genome) = self.tribes[i].genome.take() {
+                genome.mutate(&mut self.rng, mutation_rate);
+                self.tribes[i].genome = Some(genome);
+            }
+
+            // Stat nudge: small random walk on primary artifacts
+            let dc = self.rng.random_range(-nudge..nudge);
+            self.tribes[i].stats.a_combat = (self.tribes[i].stats.a_combat + dc).clamp(0.0, 1.0);
+            let dr = self.rng.random_range(-nudge..nudge);
+            self.tribes[i].stats.a_risk = (self.tribes[i].stats.a_risk + dr).clamp(0.0, 1.0);
+            let dres = self.rng.random_range(-nudge..nudge);
+            self.tribes[i].stats.a_resource = (self.tribes[i].stats.a_resource + dres).clamp(0.0, 1.0);
+            let dmo = self.rng.random_range(-nudge..nudge);
+            self.tribes[i].stats.a_map_objective = (self.tribes[i].stats.a_map_objective + dmo).clamp(0.0, 1.0);
+            let dt = self.rng.random_range(-nudge..nudge);
+            self.tribes[i].stats.a_team = (self.tribes[i].stats.a_team + dt).clamp(0.0, 1.0);
+
+            // High feed_risk bias: struggling tribes improve foraging
+            if self.tribes[i].stats.feed_risk > 0.6 {
+                self.tribes[i].stats.a_resource = (self.tribes[i].stats.a_resource + 0.03).min(1.0);
+            }
+
+            // Lineage log
+            let gen = self.tribes[i].generation;
+            self.tribes[i].lineage.push(format!("gen-{}-survived", gen));
+        }
+    }
+
+    // ─── Task 11: River Crossing Evolution ───────────────────────────────────
+
+    fn apply_river_crossing(&mut self) {
+        use crate::tribes::RiverCrossing;
+
+        for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
+            let goal_drive = tribe.last_outputs[2];
+
+            // Increment ticks_near_river if territory is large enough to plausibly
+            // border a river (real adjacency check would require a world borrow;
+            // we use territory size > 2 as a lightweight proxy).
+            let touches_river = tribe.territory.len() > 2
+                && matches!(tribe.river_crossing_tech, RiverCrossing::None | RiverCrossing::Bridges);
+            if touches_river { tribe.ticks_near_river += 1; }
+
+            // None → Bridges
+            if matches!(tribe.river_crossing_tech, RiverCrossing::None)
+                && goal_drive > 0.7
+                && tribe.ticks_near_river > 50 {
+                tribe.river_crossing_tech = RiverCrossing::Bridges;
+                tribe.lineage.push(format!("gen-{}-bridges-unlocked", tribe.generation));
+            }
+
+            // Bridges → Boats
+            if matches!(tribe.river_crossing_tech, RiverCrossing::Bridges)
+                && goal_drive > 0.8
+                && tribe.river_crossings > 20 {
+                tribe.river_crossing_tech = RiverCrossing::Boats;
+                tribe.lineage.push(format!("gen-{}-boats-unlocked", tribe.generation));
+            }
+        }
     }
 
     /// Return the last packed frame. Can be called from a read-lock context.
