@@ -583,13 +583,15 @@ pub struct TribeSimulation {
     halted: bool,
     recordings: Vec<Recording>,
     active_replay: Option<Vec<u8>>,
+    last_frame: Vec<u8>,
 }
 
 impl TribeSimulation {
     pub fn shared(config: ControlConfig) -> SharedSimulation {
+        use rand::SeedableRng;
         let world = crate::world::WorldGrid::new(config.world_seed, config.clusters.len());
         let rng = rand::rngs::SmallRng::seed_from_u64(config.world_seed);
-        Arc::new(RwLock::new(TribeSimulation {
+        let mut sim = TribeSimulation {
             config,
             world,
             tribes: vec![],
@@ -599,7 +601,22 @@ impl TribeSimulation {
             halted: false,
             recordings: vec![],
             active_replay: None,
-        }))
+            last_frame: vec![],
+        };
+        sim.initialize_tribes();
+        Arc::new(RwLock::new(sim))
+    }
+
+    fn initialize_tribes(&mut self) {
+        let spawn_tiles = self.world.find_spawn_tiles(self.config.clusters.len(), &mut self.rng);
+        self.tribes = self.config.clusters.iter().enumerate().map(|(i, profile)| {
+            let home_tile = spawn_tiles.get(i).copied().unwrap_or(i as u16);
+            let mut tribe = crate::tribes::TribeState::from_cluster(i, profile, home_tile);
+            tribe.genome = Some(crate::simulation::Genome::new(8, 3));
+            tribe
+        }).collect();
+        // Build the initial cached frame (no food changes on tick 0)
+        self.last_frame = self.build_frame(&[]);
     }
 
     pub fn is_halted(&self) -> bool {
@@ -630,23 +647,111 @@ impl TribeSimulation {
     }
 
     pub fn step(&mut self) -> Vec<u8> {
-        // stub — real impl in Task 6
         self.tick += 1;
+
+        // 1. Regenerate food on world tiles
+        self.world.tick_food();
+
+        // 2. Foraging: tribes in Foraging or Settling eat from their territory
+        for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
+            use crate::tribes::BehaviorState;
+            if matches!(tribe.behavior, BehaviorState::Foraging | BehaviorState::Settling) {
+                let food_gathered: f32 = tribe.territory.iter().map(|&tile_idx| {
+                    let tile = &self.world.tiles[tile_idx as usize];
+                    tile.food * 0.1
+                }).sum();
+                tribe.food_stores += food_gathered;
+                for &tile_idx in &tribe.territory {
+                    let tile = &mut self.world.tiles[tile_idx as usize];
+                    tile.food = (tile.food - tile.food * 0.1).max(0.0);
+                }
+            }
+        }
+
+        // 3. Population dynamics: food → pop growth/decline
+        for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
+            let food_per_pop = if tribe.population > 0 {
+                tribe.food_stores / tribe.population as f32
+            } else {
+                0.0
+            };
+
+            let delta = ((food_per_pop - 0.8) * 0.05 * tribe.population as f32) as i32;
+            let new_pop = (tribe.population as i32 + delta).max(0) as u32;
+            tribe.population = new_pop.min(tribe.max_population);
+
+            tribe.food_stores = (tribe.food_stores - tribe.population as f32 * 0.5).max(0.0);
+
+            if tribe.population == 0 {
+                tribe.alive = false;
+            }
+
+            tribe.ticks_alive += 1;
+        }
+
+        // 4. Check generation boundary
+        if self.tick % 1000 == 0 {
+            self.generation += 1;
+        }
+
+        // 5. Check halted (all tribes dead)
+        if self.tribes.iter().all(|t| !t.alive) {
+            self.halted = true;
+        }
+
         self.pack_current_frame()
     }
 
+    /// Return the last packed frame. Can be called from a read-lock context.
     pub fn current_packet(&self) -> Vec<u8> {
-        self.pack_current_frame()
+        self.last_frame.clone()
     }
 
-    pub fn pack_current_frame(&self) -> Vec<u8> {
-        // stub binary frame — real impl in Task 6
-        let mut buf = Vec::new();
+    /// Build, cache, and return a binary WS frame for the current simulation state.
+    pub fn pack_current_frame(&mut self) -> Vec<u8> {
+        let changed_food = self.world.changed_food_tiles();
+        let frame = self.build_frame(&changed_food);
+        self.last_frame = frame.clone();
+        frame
+    }
+
+    /// Pure frame-builder (does not mutate state).
+    fn build_frame(&self, changed_food: &[(u16, f32)]) -> Vec<u8> {
+        let alive_tribes: Vec<&crate::tribes::TribeState> =
+            self.tribes.iter().filter(|t| t.alive).collect();
+
+        let mut buf = Vec::with_capacity(20 + alive_tribes.len() * 36 + changed_food.len() * 6);
+
+        // Header (20 bytes)
         push_u32(&mut buf, self.tick as u32);
         push_u32(&mut buf, (self.tick >> 32) as u32);
-        push_u32(&mut buf, self.tribes.len() as u32);
-        push_u32(&mut buf, 0u32); // changed food tiles = 0
+        push_u32(&mut buf, alive_tribes.len() as u32);
+        push_u32(&mut buf, changed_food.len() as u32);
         push_u32(&mut buf, self.generation);
+
+        // Per-tribe records (36 bytes each)
+        for tribe in &alive_tribes {
+            push_u32(&mut buf, tribe.id as u32);          // 4
+            push_u32(&mut buf, tribe.population);         // 4
+            push_u16(&mut buf, tribe.home_tile);          // 2
+            buf.push(tribe.behavior as u8);               // 1
+            buf.push(0u8);                                // 1 padding
+            push_f32(&mut buf, tribe.food_stores);        // 4
+            push_f32(&mut buf, tribe.stats.a_combat);     // 4
+            push_f32(&mut buf, tribe.stats.a_risk);       // 4
+            push_f32(&mut buf, tribe.stats.a_resource);   // 4
+            push_f32(&mut buf, tribe.stats.a_map_objective); // 4
+            push_u16(&mut buf, tribe.territory.len() as u16); // 2
+            push_u16(&mut buf, tribe.generation as u16);  // 2
+            // total per tribe: 4+4+2+1+1+4+4+4+4+4+2+2 = 36
+        }
+
+        // Changed food tiles (6 bytes each: u16 index + f32 food)
+        for &(tile_idx, food) in changed_food {
+            push_u16(&mut buf, tile_idx);
+            push_f32(&mut buf, food);
+        }
+
         buf
     }
 
@@ -698,6 +803,10 @@ impl TribeSimulation {
 }
 
 // ─── binary packing helpers ───────────────────────────────────────────────────
+
+fn push_u16(buffer: &mut Vec<u8>, value: u16) {
+    buffer.extend_from_slice(&value.to_le_bytes());
+}
 
 fn push_u32(buffer: &mut Vec<u8>, value: u32) {
     buffer.extend_from_slice(&value.to_le_bytes());
