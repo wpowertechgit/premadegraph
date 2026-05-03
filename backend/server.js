@@ -3389,7 +3389,7 @@ async function computeNeurosimClusterProfiles(dataset) {
 // Neurosim tribal simulation proxy
 // Note: /api/neurosim/cluster-export is handled natively below — do not override it
 app.all("/api/neurosim/health", (req, res) => neurosimBridge.proxyHttp(req, res));
-app.all("/api/neurosim/api/*", (req, res) => neurosimBridge.proxyHttp(req, res));
+app.all("/api/neurosim/api/*path", (req, res) => neurosimBridge.proxyHttp(req, res));
 
 app.get([
   "/api/neurosim/cluster-export",

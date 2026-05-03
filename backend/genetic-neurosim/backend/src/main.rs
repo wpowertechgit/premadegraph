@@ -39,16 +39,34 @@ struct HealthResponse {
 
 #[tokio::main]
 async fn main() {
-    let db = Database::connect().await.expect("Failed to connect to database");
-    let initial_config = match db.fetch_simulation_config().await {
-        Ok(config) => {
-            println!("Loaded {} clusters from database", config.clusters.len());
-            config
-        },
-        Err(e) => {
-            println!("Wait: Cluster data fetch failed ({e}), using default config");
-            ControlConfig::default()
+    // Postgres is optional — we prefer PREMADEGRAPH_URL HTTP fetch.
+    let db = match Database::connect().await {
+        Ok(db) => {
+            println!("Connected to Postgres");
+            db
         }
+        Err(e) => {
+            println!("Postgres unavailable ({e}), HTTP-only mode");
+            Database::dummy()
+        }
+    };
+
+    // Retry cluster fetch until backend is up (Docker startup ordering).
+    let initial_config = {
+        let mut config = ControlConfig::default();
+        for attempt in 1..=15 {
+            match db.fetch_simulation_config().await {
+                Ok(c) if !c.clusters.is_empty() => {
+                    println!("Loaded {} clusters (attempt {attempt})", c.clusters.len());
+                    config = c;
+                    break;
+                }
+                Ok(_) => println!("No clusters yet (attempt {attempt}), retrying in 3s..."),
+                Err(e) => println!("Cluster fetch failed (attempt {attempt}): {e}, retrying in 3s..."),
+            }
+            tokio::time::sleep(Duration::from_secs(3)).await;
+        }
+        config
     };
 
     let simulation = TribeSimulation::shared(initial_config);

@@ -25,6 +25,17 @@ impl Database {
         Ok(Self { pool })
     }
 
+    /// Returns a Database that skips postgres and relies solely on PREMADEGRAPH_URL.
+    pub fn dummy() -> Self {
+        // Build a pool that will never actually be used (HTTP path takes priority).
+        // We create a disconnected pool by using a deliberately invalid URL — it
+        // won't be connected to until `fetch_from_postgres` is called, which only
+        // happens when `try_fetch_from_premadegraph` returns None.
+        let pool = sqlx::PgPool::connect_lazy("postgres://dummy:dummy@localhost/dummy")
+            .expect("lazy pool construction");
+        Self { pool }
+    }
+
     pub async fn fetch_simulation_config(&self) -> Result<ControlConfig, sqlx::Error> {
         if let Some(config) = try_fetch_from_premadegraph().await {
             return Ok(config);

@@ -24,7 +24,6 @@ services:
       - NEUROSIM_HOST=neurosim
     depends_on:
       - db-explorer
-      - neurosim
 
   db-explorer:
     build:
