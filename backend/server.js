@@ -3294,9 +3294,6 @@ async function computeNeurosimClusterProfiles(dataset) {
       ? `SUM(p.feedscore * p.matches_processed) / NULLIF(SUM(p.matches_processed), 0) AS feedscore_wa,`
       : `0 AS feedscore_wa,`;
 
-    // SQLite GROUP_CONCAT ORDER BY requires SQLite >=3.38; use plain GROUP_CONCAT as fallback.
-    const puuidSql = `GROUP_CONCAT(p.puuid) AS puuids_ordered`;
-
     const rows = await sqliteAll(
       db,
       `SELECT
@@ -3311,7 +3308,7 @@ async function computeNeurosimClusterProfiles(dataset) {
          c.size AS cluster_size,
          ${artifactSql}
          ${feedscoreSql}
-         ${puuidSql}
+         0 AS no_raw_player_ids
        FROM clusters c
        LEFT JOIN cluster_members cm ON c.cluster_id = cm.cluster_id
        LEFT JOIN players p ON cm.puuid = p.puuid
@@ -3339,10 +3336,6 @@ async function computeNeurosimClusterProfiles(dataset) {
 
       const feed_risk = Math.max(0, Math.min(1, (r.feedscore_wa || 0) / 10.0));
 
-      const founder_puuids = r.puuids_ordered
-        ? r.puuids_ordered.split(",").filter(Boolean).slice(0, 3)
-        : [];
-
       return {
         id: r.id,
         size_ratio,
@@ -3352,7 +3345,6 @@ async function computeNeurosimClusterProfiles(dataset) {
         internal_edge_ratio,
         cluster_size: Number(r.cluster_size),
         feed_risk: round4(feed_risk),
-        founder_puuids,
         fight_conversion:     round4(a1),
         damage_pressure:      round4(a1),
         death_cost:           round4(a2),

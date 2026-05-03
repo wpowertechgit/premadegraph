@@ -111,6 +111,7 @@ pub struct TribeState {
     pub genome: Option<crate::simulation::Genome>,
     pub generation: u32,
     pub lineage: Vec<String>,
+    #[serde(skip_serializing)]
     pub founders: Vec<FounderTag>,
     pub ticks_alive: u64,
     pub last_inputs: [f32; 8],

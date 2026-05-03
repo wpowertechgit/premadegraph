@@ -42,7 +42,11 @@ async fn main() {
     // Postgres is optional — we prefer PREMADEGRAPH_URL HTTP fetch.
     let db = match Database::connect().await {
         Ok(db) => {
-            println!("Connected to Postgres");
+            if db.uses_postgres() {
+                println!("Connected to Postgres");
+            } else {
+                println!("Postgres disabled; HTTP-only mode");
+            }
             db
         }
         Err(e) => {
@@ -51,25 +55,7 @@ async fn main() {
         }
     };
 
-    // Retry cluster fetch until backend is up (Docker startup ordering).
-    let initial_config = {
-        let mut config = ControlConfig::default();
-        for attempt in 1..=15 {
-            match db.fetch_simulation_config().await {
-                Ok(c) if !c.clusters.is_empty() => {
-                    println!("Loaded {} clusters (attempt {attempt})", c.clusters.len());
-                    config = c;
-                    break;
-                }
-                Ok(_) => println!("No clusters yet (attempt {attempt}), retrying in 3s..."),
-                Err(e) => println!("Cluster fetch failed (attempt {attempt}): {e}, retrying in 3s..."),
-            }
-            tokio::time::sleep(Duration::from_secs(3)).await;
-        }
-        config
-    };
-
-    let simulation = TribeSimulation::shared(initial_config);
+    let simulation = TribeSimulation::shared(ControlConfig::default());
     let (frame_tx, _) = broadcast::channel::<Arc<Vec<u8>>>(32);
     let state = Arc::new(AppState {
         simulation,
@@ -78,6 +64,7 @@ async fn main() {
     });
 
     tokio::spawn(simulation_loop(state.clone()));
+    tokio::spawn(initial_cluster_refresh(state.clone()));
 
     let app = Router::new()
         .route("/health", get(health))
@@ -107,6 +94,26 @@ async fn main() {
     axum::serve(listener, app)
         .await
         .expect("axum server stopped unexpectedly");
+}
+
+async fn initial_cluster_refresh(state: Arc<AppState>) {
+    for attempt in 1..=30 {
+        match state.database.fetch_simulation_config().await {
+            Ok(config) if !config.clusters.is_empty() => {
+                let cluster_count = config.clusters.len();
+                let mut simulation = state.simulation.write();
+                simulation.set_clusters(config.clusters);
+                simulation.reinitialize();
+                println!("Loaded {cluster_count} clusters (attempt {attempt})");
+                return;
+            }
+            Ok(_) => println!("No clusters yet (attempt {attempt}), retrying in 3s..."),
+            Err(e) => println!("Cluster fetch failed (attempt {attempt}): {e}, retrying in 3s..."),
+        }
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+
+    println!("No cluster export available after startup retries; running empty simulation");
 }
 
 async fn simulation_loop(state: Arc<AppState>) {

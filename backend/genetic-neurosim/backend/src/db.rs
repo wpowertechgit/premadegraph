@@ -9,11 +9,20 @@ struct PremadegraphExportResponse {
 }
 
 pub struct Database {
-    pool: sqlx::PgPool,
+    pool: Option<sqlx::PgPool>,
 }
 
 impl Database {
+    pub fn uses_postgres(&self) -> bool {
+        self.pool.is_some()
+    }
+
     pub async fn connect() -> Result<Self, sqlx::Error> {
+        if env::var("DATABASE_URL").is_err() && env::var("PREMADEGRAPH_URL").is_ok() {
+            println!("Using PREMADEGRAPH_URL cluster source; skipping Postgres connection");
+            return Ok(Self { pool: None });
+        }
+
         let database_url = env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/premadegraph".to_string());
 
@@ -22,32 +31,33 @@ impl Database {
             .connect(&database_url)
             .await?;
 
-        Ok(Self { pool })
+        Ok(Self { pool: Some(pool) })
     }
 
     /// Returns a Database that skips postgres and relies solely on PREMADEGRAPH_URL.
     pub fn dummy() -> Self {
-        // Build a pool that will never actually be used (HTTP path takes priority).
-        // We create a disconnected pool by using a deliberately invalid URL — it
-        // won't be connected to until `fetch_from_postgres` is called, which only
-        // happens when `try_fetch_from_premadegraph` returns None.
-        let pool = sqlx::PgPool::connect_lazy("postgres://dummy:dummy@localhost/dummy")
-            .expect("lazy pool construction");
-        Self { pool }
+        Self { pool: None }
     }
 
     pub async fn fetch_simulation_config(&self) -> Result<ControlConfig, sqlx::Error> {
         if let Some(config) = try_fetch_from_premadegraph().await {
             return Ok(config);
         }
+        if self.pool.is_none() {
+            return Ok(ControlConfig::default());
+        }
         self.fetch_from_postgres().await
     }
 
     async fn fetch_from_postgres(&self) -> Result<ControlConfig, sqlx::Error> {
+        let Some(pool) = &self.pool else {
+            return Ok(ControlConfig::default());
+        };
+
         let rows = sqlx::query(
             "SELECT cluster_id::TEXT, size_ratio, mean_opscore, opscore_stddev, cohesion, internal_edge_ratio FROM player_clusters",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(pool)
         .await?;
 
         let profiles = rows

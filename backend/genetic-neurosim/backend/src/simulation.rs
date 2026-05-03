@@ -60,7 +60,9 @@ pub struct ClusterProfile {
     pub feed_risk: f32,
     #[serde(default)]
     pub cluster_size: u32,
-    #[serde(default)]
+    // Accepted from legacy exports for internal lineage only; never expose raw
+    // player identifiers through NeuroSim's own config/status APIs.
+    #[serde(default, skip_serializing)]
     pub founder_puuids: Vec<String>,
 }
 

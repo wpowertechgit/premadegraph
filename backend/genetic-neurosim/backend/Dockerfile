@@ -5,12 +5,11 @@ WORKDIR /usr/src/app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock ./
-# Pre-build dummy to cache dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
-
 COPY src ./src
-# Build for release
-RUN cargo build --release
+
+# Build the real source directly. The old dummy-main cache step could leave a
+# valid no-op neurosim-backend binary in the image, causing code-0 restart loops.
+RUN cargo build --release --locked
 
 # Final stage
 FROM debian:bookworm-slim
