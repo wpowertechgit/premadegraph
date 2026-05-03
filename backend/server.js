@@ -3243,6 +3243,78 @@ app.post([
   }
 });
 
+async function computeNeurosimClusterProfiles(dataset) {
+  const db = new sqlite3.Database(
+    dataset.refinedDbAbsolutePath,
+    sqlite3.OPEN_READONLY,
+    () => {},
+  );
+  try {
+    const totalRow = await sqliteGet(db, "SELECT SUM(size) AS total FROM clusters");
+    const total = totalRow?.total || 1;
+
+    const rows = await sqliteAll(
+      db,
+      `SELECT
+         c.cluster_id AS id,
+         CAST(c.size AS REAL) / ? AS size_ratio,
+         COALESCE(AVG(p.opscore), 0.0) / 10.0 AS mean_opscore,
+         COALESCE(
+           SQRT(MAX(0.0, AVG(p.opscore * p.opscore) - AVG(p.opscore) * AVG(p.opscore))),
+           0.0
+         ) / 10.0 AS opscore_stddev,
+         CAST(COUNT(CASE WHEN cm.is_bridge = 1 THEN 1 END) AS REAL) / MAX(c.size, 1) AS bridge_ratio,
+         c.size AS cluster_size
+       FROM clusters c
+       LEFT JOIN cluster_members cm ON c.cluster_id = cm.cluster_id
+       LEFT JOIN players p ON cm.puuid = p.puuid
+       GROUP BY c.cluster_id
+       HAVING c.size >= 3
+       ORDER BY c.size DESC`,
+      [total],
+    );
+
+    const clusters = rows.map((r) => ({
+      id: r.id,
+      size_ratio: Math.round(r.size_ratio * 10000) / 10000,
+      mean_opscore: Math.round(r.mean_opscore * 10000) / 10000,
+      opscore_stddev: Math.round(r.opscore_stddev * 10000) / 10000,
+      cohesion: Math.round((1.0 - r.bridge_ratio) * 10000) / 10000,
+      internal_edge_ratio:
+        Math.round(Math.max(0, 1.0 - Math.min(1, r.opscore_stddev * 2)) * 10000) / 10000,
+    }));
+
+    return {
+      datasetId: dataset.id,
+      clusterCount: clusters.length,
+      totalMembersInClusters: total,
+      minClusterSize: 3,
+      clusters,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+app.get([
+  "/api/neurosim/cluster-export",
+  "/api/neurosim/datasets/:datasetId/cluster-export",
+], async (req, res) => {
+  try {
+    const dataset = req.params.datasetId
+      ? getDatasetConfigById(req.params.datasetId)
+      : getActiveDataset();
+    if (!dataset) {
+      return res.status(404).json({ error: `Unknown dataset: ${req.params.datasetId}` });
+    }
+    const result = await computeNeurosimClusterProfiles(dataset);
+    res.json(result);
+  } catch (error) {
+    console.error("[neurosim] cluster-export failed:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(PORT, () => {
   loadDatasetRegistry();
   openActiveRawDatabase();
