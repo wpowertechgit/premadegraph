@@ -681,6 +681,17 @@ impl TribeSimulation {
         self.config.clusters = clusters;
     }
 
+    pub fn reinitialize(&mut self) {
+        use rand::SeedableRng;
+        self.tick = 0;
+        self.generation = 0;
+        self.halted = false;
+        self.world = crate::world::WorldGrid::new(self.config.world_seed, self.config.clusters.len());
+        self.rng = rand::rngs::SmallRng::seed_from_u64(self.config.world_seed);
+        self.tribes = vec![];
+        self.initialize_tribes();
+    }
+
     pub fn status(&self) -> StatusResponse {
         StatusResponse {
             tick: self.tick,

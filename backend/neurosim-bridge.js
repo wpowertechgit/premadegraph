@@ -134,10 +134,31 @@ function proxyWebSocket(req, clientSocket, head, upstreamPath = "/ws/tribal-simu
   });
 }
 
+function triggerNeurosimRefresh() {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { hostname: NEUROSIM_HOST, port: NEUROSIM_PORT, path: "/api/config/refresh", method: "POST" },
+      (res) => {
+        res.resume();
+        res.on("end", () => {
+          console.log(`[neurosim-bridge] cluster refresh triggered (status ${res.statusCode})`);
+          resolve();
+        });
+      },
+    );
+    req.on("error", (err) => {
+      console.warn(`[neurosim-bridge] refresh failed: ${err.message}`);
+      resolve();
+    });
+    req.end();
+  });
+}
+
 module.exports = {
   startNeurosimBackend,
   stopNeurosimBackend,
   proxyHttp,
   proxyWebSocket,
   resolveNeurosimBinary,
+  triggerNeurosimRefresh,
 };

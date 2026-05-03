@@ -150,6 +150,7 @@ async fn refresh_from_db(State(state): State<Arc<AppState>>) -> Result<Json<Cont
         Ok(config) => {
             let mut simulation = state.simulation.write();
             simulation.set_clusters(config.clusters);
+            simulation.reinitialize();
             Ok(Json(simulation.config().clone()))
         },
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))

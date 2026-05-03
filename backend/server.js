@@ -1888,6 +1888,8 @@ app.post("/api/datasets/:datasetId/select", (req, res) => {
     }
     openActiveRawDatabase();
     openActiveRefinedDatabase();
+    // Reinitialize neurosim tribes from new dataset's clusters
+    neurosimBridge.triggerNeurosimRefresh().catch(() => {});
     res.json({
       current: dataset.id,
       dataset: {
