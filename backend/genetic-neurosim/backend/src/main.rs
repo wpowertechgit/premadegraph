@@ -10,7 +10,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        Path, Query, State,
     },
     http::StatusCode,
     response::IntoResponse,
@@ -24,6 +24,7 @@ use simulation::{
     InterventionResponse, RecordingSummary, ReplayRecordingRequest, RestartSeedRequest,
     SaveRecordingRequest, SharedSimulation, TribeSimulation, StatusResponse,
     TribeSnapshotResponse, WorldSnapshotResponse, TileOwnershipResponse,
+    RecentEventsResponse, TribeEventsResponse, RunSummary,
 };
 use war::ActiveWarsResponse;
 use db::Database;
@@ -89,9 +90,12 @@ async fn main() {
         .route("/api/control/restart-seed", post(control_restart_seed))
         .route("/api/world-snapshot", get(get_world_snapshot))
         .route("/api/tile-ownership", get(get_tile_ownership))
-        .route("/api/tribes/:id", get(get_tribe_snapshot))
+        .route("/api/tribes/{id}", get(get_tribe_snapshot))
         .route("/api/interventions", post(handle_intervention))
         .route("/api/wars/active", get(get_active_wars))
+        .route("/api/events/recent", get(get_recent_events))
+        .route("/api/tribes/{id}/events", get(get_tribe_events))
+        .route("/api/simulation/summary", get(get_run_summary))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -300,6 +304,30 @@ async fn handle_intervention(
         .apply_intervention(request)
         .map(Json)
         .map_err(|msg| (StatusCode::NOT_IMPLEMENTED, msg))
+}
+
+#[derive(serde::Deserialize, Default)]
+struct LimitQuery {
+    limit: Option<usize>,
+}
+
+async fn get_recent_events(
+    Query(q): Query<LimitQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Json<RecentEventsResponse> {
+    Json(state.simulation.read().events_response(q.limit.unwrap_or(50)))
+}
+
+async fn get_tribe_events(
+    Path(id): Path<usize>,
+    Query(q): Query<LimitQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Json<TribeEventsResponse> {
+    Json(state.simulation.read().tribe_events_response(id, q.limit.unwrap_or(50)))
+}
+
+async fn get_run_summary(State(state): State<Arc<AppState>>) -> Json<RunSummary> {
+    Json(state.simulation.read().run_summary())
 }
 
 async fn ws_simulation(

@@ -96,6 +96,17 @@ function documentationSyncPlugin(): Plugin {
   };
 }
 
+const backendTarget = process.env.BACKEND_URL ?? "http://localhost:3001";
+
 export default defineConfig({
   plugins: [react(), documentationSyncPlugin()],
+  server: {
+    proxy: {
+      "/api": {
+        target: backendTarget,
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
 });

@@ -283,6 +283,59 @@ pub struct TileOwnershipResponse {
     pub owners: Vec<TileOwnerRecord>,
 }
 
+// ─── EventsResponse ──────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct RecentEventsResponse {
+    pub events: Vec<crate::events::SimulationEvent>,
+    pub total_buffered: usize,
+}
+
+#[derive(serde::Serialize)]
+pub struct TribeEventsResponse {
+    pub tribe_id: usize,
+    pub events: Vec<crate::events::SimulationEvent>,
+    pub total_buffered: usize,
+}
+
+// ─── RunSummary ───────────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct TribeSummaryRecord {
+    pub id: usize,
+    pub cluster_id: String,
+    pub alive: bool,
+    pub population: u32,
+    pub territory_count: usize,
+    pub generation: u32,
+    pub ticks_alive: u64,
+    pub lineage: Vec<String>,
+    pub wars_as_attacker: usize,
+    pub wars_as_defender: usize,
+    pub wars_won: usize,
+    pub wars_lost: usize,
+    pub casualties_dealt: u32,
+    pub casualties_received: u32,
+    pub a_combat: f32,
+    pub a_resource: f32,
+    pub feed_risk: f32,
+}
+
+#[derive(serde::Serialize)]
+pub struct RunSummary {
+    pub tick: u64,
+    pub generation: u32,
+    pub alive_count: usize,
+    pub extinct_count: usize,
+    pub total_tribes: usize,
+    pub world_seed: u64,
+    pub scenario_id: Option<String>,
+    pub halted: bool,
+    pub war_count: usize,
+    /// Tribes sorted: alive by territory desc, then extinct by ticks_alive desc.
+    pub tribes: Vec<TribeSummaryRecord>,
+}
+
 // ─── Vec2 ─────────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Default)]
@@ -1996,6 +2049,95 @@ impl TribeSimulation {
         InterventionResponse {
             ok: true,
             message: format!("Spawned food (+{:.2}) on {} tiles", amount, changed),
+        }
+    }
+
+    // ─── G4: Events REST query methods ─────────────────────────────────────────
+
+    pub fn events_response(&self, limit: usize) -> RecentEventsResponse {
+        let cap = limit.min(MAX_GLOBAL_EVENTS);
+        RecentEventsResponse {
+            total_buffered: self.global_events.len(),
+            events: self.global_events.iter().rev().take(cap).cloned().collect(),
+        }
+    }
+
+    pub fn tribe_events_response(&self, tribe_id: usize, limit: usize) -> TribeEventsResponse {
+        let cap = limit.min(MAX_TRIBE_EVENTS);
+        match self.tribe_events.get(&tribe_id) {
+            Some(j) => TribeEventsResponse {
+                tribe_id,
+                total_buffered: j.len(),
+                events: j.iter().rev().take(cap).cloned().collect(),
+            },
+            None => TribeEventsResponse { tribe_id, total_buffered: 0, events: vec![] },
+        }
+    }
+
+    // ─── Run summary ────────────────────────────────────────────────────────────
+
+    pub fn run_summary(&self) -> RunSummary {
+        let mut records: Vec<TribeSummaryRecord> = self.tribes.iter().map(|t| {
+            let tid = t.id as u32;
+            let wars_as_attacker = self.active_wars.iter().filter(|w| w.attacker_id == tid).count();
+            let wars_as_defender = self.active_wars.iter().filter(|w| w.defender_id == tid).count();
+            let wars_won = self.active_wars.iter().filter(|w| {
+                (w.attacker_id == tid && w.status == crate::war::WarStatus::AttackerWon)
+                    || (w.defender_id == tid && w.status == crate::war::WarStatus::DefenderWon)
+            }).count();
+            let wars_lost = self.active_wars.iter().filter(|w| {
+                (w.attacker_id == tid && w.status == crate::war::WarStatus::DefenderWon)
+                    || (w.defender_id == tid && w.status == crate::war::WarStatus::AttackerWon)
+            }).count();
+            let casualties_dealt: u32 = self.active_wars.iter().filter_map(|w| {
+                if w.attacker_id == tid { Some(w.defender_casualties) }
+                else if w.defender_id == tid { Some(w.attacker_casualties) }
+                else { None }
+            }).sum();
+            let casualties_received: u32 = self.active_wars.iter().filter_map(|w| {
+                if w.attacker_id == tid { Some(w.attacker_casualties) }
+                else if w.defender_id == tid { Some(w.defender_casualties) }
+                else { None }
+            }).sum();
+            TribeSummaryRecord {
+                id: t.id,
+                cluster_id: t.cluster_id.clone(),
+                alive: t.alive,
+                population: t.population,
+                territory_count: t.territory.len(),
+                generation: t.generation,
+                ticks_alive: t.ticks_alive,
+                lineage: t.lineage.clone(),
+                wars_as_attacker,
+                wars_as_defender,
+                wars_won,
+                wars_lost,
+                casualties_dealt,
+                casualties_received,
+                a_combat: t.stats.a_combat,
+                a_resource: t.stats.a_resource,
+                feed_risk: t.stats.feed_risk,
+            }
+        }).collect();
+
+        records.sort_by(|a, b| match (a.alive, b.alive) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (true, true) => b.territory_count.cmp(&a.territory_count),
+            (false, false) => b.ticks_alive.cmp(&a.ticks_alive),
+        });
+
+        RunSummary {
+            tick: self.tick,
+            generation: self.generation,
+            alive_count: self.tribes.iter().filter(|t| t.alive).count(),
+            extinct_count: self.tribes.iter().filter(|t| !t.alive).count(),
+            total_tribes: self.tribes.len(),
+            world_seed: self.config.world_seed,
+            scenario_id: self.config.scenario_id.clone(),
+            halted: self.halted,
+            war_count: self.active_wars.len(),
+            tribes: records,
         }
     }
 

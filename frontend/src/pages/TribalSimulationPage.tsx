@@ -414,7 +414,8 @@ export default function TribalSimulationPage() {
     // initial fetch
     fetchTileOwnership(tribeTerritory, tribeColors);
 
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/api/neurosim/ws/tribal-simulation`);
+    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${wsProto}//${window.location.host}/api/neurosim/ws/tribal-simulation`);
     wsRef.current = ws;
     ws.binaryType = "arraybuffer";
 

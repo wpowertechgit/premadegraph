@@ -4,7 +4,10 @@ import os
 OUTPUT_FILE = "teljes_projekt_kod.txt"
 
 # Csak ezeket a kiterjesztéseket veszi figyelembe (Whitelist)
-ALLOWED_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.sql', '.css', '.md', '.txt','.toml','.rs'}
+ALLOWED_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.sql', '.css', '.txt','.toml','.rs', '.md', '.tex'}
+
+INCLUDE_MARKDOWN = True
+INCLUDE_LATEX = True
 
 # Ezeket mindenképp KIZÁRJA (Blacklist - biztonsági háló)
 IGNORED_EXTENSIONS = {'.json', '.log', '.html', '.pyc','.txt','.css'}
@@ -31,6 +34,12 @@ def collect_code():
             for file in files:
                 file_ext = os.path.splitext(file)[1].lower()
                 
+                # Szűrés
+                if not INCLUDE_MARKDOWN and file_ext == '.md':
+                    continue
+                if not INCLUDE_LATEX and file_ext == '.tex':
+                    continue
+
                 # Csak akkor dolgozza fel, ha engedélyezett ÉS nem tiltott
                 if file_ext in ALLOWED_EXTENSIONS and file_ext not in IGNORED_EXTENSIONS and file not in EXCLUDE_FILES:
                     file_path = os.path.join(root, file)

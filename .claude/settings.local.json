@@ -26,7 +26,9 @@
       "Bash(New-Item -Path 'c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\docs\\\\evidence\\\\TaskORun.md' -ItemType File -Force)",
       "Bash(Out-Null)",
       "Bash(Write-Output \"created\")",
-      "PowerShell(New-Item -Path 'c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\docs\\\\evidence\\\\TaskORun.md' -ItemType File -Force)"
+      "PowerShell(New-Item -Path 'c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\docs\\\\evidence\\\\TaskORun.md' -ItemType File -Force)",
+      "Bash(node -e ' *)",
+      "PowerShell(docker compose up -d frontend 2>&1)"
     ]
   }
 }
