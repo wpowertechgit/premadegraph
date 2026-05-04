@@ -1630,6 +1630,8 @@ If Python ML tooling is needed, prefer exporting compact model, genome, coeffici
 
 Python can still be part of the project. The important boundary is that Python should not accidentally become the real-time engine unless that choice is explicitly benchmarked and justified.
 
+See `docs/neurosim-python-ml-boundary.md` for the full Python/ML boundary rules for this project.
+
 ### Data-Oriented State Layout
 
 Avoid storing the world as nested objects with strings and heap allocations everywhere.

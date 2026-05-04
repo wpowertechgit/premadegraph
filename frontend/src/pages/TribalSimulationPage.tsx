@@ -97,6 +97,45 @@ interface WorldSnapshot {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── M2: Tribal metrics derived from live frame ───────────────────────────
+interface TribalMetricsSample {
+  tick: number;
+  living_tribes: number;
+  total_population: number;
+  total_territory: number;
+  at_war_count: number;
+  starvation_count: number;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── M3: Recording types ──────────────────────────────────────────────────
+interface RecordingSummary {
+  id: string;
+  name: string;
+  tick_count: number;
+  created_at: string;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── L3: War types ────────────────────────────────────────────────────────
+interface WarRecord {
+  war_id: number;
+  attacker_id: number;
+  defender_id: number;
+  start_tick: number;
+  status: "active" | "peace" | "attacker_won" | "defender_won";
+  attacker_casualties: number;
+  defender_casualties: number;
+  battle_tile: number | null;
+  duration_ticks: number;
+}
+
+interface ActiveWarsResponse {
+  wars: WarRecord[];
+  active_count: number;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ─── E5: Tile ownership types ─────────────────────────────────────────────
 interface TileOwner {
   tile_id: number;
@@ -270,9 +309,15 @@ export default function TribalSimulationPage() {
   const [showEvents, setShowEvents] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
+  // L3: Wars panel
+  const [showWars, setShowWars] = useState(false);
+  const [wars, setWars] = useState<WarRecord[]>([]);
 
   // C4: Pause state synced from backend
   const [paused, setPaused] = useState(false);
+
+  // O3: Active scenario id — empty string = dataset default
+  const [scenario, setScenario] = useState<string>("");
 
   // H2: Selected tribe and dossier panel
   const [showTribe, setShowTribe] = useState(false);
@@ -280,6 +325,13 @@ export default function TribalSimulationPage() {
   const [tribeSnapshot, setTribeSnapshot] = useState<TribeSnapshot | null>(null);
   // I4: Brain tab inside Tribe panel: "dossier" | "brain"
   const [tribeTab, setTribeTab] = useState<"dossier" | "brain">("dossier");
+
+  // M2: bounded metrics history (max 160 samples) and current snapshot
+  const metricsHistoryRef = useRef<TribalMetricsSample[]>([]);
+  const [currentMetrics, setCurrentMetrics] = useState<TribalMetricsSample | null>(null);
+
+  // M3: recordings list
+  const [recordings, setRecordings] = useState<RecordingSummary[]>([]);
 
   // strToHue is used indirectly via tribeColors; keep reference stable
   const _strToHue = strToHue;
@@ -390,6 +442,21 @@ export default function TribalSimulationPage() {
         }
       }
 
+      // M2: derive tribal metrics from frame, push to bounded history
+      const sample: TribalMetricsSample = {
+        tick: f.tick,
+        living_tribes: f.tribes.length,
+        total_population: f.tribes.reduce((s, t) => s + t.population, 0),
+        total_territory: f.tribes.reduce((s, t) => s + t.territoryCount, 0),
+        at_war_count: f.tribes.filter(t => t.behavior === 3).length,
+        starvation_count: f.tribes.filter(t => t.behavior === 7 || t.behavior === 8).length,
+      };
+      metricsHistoryRef.current.push(sample);
+      if (metricsHistoryRef.current.length > 160) {
+        metricsHistoryRef.current.shift();
+      }
+      setCurrentMetrics(sample);
+
       setFrame(f);
       draw(f);
     };
@@ -421,6 +488,17 @@ export default function TribalSimulationPage() {
     }).catch(console.error);
   };
 
+  // O3: Apply named scenario — patches config then resets
+  const handleScenarioChange = async (id: string) => {
+    setScenario(id);
+    await fetch("/api/neurosim/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario_id: id }),
+    }).catch(console.error);
+    await sendControl("reset");
+  };
+
   // C4/C5: generic control POST + status refresh
   const sendControl = async (endpoint: string) => {
     try {
@@ -450,6 +528,39 @@ export default function TribalSimulationPage() {
     }, 2000);
     return () => clearInterval(poll);
   }, []);
+
+  // L3: Poll active wars when wars panel is open
+  useEffect(() => {
+    if (!showWars) return;
+    const fetchWars = async () => {
+      try {
+        const res = await fetch("/api/neurosim/api/wars/active");
+        if (res.ok) {
+          const data: ActiveWarsResponse = await res.json();
+          setWars(data.wars);
+        }
+      } catch {
+        // backend unreachable
+      }
+    };
+    fetchWars();
+    const iv = setInterval(fetchWars, 2000);
+    return () => clearInterval(iv);
+  }, [showWars]);
+
+  // M3: Poll recordings when sessions panel is open
+  useEffect(() => {
+    if (!showSessions) return;
+    const fetchRecs = async () => {
+      try {
+        const res = await fetch("/api/neurosim/api/recordings");
+        if (res.ok) setRecordings(await res.json());
+      } catch { /* backend unreachable */ }
+    };
+    fetchRecs();
+    const iv = setInterval(fetchRecs, 3000);
+    return () => clearInterval(iv);
+  }, [showSessions]);
 
   // H2: Fetch tribe snapshot whenever selectedTribeId changes, refresh every 1s
   useEffect(() => {
@@ -506,6 +617,7 @@ export default function TribalSimulationPage() {
         {([
           ["Controls",  showControls,  setShowControls],
           ["Tribe",     showTribe,     setShowTribe],
+          ["Wars",      showWars,      setShowWars],
           ["Events",    showEvents,    setShowEvents],
           ["Analytics", showAnalytics, setShowAnalytics],
           ["Sessions",  showSessions,  setShowSessions],
@@ -581,6 +693,27 @@ export default function TribalSimulationPage() {
               >
                 Reset Same Seed
               </Button>
+
+              {/* O3: Scenario selector */}
+              <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Scenario
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant={scenario === "" ? "contained" : "outlined"}
+                  size="small"
+                  onClick={() => handleScenarioChange("")}
+                >
+                  Dataset
+                </Button>
+                <Button
+                  variant={scenario === "two_tribes_one_border" ? "contained" : "outlined"}
+                  size="small"
+                  onClick={() => handleScenarioChange("two_tribes_one_border")}
+                >
+                  2 Tribes
+                </Button>
+              </Stack>
 
               <Typography variant="caption">Tick Rate</Typography>
               <Slider
@@ -737,6 +870,41 @@ export default function TribalSimulationPage() {
           </Paper>
         )}
 
+        {/* L3: Active Wars panel */}
+        {showWars && (
+          <Paper sx={{ p: 2, minWidth: 240, maxWidth: 300 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1, display: "block", mb: 1 }}>
+              Active Wars ({wars.length})
+            </Typography>
+            {wars.length === 0 ? (
+              <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                No active wars
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {wars.map((w) => (
+                  <Box key={w.war_id} sx={{ borderLeft: "2px solid #F44336", pl: 1 }}>
+                    <Typography variant="caption" display="block" sx={{ fontWeight: "bold" }}>
+                      #{w.attacker_id} → #{w.defender_id}
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ color: "text.secondary" }}>
+                      Duration: {w.duration_ticks} ticks
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ color: "text.secondary" }}>
+                      Casualties: {w.attacker_casualties} / {w.defender_casualties}
+                    </Typography>
+                    {w.battle_tile !== null && (
+                      <Typography variant="caption" display="block" sx={{ color: "text.disabled" }}>
+                        Tile: {w.battle_tile}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </Paper>
+        )}
+
         {/* C3: Events / Analytics / Sessions placeholders (collapsed unless toggled) */}
         {showEvents && (
           <Paper sx={{ p: 2, minWidth: 200 }}>
@@ -748,24 +916,76 @@ export default function TribalSimulationPage() {
             </Typography>
           </Paper>
         )}
+        {/* M2: Live analytics panel */}
         {showAnalytics && (
-          <Paper sx={{ p: 2, minWidth: 200 }}>
-            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
+          <Paper sx={{ p: 2, minWidth: 200, maxWidth: 260 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1, display: "block", mb: 1 }}>
               Analytics
             </Typography>
-            <Typography variant="caption" display="block" sx={{ color: "text.disabled", mt: 1 }}>
-              Live metrics — pending M1
-            </Typography>
+            {currentMetrics ? (
+              <Stack spacing={0.5}>
+                {([
+                  ["Living tribes",    currentMetrics.living_tribes],
+                  ["Total population", currentMetrics.total_population],
+                  ["Total territory",  currentMetrics.total_territory],
+                  ["At war",           currentMetrics.at_war_count],
+                  ["Starving",         currentMetrics.starvation_count],
+                ] as [string, number][]).map(([label, value]) => (
+                  <Stack key={label} direction="row" justifyContent="space-between">
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>{label}</Typography>
+                    <Typography variant="caption">{value}</Typography>
+                  </Stack>
+                ))}
+                <Typography variant="caption" sx={{ color: "text.disabled", mt: 0.5 }}>
+                  {metricsHistoryRef.current.length} samples (max 160)
+                </Typography>
+              </Stack>
+            ) : (
+              <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                Waiting for live frame…
+              </Typography>
+            )}
           </Paper>
         )}
+
+        {/* M3: Sessions panel */}
         {showSessions && (
-          <Paper sx={{ p: 2, minWidth: 200 }}>
-            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1 }}>
-              Sessions
+          <Paper sx={{ p: 2, minWidth: 220, maxWidth: 300 }}>
+            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 1, display: "block", mb: 1 }}>
+              Sessions ({recordings.length})
             </Typography>
-            <Typography variant="caption" display="block" sx={{ color: "text.disabled", mt: 1 }}>
-              Saved sessions — pending M3
-            </Typography>
+            {recordings.length === 0 ? (
+              <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                No saved sessions
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {recordings.map((rec) => (
+                  <Box key={rec.id} sx={{ borderLeft: "2px solid #555", pl: 1 }}>
+                    <Typography variant="caption" display="block" sx={{ fontWeight: "bold" }}>
+                      {rec.name}
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ color: "text.secondary" }}>
+                      {rec.tick_count} ticks · {rec.created_at}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      sx={{ mt: 0.5, fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: 0.5 }}
+                      onClick={() =>
+                        fetch("/api/neurosim/api/recordings/replay", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ recording_id: rec.id }),
+                        }).catch(console.error)
+                      }
+                    >
+                      Replay
+                    </Button>
+                  </Box>
+                ))}
+              </Stack>
+            )}
           </Paper>
         )}
       </Stack>

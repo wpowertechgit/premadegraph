@@ -41,6 +41,18 @@ impl WorldGenerationConfig {
         }
     }
 
+    /// O2: Fixed 6×6 deterministic world for the `two_tribes_one_border` scenario.
+    pub fn two_tribes_scenario() -> Self {
+        Self {
+            seed: 42_002,
+            tribe_count: 2,
+            total_initial_population: 100,
+            target_tiles_per_tribe: 6,
+            target_population_density: 10.0,
+            min_tiles: 36, // 6×6
+        }
+    }
+
     /// Compute (grid_w, grid_h) so the map is large enough for all tribes.
     /// Formula: target = max(min_tiles, tribe_count * target_tiles_per_tribe,
     ///                       total_initial_population / target_population_density)
@@ -137,6 +149,8 @@ pub struct WorldGrid {
     pub total_tiles: usize,
     pub tiles: Vec<BiomeTile>,
     last_sent_food: Vec<f32>,
+    /// World-level ownership array. Sentinel u32::MAX = neutral/unowned.
+    pub tile_owner: Vec<u32>,
 }
 
 impl WorldGrid {
@@ -244,6 +258,7 @@ impl WorldGrid {
             total_tiles,
             tiles,
             last_sent_food,
+            tile_owner: vec![u32::MAX; total_tiles],
         }
     }
 
@@ -365,6 +380,39 @@ impl WorldGrid {
         }
 
         neighbors
+    }
+
+    // ─── K2: Tile Ownership ───────────────────────────────────────────────────
+
+    /// Set owner of a tile. `u32::MAX` marks neutral.
+    pub fn set_tile_owner(&mut self, tile_idx: usize, owner: u32) {
+        if tile_idx < self.total_tiles {
+            self.tile_owner[tile_idx] = owner;
+        }
+    }
+
+    /// Return `Some(tribe_id)` if owned, `None` if neutral.
+    pub fn get_tile_owner_opt(&self, tile_idx: usize) -> Option<u32> {
+        if tile_idx < self.total_tiles && self.tile_owner[tile_idx] != u32::MAX {
+            Some(self.tile_owner[tile_idx])
+        } else {
+            None
+        }
+    }
+
+    /// Return hex-adjacent tiles that are currently neutral (no owner).
+    /// Deduplicates across all tiles in the provided territory slice.
+    pub fn neutral_adjacent_tiles(&self, territory: &[u16]) -> Vec<usize> {
+        let mut seen = std::collections::HashSet::new();
+        let mut neutral = Vec::new();
+        for &tile_idx in territory {
+            for neighbor in self.hex_adjacent_tiles(tile_idx as usize) {
+                if seen.insert(neighbor) && self.tile_owner[neighbor] == u32::MAX {
+                    neutral.push(neighbor);
+                }
+            }
+        }
+        neutral
     }
 
     /// Return up to 6 hex-adjacent tile indices using odd-r offset (pointy-top).

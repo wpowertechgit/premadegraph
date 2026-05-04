@@ -22,7 +22,11 @@
       "Bash(node --check backend/server.js)",
       "Bash(node --check backend/neurosim-bridge.js)",
       "Bash(cargo test *)",
-      "Bash(npm --prefix \"c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\frontend\" run build)"
+      "Bash(npm --prefix \"c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\frontend\" run build)",
+      "Bash(New-Item -Path 'c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\docs\\\\evidence\\\\TaskORun.md' -ItemType File -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"created\")",
+      "PowerShell(New-Item -Path 'c:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\docs\\\\evidence\\\\TaskORun.md' -ItemType File -Force)"
     ]
   }
 }

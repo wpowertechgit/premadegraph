@@ -95,6 +95,9 @@ pub struct ControlConfig {
     pub max_generations: u32,
     pub food_spawn_rate: f32,
     pub energy_decay: f32,
+    /// O1: Named deterministic scenario. None = live dataset default.
+    #[serde(default)]
+    pub scenario_id: Option<String>,
 }
 
 impl Default for ControlConfig {
@@ -108,6 +111,7 @@ impl Default for ControlConfig {
             max_generations: 1000,
             food_spawn_rate: 0.1,
             energy_decay: 0.01,
+            scenario_id: None,
         }
     }
 }
@@ -123,6 +127,9 @@ pub struct ConfigPatch {
     pub energy_decay: Option<f32>,
     pub tick_rate: Option<u32>,
     pub world_seed: Option<u64>,
+    /// O1: set to Some("two_tribes_one_border") to activate scenario, None to clear.
+    #[serde(default)]
+    pub scenario_id: Option<String>,
 }
 
 // ─── Recording types ─────────────────────────────────────────────────────────
@@ -165,6 +172,8 @@ pub struct StatusResponse {
     pub world_height_tiles: usize,
     pub total_tiles: usize,
     pub world_seed: u64,
+    /// O1: active scenario id, or None for live dataset default.
+    pub scenario_id: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -252,6 +261,8 @@ pub struct TribeSnapshotResponse {
     pub generation: u32,
     pub ticks_alive: u64,
     pub alive: bool,
+    /// K3: biome tile counts for this tribe's territory, e.g. {"plains":3,"forest":1}.
+    pub biome_composition: std::collections::HashMap<String, usize>,
 }
 
 // ─── TileOwnershipResponse ────────────────────────────────────────────────────
@@ -738,6 +749,37 @@ impl InnovationTracker {
     }
 }
 
+// ─── O2: Scenario cluster factory ────────────────────────────────────────────
+
+fn scenario_cluster(id: &str, a_combat: f32, a_resource: f32) -> ClusterProfile {
+    ClusterProfile {
+        id: id.to_string(),
+        size_ratio: 0.5,
+        mean_opscore: 6.0,
+        opscore_stddev: 0.5,
+        cohesion: 0.7,
+        internal_edge_ratio: 0.5,
+        a_combat,
+        a_risk: 0.5,
+        a_resource,
+        a_map_objective: 0.4,
+        a_team: 0.5,
+        fight_conversion: 0.0,
+        damage_pressure: 0.0,
+        death_cost: 0.0,
+        survival_quality: 0.0,
+        economy: 0.0,
+        tempo: 0.0,
+        vision_control: 0.0,
+        objective_conversion: 0.0,
+        setup_control: 0.0,
+        protection_support: 0.0,
+        feed_risk: 0.25,
+        cluster_size: 50,
+        founder_puuids: vec![],
+    }
+}
+
 // ─── TribeSimulation ─────────────────────────────────────────────────────────
 
 /// Max events retained in the global ring buffer.
@@ -764,6 +806,10 @@ pub struct TribeSimulation {
     /// Per-tribe bounded event journals (indexed by tribe id). Persists after
     /// tribe extinction so logs remain queryable.
     tribe_events: HashMap<usize, VecDeque<crate::events::SimulationEvent>>,
+    /// L1: First-class war records tracked independently from behavior states.
+    pub active_wars: Vec<crate::war::WarState>,
+    /// L1: Monotonic war id counter.
+    next_war_id: u32,
 }
 
 impl TribeSimulation {
@@ -787,6 +833,8 @@ impl TribeSimulation {
             next_event_id: 0,
             global_events: VecDeque::new(),
             tribe_events: HashMap::new(),
+            active_wars: Vec::new(),
+            next_war_id: 0,
         };
         sim.initialize_tribes();
         Arc::new(RwLock::new(sim))
@@ -800,6 +848,13 @@ impl TribeSimulation {
             tribe.genome = Some(crate::simulation::Genome::new(8, 3));
             tribe
         }).collect();
+        // K2: sync initial tile owners for each tribe's home tile
+        for i in 0..self.tribes.len() {
+            let home = self.tribes[i].home_tile as usize;
+            let id = self.tribes[i].id as u32;
+            self.world.set_tile_owner(home, id);
+        }
+
         // Build the initial cached frame (no food changes on tick 0)
         self.last_frame = self.build_frame(&[]);
 
@@ -864,6 +919,10 @@ impl TribeSimulation {
         if let Some(v) = patch.energy_decay { self.config.energy_decay = v; }
         if let Some(v) = patch.tick_rate { self.config.tick_rate = v; }
         if let Some(v) = patch.world_seed { self.config.world_seed = v; }
+        // O1: empty string = clear scenario (dataset default); non-empty = named scenario.
+        if let Some(v) = patch.scenario_id {
+            self.config.scenario_id = if v.is_empty() { None } else { Some(v) };
+        }
     }
 
     pub fn set_clusters(&mut self, clusters: Vec<ClusterProfile>) {
@@ -875,12 +934,12 @@ impl TribeSimulation {
         self.tick = 0;
         self.generation = 0;
         self.halted = false;
-        let wgen = crate::world::WorldGenerationConfig::from_clusters(self.config.world_seed, &self.config.clusters);
-        self.world = crate::world::WorldGrid::new(&wgen);
-        self.rng = rand::rngs::SmallRng::seed_from_u64(self.config.world_seed);
         self.tribes = vec![];
         // Clear global buffer; keep per-tribe journals so extinct runs stay queryable
         self.global_events.clear();
+        // L1: clear war records on reset
+        self.active_wars.clear();
+        self.next_war_id = 0;
 
         // Emit reset event before spawn events
         let reset_ev = crate::events::SimulationEvent::new(
@@ -891,7 +950,63 @@ impl TribeSimulation {
         );
         self.push_event(reset_ev);
 
-        self.initialize_tribes();
+        // O2: branch on scenario
+        if self.config.scenario_id.as_deref() == Some("two_tribes_one_border") {
+            self.initialize_two_tribes_scenario();
+        } else {
+            let wgen = crate::world::WorldGenerationConfig::from_clusters(self.config.world_seed, &self.config.clusters);
+            self.world = crate::world::WorldGrid::new(&wgen);
+            self.rng = rand::rngs::SmallRng::seed_from_u64(self.config.world_seed);
+            self.initialize_tribes();
+        }
+    }
+
+    // ─── O2: Two Tribes One Border Scenario ──────────────────────────────────
+
+    fn initialize_two_tribes_scenario(&mut self) {
+        use rand::SeedableRng;
+        const SCENARIO_SEED: u64 = 42_002;
+
+        let wgen = crate::world::WorldGenerationConfig::two_tribes_scenario();
+        self.world = crate::world::WorldGrid::new(&wgen);
+        self.rng = rand::rngs::SmallRng::seed_from_u64(SCENARIO_SEED);
+
+        let profiles = [
+            scenario_cluster("scenario-alpha", 0.65, 0.5),
+            scenario_cluster("scenario-beta", 0.55, 0.6),
+        ];
+
+        // Place tribes on adjacent center tiles
+        let mid = self.world.total_tiles / 2;
+        let home_a = mid.saturating_sub(1);
+        let home_b = (home_a + 1).min(self.world.total_tiles - 1);
+        let homes: [u16; 2] = [home_a as u16, home_b as u16];
+
+        self.tribes = profiles.iter().enumerate().map(|(i, profile)| {
+            let mut tribe = crate::tribes::TribeState::from_cluster(i, profile, homes[i]);
+            tribe.genome = Some(crate::simulation::Genome::new(8, 3));
+            tribe
+        }).collect();
+
+        for i in 0..self.tribes.len() {
+            let home = self.tribes[i].home_tile as usize;
+            let id = self.tribes[i].id as u32;
+            self.world.set_tile_owner(home, id);
+        }
+
+        self.last_frame = self.build_frame(&[]);
+
+        let tick = self.tick;
+        let gen = self.generation;
+        for tribe_id in 0..self.tribes.len() as u32 {
+            let ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::TribeSpawned,
+                crate::events::EventSeverity::Info,
+                tribe_id,
+            );
+            self.push_event(ev);
+        }
     }
 
     pub fn status(&self) -> StatusResponse {
@@ -905,6 +1020,7 @@ impl TribeSimulation {
             world_height_tiles: self.world.grid_h,
             total_tiles: self.world.total_tiles,
             world_seed: self.config.world_seed,
+            scenario_id: self.config.scenario_id.clone(),
         }
     }
 
@@ -968,6 +1084,29 @@ impl TribeSimulation {
         }
     }
 
+    // ─── K3: Biome Composition ────────────────────────────────────────────────
+
+    fn biome_composition_for_tribe(&self, tribe_id: usize) -> std::collections::HashMap<String, usize> {
+        let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        if let Some(tribe) = self.tribes.get(tribe_id) {
+            for &tile_idx in &tribe.territory {
+                let idx = tile_idx as usize;
+                if idx < self.world.tiles.len() {
+                    let key = match self.world.tiles[idx].biome {
+                        crate::world::Biome::Plains   => "plains",
+                        crate::world::Biome::Forest   => "forest",
+                        crate::world::Biome::Desert   => "desert",
+                        crate::world::Biome::Mountain => "mountain",
+                        crate::world::Biome::Swamp    => "swamp",
+                        crate::world::Biome::River    => "river",
+                    };
+                    *map.entry(key.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+        map
+    }
+
     pub fn tribe_snapshot(&self, id: usize) -> Option<TribeSnapshotResponse> {
         let t = self.tribes.get(id)?;
         Some(TribeSnapshotResponse {
@@ -988,6 +1127,7 @@ impl TribeSimulation {
             generation: t.generation,
             ticks_alive: t.ticks_alive,
             alive: t.alive,
+            biome_composition: self.biome_composition_for_tribe(id),
         })
     }
 
@@ -1014,6 +1154,27 @@ impl TribeSimulation {
                 contested: false,
             }).collect(),
         }
+    }
+
+    // ─── L2: Active Wars Snapshot ─────────────────────────────────────────────
+
+    pub fn active_wars_snapshot(&self) -> crate::war::ActiveWarsResponse {
+        let wars: Vec<crate::war::WarSummary> = self.active_wars.iter()
+            .filter(|w| w.status == crate::war::WarStatus::Active)
+            .map(|w| crate::war::WarSummary {
+                war_id: w.war_id,
+                attacker_id: w.attacker_id,
+                defender_id: w.defender_id,
+                start_tick: w.start_tick,
+                status: w.status,
+                attacker_casualties: w.attacker_casualties,
+                defender_casualties: w.defender_casualties,
+                battle_tile: w.battle_tile,
+                duration_ticks: self.tick.saturating_sub(w.start_tick),
+            })
+            .collect();
+        let active_count = wars.len();
+        crate::war::ActiveWarsResponse { wars, active_count }
     }
 
     pub fn step(&mut self) -> Vec<u8> {
@@ -1043,6 +1204,11 @@ impl TribeSimulation {
 
         // 3. State machine transitions (Task 7)
         self.apply_state_machine();
+
+        // K1: Territory expansion — every 20 ticks for eligible settling/foraging tribes
+        if self.tick % 20 == 0 {
+            self.apply_territory_expansion();
+        }
 
         // 4. Combat resolution (Task 8)
         self.apply_combat();
@@ -1245,6 +1411,53 @@ impl TribeSimulation {
         }
     }
 
+    // ─── K1: Territory Expansion ──────────────────────────────────────────────
+
+    fn apply_territory_expansion(&mut self) {
+        use crate::tribes::BehaviorState;
+
+        let eligible: Vec<usize> = (0..self.tribes.len())
+            .filter(|&i| {
+                let t = &self.tribes[i];
+                t.alive && matches!(t.behavior, BehaviorState::Settling | BehaviorState::Foraging)
+            })
+            .collect();
+
+        let tick = self.tick;
+        let gen = self.generation;
+        // Track tiles claimed this round to prevent two tribes claiming the same tile
+        let mut newly_claimed: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut claims: Vec<(usize, usize)> = Vec::new(); // (tribe_idx, tile_idx)
+
+        for &tribe_idx in &eligible {
+            // resource_drive (output index 1) drives expansion
+            let resource_drive = self.tribes[tribe_idx].last_outputs[1];
+            if resource_drive < 0.4 {
+                continue;
+            }
+            let neutral = self.world.neutral_adjacent_tiles(&self.tribes[tribe_idx].territory);
+            if let Some(&tile_idx) = neutral.iter().find(|t| !newly_claimed.contains(t)) {
+                newly_claimed.insert(tile_idx);
+                claims.push((tribe_idx, tile_idx));
+            }
+        }
+
+        for (tribe_idx, tile_idx) in claims {
+            let tribe_id = self.tribes[tribe_idx].id as u32;
+            self.tribes[tribe_idx].territory.push(tile_idx as u16);
+            self.world.set_tile_owner(tile_idx, tribe_id);
+
+            let mut ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::TileClaimed,
+                crate::events::EventSeverity::Debug,
+                tribe_id,
+            );
+            ev.tile_id = tile_idx as u32;
+            self.push_event(ev);
+        }
+    }
+
     fn has_neighbor(&self, tribe_idx: usize) -> bool {
         let my_tiles: std::collections::HashSet<u16> =
             self.tribes[tribe_idx].territory.iter().cloned().collect();
@@ -1266,6 +1479,8 @@ impl TribeSimulation {
         use crate::tribes::BehaviorState;
 
         // War declaration: AtWar tribes pick a target if they don't have one
+        // L1: collect new (atk_id, def_id, battle_tile) pairs before mutating
+        let mut new_war_pairs: Vec<(u32, u32, u32)> = Vec::new();
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
             if !matches!(self.tribes[i].behavior, BehaviorState::AtWar) { continue; }
@@ -1279,6 +1494,48 @@ impl TribeSimulation {
                     (my_home - their_home).unsigned_abs()
                 });
             self.tribes[i].target_tribe = target;
+
+            // L1: record new war pair if not already tracked
+            if let Some(def_idx) = target {
+                let atk_id = self.tribes[i].id as u32;
+                let def_id = self.tribes[def_idx].id as u32;
+                let battle_tile = self.tribes[def_idx].home_tile as u32;
+                let already = self.active_wars.iter().any(|w| {
+                    w.status == crate::war::WarStatus::Active
+                        && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                            || (w.attacker_id == def_id && w.defender_id == atk_id))
+                });
+                if !already {
+                    new_war_pairs.push((atk_id, def_id, battle_tile));
+                }
+            }
+        }
+
+        // L1: create WarState records and emit WarDeclared events
+        let tick = self.tick;
+        let gen = self.generation;
+        for (atk_id, def_id, battle_tile) in new_war_pairs {
+            let war_id = self.next_war_id;
+            self.next_war_id += 1;
+            self.active_wars.push(crate::war::WarState {
+                war_id,
+                attacker_id: atk_id,
+                defender_id: def_id,
+                start_tick: tick,
+                status: crate::war::WarStatus::Active,
+                attacker_casualties: 0,
+                defender_casualties: 0,
+                battle_tile: Some(battle_tile),
+            });
+            let mut ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::WarDeclared,
+                crate::events::EventSeverity::Important,
+                atk_id,
+            );
+            ev.other_tribe_id = def_id;
+            ev.war_id = war_id;
+            self.push_event(ev);
         }
 
         // Combat ticks every 10 ticks
@@ -1299,6 +1556,10 @@ impl TribeSimulation {
                 self.tribes[attacker_idx].ticks_in_state = 0;
                 continue;
             }
+
+            // L1: capture IDs for war record lookups before any mutation
+            let atk_id = self.tribes[attacker_idx].id as u32;
+            let def_id = self.tribes[defender_idx].id as u32;
 
             // Box-Muller normal sample for attacker
             let u1: f32 = self.rng.random::<f32>().max(1e-7);
@@ -1337,9 +1598,27 @@ impl TribeSimulation {
             self.tribes[defender_idx].population =
                 self.tribes[defender_idx].population.saturating_sub(d_casualties);
 
+            // L1: accumulate casualties in war record
+            if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                w.status == crate::war::WarStatus::Active
+                    && w.attacker_id == atk_id
+                    && w.defender_id == def_id
+            }) {
+                war.attacker_casualties += a_casualties;
+                war.defender_casualties += d_casualties;
+            }
+
             // Check extinction
             if self.tribes[attacker_idx].population == 0 {
                 self.tribes[attacker_idx].alive = false;
+                // L1: defender won — attacker wiped out
+                if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                    w.status == crate::war::WarStatus::Active
+                        && w.attacker_id == atk_id
+                        && w.defender_id == def_id
+                }) {
+                    war.status = crate::war::WarStatus::DefenderWon;
+                }
             }
             if self.tribes[defender_idx].population == 0 {
                 self.tribes[defender_idx].alive = false;
@@ -1348,12 +1627,25 @@ impl TribeSimulation {
                 let absorbed_founders: Vec<crate::tribes::FounderTag> =
                     self.tribes[defender_idx].founders.clone();
                 let absorbed_cluster_id = self.tribes[defender_idx].cluster_id.clone();
-                self.tribes[attacker_idx].territory.extend(absorbed_territory);
+                let attacker_id = self.tribes[attacker_idx].id as u32;
+                self.tribes[attacker_idx].territory.extend(absorbed_territory.iter().copied());
+                // K2: transfer tile ownership to attacker
+                for &t in &absorbed_territory {
+                    self.world.set_tile_owner(t as usize, attacker_id);
+                }
                 self.tribes[attacker_idx].founders.extend(absorbed_founders);
                 self.tribes[attacker_idx].lineage.push(absorbed_cluster_id);
                 self.tribes[attacker_idx].target_tribe = None;
                 self.tribes[attacker_idx].behavior = BehaviorState::Occupying;
                 self.tribes[attacker_idx].ticks_in_state = 0;
+                // L1: attacker won — defender absorbed
+                if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                    w.status == crate::war::WarStatus::Active
+                        && w.attacker_id == atk_id
+                        && w.defender_id == def_id
+                }) {
+                    war.status = crate::war::WarStatus::AttackerWon;
+                }
             } else if self.tribes[attacker_idx].ticks_in_state > 300 {
                 // War timeout — both go to Peace
                 self.tribes[attacker_idx].behavior = BehaviorState::Peace;
@@ -1361,6 +1653,13 @@ impl TribeSimulation {
                 self.tribes[attacker_idx].ticks_in_state = 0;
                 self.tribes[defender_idx].behavior = BehaviorState::Peace;
                 self.tribes[defender_idx].ticks_in_state = 0;
+                // L1: war ended in timeout peace
+                if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                    w.status == crate::war::WarStatus::Active
+                        && (w.attacker_id == atk_id || w.defender_id == atk_id)
+                }) {
+                    war.status = crate::war::WarStatus::Peace;
+                }
             }
         }
     }

@@ -3,6 +3,7 @@ mod db;
 pub mod world;
 pub mod tribes;
 pub mod events;
+pub mod war;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -24,6 +25,7 @@ use simulation::{
     SaveRecordingRequest, SharedSimulation, TribeSimulation, StatusResponse,
     TribeSnapshotResponse, WorldSnapshotResponse, TileOwnershipResponse,
 };
+use war::ActiveWarsResponse;
 use db::Database;
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
@@ -89,6 +91,7 @@ async fn main() {
         .route("/api/tile-ownership", get(get_tile_ownership))
         .route("/api/tribes/:id", get(get_tribe_snapshot))
         .route("/api/interventions", post(handle_intervention))
+        .route("/api/wars/active", get(get_active_wars))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -282,6 +285,10 @@ async fn get_tribe_snapshot(
         .tribe_snapshot(id)
         .map(Json)
         .ok_or_else(|| (StatusCode::NOT_FOUND, format!("tribe {id} not found")))
+}
+
+async fn get_active_wars(State(state): State<Arc<AppState>>) -> Json<ActiveWarsResponse> {
+    Json(state.simulation.read().active_wars_snapshot())
 }
 
 async fn handle_intervention(
