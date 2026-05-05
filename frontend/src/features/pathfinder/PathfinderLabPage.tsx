@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import AlgorithmComparisonTable from "./AlgorithmComparisonTable";
+import AlgorithmComparisonTable from "../analysis/AlgorithmComparisonTable";
 import PathfinderCanvas from "./PathfinderCanvas";
 import PathfinderControls from "./PathfinderControls";
 import PathfinderGraphOverlay from "./PathfinderGraphOverlay";
 import PlaybackControls from "./PlaybackControls";
 import RunSummaryPanel from "./RunSummaryPanel";
 import SavedReplaysOverlay from "./SavedReplaysOverlay";
-import { getComparisonRows, getMockGraphSnapshot, mockDatasetSummary, mockPlayers, runPathfinderMock } from "./pathfinderMocks";
+import { getComparisonRows, getMockGraphSnapshot, mockDatasetSummary, mockPlayers, runPathfinderMock } from "../../pathfinderMocks";
 import {
   deletePathfinderReplay,
   fetchPathfinderEngineSpec,
@@ -18,7 +18,7 @@ import {
   runPathfinderBackend,
   runRustPathfinderBackend,
   savePathfinderReplay,
-} from "./pathfinderApi";
+} from "../../pathfinderApi";
 import { usePathfinderPlayback } from "./usePathfinderPlayback";
 import {
   ALGORITHM_LABELS,
@@ -32,9 +32,9 @@ import {
   type PathMode,
   type PlayerOption,
   type SavedReplayRecord,
-} from "./pathfinderTypes";
-import { useI18n } from "./i18n";
-import { pageShellStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
+} from "../../pathfinderTypes";
+import { useI18n } from "../../i18n";
+import { pageShellStyle, sectionLabelStyle, surfaceCardStyle } from "../../theme";
 
 function getDefaultComparisonNote(
   sourcePlayerId: string,

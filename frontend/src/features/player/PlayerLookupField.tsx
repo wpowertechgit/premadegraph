@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { type PlayerOption } from "./pathfinderTypes";
-import { useI18n } from "./i18n";
-import { inputStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
+import { type PlayerOption } from "../../pathfinderTypes";
+import { useI18n } from "../../i18n";
+import { inputStyle, sectionLabelStyle, surfaceCardStyle } from "../../theme";
 
 interface PlayerLookupFieldProps {
   label: string;

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GraphV2Scene from "./GraphV2Scene";
-import PlayerLookupField from "./PlayerLookupField";
+import PlayerLookupField from "../player/PlayerLookupField";
 import {
   fetchRustGraphV2Buffers,
   fetchRustGraphV2ClusterMeta,
@@ -11,12 +11,12 @@ import {
   rebuildRustGraphV2,
   runRustBetweennessCentrality,
   runRustPathfinderBackend,
-} from "./pathfinderApi";
-import { type PathMode, type PlayerOption } from "./pathfinderTypes";
+} from "../../pathfinderApi";
+import { type PathMode, type PlayerOption } from "../../pathfinderTypes";
 import type { GraphV2Buffers, GraphV2ClusterMeta, GraphV2Manifest, GraphV2NodeMeta } from "./graphV2Types";
-import type { BetweennessCentralityResponse } from "./betweennessTypes";
-import { getAlgorithmLabel, getPathModeLabel, translateBackendText, useI18n } from "./i18n";
-import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "./theme";
+import type { BetweennessCentralityResponse } from "../centrality/betweennessTypes";
+import { getAlgorithmLabel, getPathModeLabel, translateBackendText, useI18n } from "../../i18n";
+import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "../../theme";
 
 const metricLabelStyle: React.CSSProperties = {
   color: "var(--text-muted)",

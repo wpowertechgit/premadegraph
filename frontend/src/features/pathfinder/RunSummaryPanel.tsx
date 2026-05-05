@@ -1,7 +1,7 @@
 import React from "react";
-import { type PathfinderRunResponse, type SavedReplayRecord } from "./pathfinderTypes";
-import { getAlgorithmLabel, getPathModeLabel, getStatusLabel, translateBackendText, useI18n } from "./i18n";
-import { buttonStyle, metricCardStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
+import { type PathfinderRunResponse, type SavedReplayRecord } from "../../pathfinderTypes";
+import { getAlgorithmLabel, getPathModeLabel, getStatusLabel, translateBackendText, useI18n } from "../../i18n";
+import { buttonStyle, metricCardStyle, sectionLabelStyle, surfaceCardStyle } from "../../theme";
 
 interface RunSummaryPanelProps {
   run: PathfinderRunResponse | null;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { RiCloseLine } from "react-icons/ri";
 import PlaybackControls from "./PlaybackControls";
-import PlayerLookupField from "./PlayerLookupField";
+import PlayerLookupField from "../player/PlayerLookupField";
 import PathfinderGraphScene from "./PathfinderGraphScene";
 import {
   type AlgorithmId,
@@ -12,8 +12,8 @@ import {
   type PathMode,
   type PlaybackState,
   type PlayerOption,
-} from "./pathfinderTypes";
-import { getAlgorithmLabel, getPathModeLabel, getPhaseLabel, useI18n } from "./i18n";
+} from "../../pathfinderTypes";
+import { getAlgorithmLabel, getPathModeLabel, getPhaseLabel, useI18n } from "../../i18n";
 
 interface PathfinderGraphOverlayProps {
   open: boolean;

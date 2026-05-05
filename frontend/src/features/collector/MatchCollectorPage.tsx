@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useI18n } from "./i18n";
+import { useI18n } from "../../i18n";
 
 type CollectorConfigResponse = {
   defaults: CollectorStartPayload;

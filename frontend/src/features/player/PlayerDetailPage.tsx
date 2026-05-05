@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import PlayerLookupField from "./PlayerLookupField";
-import PlayerPerformanceCard from "./components/PlayerPerformanceCard.tsx";
-import { fetchPlayerOptions } from "./pathfinderApi";
-import { type PlayerOption } from "./pathfinderTypes";
-import { useI18n } from "./i18n";
-import { pageShellStyle, sectionLabelStyle } from "./theme";
+import PlayerPerformanceCard from "../../components/PlayerPerformanceCard.tsx";
+import { fetchPlayerOptions } from "../../pathfinderApi";
+import { type PlayerOption } from "../../pathfinderTypes";
+import { useI18n } from "../../i18n";
+import { pageShellStyle, sectionLabelStyle } from "../../theme";
 
 const PlayerDetailPage = () => {
   const { t } = useI18n();

@@ -3,7 +3,7 @@ import {
   type CanvasFrame,
   type PathfinderRunResponse,
   type PlaybackState,
-} from "./pathfinderTypes";
+} from "../../pathfinderTypes";
 
 function edgeKey(from: string, to: string): string {
   return [from, to].sort().join("|");

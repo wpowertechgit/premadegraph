@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FaBookOpen, FaExternalLinkAlt, FaFilePdf, FaSearch, FaSyncAlt, FaTimes } from "react-icons/fa";
-import { buttonStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "./theme";
-import generatedManifest from "./documentationManifest.generated.json";
+import { buttonStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "../../theme";
+import generatedManifest from "../../documentationManifest.generated.json";
 
 type DocumentationEntry = {
   id: string;

@@ -7,11 +7,11 @@ import type {
   PathfinderRunResponse,
   SavedReplayRecord,
 } from "./pathfinderTypes";
-import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
-import type { GraphV2Buffers, GraphV2ClusterMeta, GraphV2Manifest, GraphV2NodeMeta } from "./graphV2Types";
+import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./features/birdseye/graphSphereTypes";
+import type { GraphV2Buffers, GraphV2ClusterMeta, GraphV2Manifest, GraphV2NodeMeta } from "./features/associative/graphV2Types";
 import type { SignedBalanceRequest, SignedBalanceResponse } from "./signedBalanceTypes";
-import type { AssortativityRequest, AssortativityResponse } from "./assortativityTypes";
-import type { BetweennessCentralityRequest, BetweennessCentralityResponse } from "./betweennessTypes";
+import type { AssortativityRequest, AssortativityResponse } from "./features/assortativity/assortativityTypes";
+import type { BetweennessCentralityRequest, BetweennessCentralityResponse } from "./features/centrality/betweennessTypes";
 
 const API_BASE = "http://localhost:3001/api/pathfinder";
 const RUST_API_BASE = "http://localhost:3001/api/pathfinder-rust";

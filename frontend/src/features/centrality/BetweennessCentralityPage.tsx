@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { FaBolt, FaCheckCircle, FaExclamationTriangle, FaNetworkWired, FaStopwatch } from "react-icons/fa";
-import { runRustBetweennessCentrality } from "./pathfinderApi";
-import { useI18n } from "./i18n";
-import { buttonStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "./theme";
+import { runRustBetweennessCentrality } from "../../pathfinderApi";
+import { useI18n } from "../../i18n";
+import { buttonStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "../../theme";
 import type {
   BetweennessCentralityNodeResult,
   BetweennessCentralityRequest,

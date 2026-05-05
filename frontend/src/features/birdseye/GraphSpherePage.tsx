@@ -2,11 +2,11 @@ import React, { startTransition, useDeferredValue, useEffect, useMemo, useState 
 import { RiCloseLine, RiInformationLine } from "react-icons/ri";
 import GraphSphereScene from "./GraphSphereScene";
 import { buildMockBirdseyeData } from "./graphBirdseyeMock";
-import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta } from "./pathfinderApi";
+import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta } from "../../pathfinderApi";
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
-import { useI18n } from "./i18n";
-import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "./theme";
-import PlayerPerformanceCard from "./components/PlayerPerformanceCard.tsx";
+import { useI18n } from "../../i18n";
+import { buttonStyle, glassCardStyle, pageShellStyle, sectionLabelStyle } from "../../theme";
+import PlayerPerformanceCard from "../../components/PlayerPerformanceCard.tsx";
 
 type FocusRequest = {
   index: number;

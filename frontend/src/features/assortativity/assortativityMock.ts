@@ -1,5 +1,5 @@
-import { getMockGraphSnapshot, mockPlayers } from "./pathfinderMocks";
-import type { GraphNode } from "./pathfinderTypes";
+import { getMockGraphSnapshot, mockPlayers } from "../../pathfinderMocks";
+import type { GraphNode } from "../../pathfinderTypes";
 import type {
   AssortativityMetricResult,
   AssortativityRequest,

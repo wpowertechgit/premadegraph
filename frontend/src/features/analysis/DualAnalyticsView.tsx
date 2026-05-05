@@ -15,9 +15,9 @@ import {
   persistSignedBalanceRun,
 } from "./analyticsState";
 import { runAssortativityMock } from "./assortativityMock";
-import { runRustAssortativity, runRustSignedBalance } from "./pathfinderApi";
+import { runRustAssortativity, runRustSignedBalance } from "../../pathfinderApi";
 import { runSignedBalanceMock } from "./signedBalanceMock";
-import { buttonStyle, pageShellStyle, sectionLabelStyle } from "./theme";
+import { buttonStyle, pageShellStyle, sectionLabelStyle } from "../../theme";
 import type { AssortativityResponse } from "./assortativityTypes";
 import type { SignedBalanceResponse } from "./signedBalanceTypes";
 

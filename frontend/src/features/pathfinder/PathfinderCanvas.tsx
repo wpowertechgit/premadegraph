@@ -1,7 +1,7 @@
 import React from "react";
 import PathfinderGraphScene from "./PathfinderGraphScene";
-import { type CanvasFrame, type GraphSnapshot, type PathfinderRunResponse } from "./pathfinderTypes";
-import { useI18n } from "./i18n";
+import { type CanvasFrame, type GraphSnapshot, type PathfinderRunResponse } from "../../pathfinderTypes";
+import { useI18n } from "../../i18n";
 
 interface PathfinderCanvasProps {
   snapshot: GraphSnapshot;

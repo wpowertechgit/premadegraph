@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { runRustSignedBalance } from "./pathfinderApi";
 import { useI18n } from "./i18n";
 import { runSignedBalanceMock } from "./signedBalanceMock";
-import { buildBalanceBanner, CoefficientBadge, InterpretationBanner, MethodologyCard, ParameterGuide } from "./analyticsComponents";
-import { explainBalanceFinding, formatSignedPercent, persistSignedBalanceRun } from "./analyticsState";
+import { buildBalanceBanner, CoefficientBadge, InterpretationBanner, MethodologyCard, ParameterGuide } from "./features/analysis/analyticsComponents";
+import { explainBalanceFinding, formatSignedPercent, persistSignedBalanceRun } from "./features/analysis/analyticsState";
 import { buttonStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "./theme";
 import type {
   SignedBalanceRequest,

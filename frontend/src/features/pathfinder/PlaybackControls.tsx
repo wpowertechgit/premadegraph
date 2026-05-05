@@ -7,9 +7,9 @@ import {
   RiSkipForwardFill,
   RiSkipRightLine,
 } from "react-icons/ri";
-import { type PlaybackState } from "./pathfinderTypes";
-import { useI18n } from "./i18n";
-import { buttonStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
+import { type PlaybackState } from "../../pathfinderTypes";
+import { useI18n } from "../../i18n";
+import { buttonStyle, sectionLabelStyle, surfaceCardStyle } from "../../theme";
 
 interface PlaybackControlsProps {
   playbackState: PlaybackState;

@@ -1,8 +1,8 @@
 import React from "react";
 import { RiCloseLine } from "react-icons/ri";
-import { getAlgorithmLabel, getPathModeLabel, useI18n } from "./i18n";
-import { buttonStyle, metricCardStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
-import type { SavedReplayRecord } from "./pathfinderTypes";
+import { getAlgorithmLabel, getPathModeLabel, useI18n } from "../../i18n";
+import { buttonStyle, metricCardStyle, sectionLabelStyle, surfaceCardStyle } from "../../theme";
+import type { SavedReplayRecord } from "../../pathfinderTypes";
 
 interface SavedReplaysOverlayProps {
   open: boolean;

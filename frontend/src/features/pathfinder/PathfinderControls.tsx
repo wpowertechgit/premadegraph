@@ -1,13 +1,13 @@
 import React from "react";
-import PlayerLookupField from "./PlayerLookupField";
+import PlayerLookupField from "../player/PlayerLookupField";
 import {
   type AlgorithmId,
   type ExecutionMode,
   type PathMode,
   type PlayerOption,
-} from "./pathfinderTypes";
-import { getAlgorithmLabel, getPathModeLabel, useI18n } from "./i18n";
-import { buttonStyle, inputStyle, sectionLabelStyle, surfaceCardStyle } from "./theme";
+} from "../../pathfinderTypes";
+import { getAlgorithmLabel, getPathModeLabel, useI18n } from "../../i18n";
+import { buttonStyle, inputStyle, sectionLabelStyle, surfaceCardStyle } from "../../theme";
 
 interface PathfinderControlsProps {
   players: PlayerOption[];

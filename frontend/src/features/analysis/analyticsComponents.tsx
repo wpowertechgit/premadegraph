@@ -1,5 +1,5 @@
 import React, { useId, useState } from "react";
-import { INTERPRETATION_PALETTE, buttonStyle, sectionLabelStyle } from "./theme";
+import { INTERPRETATION_PALETTE, buttonStyle, sectionLabelStyle } from "../../theme";
 import {
   classifyAssortativityFinding,
   classifyBalanceFinding,

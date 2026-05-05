@@ -3,18 +3,18 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from
 import { Alert, Snackbar } from "@mui/material";
 import { useI18n } from "./i18n";
 import AppNavbar from "./AppNavbar";
-import GraphSpherePage from "./GraphSpherePage";
+import GraphSpherePage from "./features/birdseye/GraphSpherePage";
 import { startRouteTransition } from "./RouteTransitionOverlay";
 
-const MatchAnalysisPage = lazy(() => import("./MatchAnalysisForm"));
-const MatchCollectorPage = lazy(() => import("./MatchCollectorPage"));
-const GraphPage = lazy(() => import("./GraphPage"));
-const PlayerDetailPage = lazy(() => import("./PlayerDetailPage"));
-const AssortativityPage = lazy(() => import("./AssortativityPage"));
-const BetweennessCentralityPage = lazy(() => import("./BetweennessCentralityPage"));
-const PathfinderLabPage = lazy(() => import("./PathfinderLabPage"));
-const DocumentationPage = lazy(() => import("./DocumentationPage"));
-const TribalSimulationPage = lazy(() => import("./pages/TribalSimulationPage"));
+const MatchAnalysisPage = lazy(() => import("./features/analysis/MatchAnalysisForm"));
+const MatchCollectorPage = lazy(() => import("./features/collector/MatchCollectorPage"));
+const GraphPage = lazy(() => import("./features/associative/GraphPage"));
+const PlayerDetailPage = lazy(() => import("./features/player/PlayerDetailPage"));
+const AssortativityPage = lazy(() => import("./features/assortativity/AssortativityPage"));
+const BetweennessCentralityPage = lazy(() => import("./features/centrality/BetweennessCentralityPage"));
+const PathfinderLabPage = lazy(() => import("./features/pathfinder/PathfinderLabPage"));
+const DocumentationPage = lazy(() => import("./features/documentation/DocumentationPage"));
+const TribalSimulationPage = lazy(() => import("./features/simulation/TribalSimulationPage"));
 
 const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
 const NAV_WIDTH_MIN = 280;

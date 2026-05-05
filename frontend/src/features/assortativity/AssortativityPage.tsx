@@ -1,14 +1,14 @@
 import React, { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
-import GraphSphereScene from "./GraphSphereScene";
-import { buildMockBirdseyeData } from "./graphBirdseyeMock";
-import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta, runRustAssortativity } from "./pathfinderApi";
-import { useI18n } from "./i18n";
+import GraphSphereScene from "../birdseye/GraphSphereScene";
+import { buildMockBirdseyeData } from "../birdseye/graphBirdseyeMock";
+import { fetchRustBirdseyeBuffers, fetchRustBirdseyeManifest, fetchRustBirdseyeNodeMeta, runRustAssortativity } from "../../pathfinderApi";
+import { useI18n } from "../../i18n";
 import { runAssortativityMock } from "./assortativityMock";
 import type { AssortativityMetricResult, AssortativityRequest, AssortativityResponse, AssortativitySample } from "./assortativityTypes";
-import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
-import { CoefficientBadge, EdgeCategoryLegend, InterpretationBanner, MethodologyCard, ParameterGuide } from "./analyticsComponents";
-import { explainAssortativityFinding, persistAssortativityRun } from "./analyticsState";
-import { buttonStyle, glassCardStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "./theme";
+import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "../birdseye/graphSphereTypes";
+import { CoefficientBadge, EdgeCategoryLegend, InterpretationBanner, MethodologyCard, ParameterGuide } from "../analysis/analyticsComponents";
+import { explainAssortativityFinding, persistAssortativityRun } from "../analysis/analyticsState";
+import { buttonStyle, glassCardStyle, inputStyle, pageShellStyle, sectionLabelStyle } from "../../theme";
 
 const DEFAULT_REQUEST: AssortativityRequest = {
   minEdgeSupport: 1,

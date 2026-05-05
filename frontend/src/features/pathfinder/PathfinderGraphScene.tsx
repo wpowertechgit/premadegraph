@@ -5,8 +5,8 @@ import {
   type GraphSnapshot,
   type PathfinderRunResponse,
   type RelationType,
-} from "./pathfinderTypes";
-import { useI18n } from "./i18n";
+} from "../../pathfinderTypes";
+import { useI18n } from "../../i18n";
 
 interface PathfinderGraphSceneProps {
   snapshot: GraphSnapshot;

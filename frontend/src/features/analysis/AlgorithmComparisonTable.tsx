@@ -1,7 +1,7 @@
 import React from "react";
-import { type ComparisonRow } from "./pathfinderTypes";
-import { getAlgorithmLabel, translateBackendText, useI18n } from "./i18n";
-import { surfaceCardStyle } from "./theme";
+import { type ComparisonRow } from "../../pathfinderTypes";
+import { getAlgorithmLabel, translateBackendText, useI18n } from "../../i18n";
+import { surfaceCardStyle } from "../../theme";
 
 interface AlgorithmComparisonTableProps {
   rows: ComparisonRow[];
