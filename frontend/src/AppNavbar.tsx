@@ -20,7 +20,7 @@ import {
 } from "react-icons/fa";
 import { useI18n } from "./i18n";
 import type { DatasetRecord, RuntimeKeyRecord } from "./App";
-import collectorIcon from "../assets/The_Collector_WR_item.png";
+const collectorIcon = "/The_Collector_WR_item.png";
 
 type AppNavbarProps = {
   collapsed: boolean;

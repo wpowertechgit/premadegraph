@@ -21,28 +21,21 @@ public sealed class AssetRegistry
     public static AssetRegistry CreateWithFallbacks()
     {
         var icons = new IconRegistry();
-        icons.Register("artifact/combat", "icons/artifacts/combat");
-        icons.Register("artifact/resource", "icons/artifacts/resource");
-        icons.Register("artifact/map-objective", "icons/artifacts/map-objective");
-        icons.Register("artifact/risk", "icons/artifacts/risk");
-        icons.Register("artifact/team", "icons/artifacts/team");
+        foreach (var (key, assetKey) in AssetManifest.IconBindings)
+        {
+            icons.Register(key, assetKey);
+        }
 
         var registry = new AssetRegistry(icons);
-        registry.RegisterBiome(new BiomeVisualProfile(
-            BiomeId.Unknown,
-            "Unknown",
-            "biomes/fallback/terrain",
-            Array.Empty<string>(),
-            "#3b3b3b"));
 
-        foreach (PolityTier tier in Enum.GetValues<PolityTier>())
+        foreach (var biome in AssetManifest.BiomeProfiles)
         {
-            registry.RegisterSettlement(new SettlementVisualProfile(
-                tier,
-                null,
-                $"settlements/fallback/{tier.ToString().ToLowerInvariant()}",
-                $"icons/polities/{tier.ToString().ToLowerInvariant()}",
-                "lod/default"));
+            registry.RegisterBiome(biome);
+        }
+
+        foreach (var settlement in AssetManifest.SettlementProfiles)
+        {
+            registry.RegisterSettlement(settlement);
         }
 
         return registry;

@@ -1,4 +1,4 @@
-import { getMockGraphSnapshot, mockDatasetSummary, mockPlayers } from "./pathfinderMocks";
+import { getMockGraphSnapshot, mockDatasetSummary, mockPlayers } from "../../pathfinderMocks";
 import type { BirdseyeBuffers, BirdseyeManifest, BirdseyeNodeMeta } from "./graphSphereTypes";
 
 export function buildMockBirdseyeData(): {

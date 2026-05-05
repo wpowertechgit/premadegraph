@@ -23,16 +23,16 @@ import {
   InputAdornment,
 } from "@mui/material";
 import { translateBackendText, useI18n } from "../../i18n";
-import BarrierIcon from "../../assets/Barrier_HD.png";
-import ClarityIcon from "../../assets/Clarity_HD.png";
-import CleanseIcon from "../../assets/Cleanse_HD.png";
-import ExhaustIcon from "../../assets/Exhaust_HD.png";
-import FlashIcon from "../../assets/Flash_HD.png";
-import GhostIcon from "../../assets/Ghost_HD.png";
-import HealIcon from "../../assets/Heal_HD.png";
-import IgniteIcon from "../../assets/Ignite_HD.png";
-import SmiteIcon from "../../assets/Smite_HD.png";
-import TeleportIcon from "../../assets/Teleport_HD.png";
+const BarrierIcon = "/Barrier_HD.png";
+const ClarityIcon = "/Clarity_HD.png";
+const CleanseIcon = "/Cleanse_HD.png";
+const ExhaustIcon = "/Exhaust_HD.png";
+const FlashIcon = "/Flash_HD.png";
+const GhostIcon = "/Ghost_HD.png";
+const HealIcon = "/Heal_HD.png";
+const IgniteIcon = "/Ignite_HD.png";
+const SmiteIcon = "/Smite_HD.png";
+const TeleportIcon = "/Teleport_HD.png";
 
 const SUMMONER_SPELL_ICONS: Record<number, { name: string; icon: string }> = {
   1: { name: "Cleanse", icon: CleanseIcon },
