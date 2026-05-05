@@ -18,6 +18,10 @@ const {
 } = require("./pathfinder/prototypeEngine");
 const { executeRustCommand, executeRustCommandRaw, shutdownDaemon } = require("./pathfinder/rustBridge");
 const neurosimBridge = require("./neurosim-bridge");
+const {
+  buildDesktopHandshake,
+  resolveDesktopUpstream,
+} = require("./neurosim-desktop-contract");
 
 const DATA_ROOT = path.resolve(__dirname, "data");
 const DATASET_REGISTRY_PATH = path.join(DATA_ROOT, "datasets.json");
@@ -3382,6 +3386,24 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.all("/api/neurosim/health", (req, res) => neurosimBridge.proxyHttp(req, res));
 app.all("/api/neurosim/api/*path", (req, res) => neurosimBridge.proxyHttp(req, res));
 
+app.get("/api/neurosim/desktop/v1/handshake", (req, res) => {
+  res.json(buildDesktopHandshake(req.headers.host || `localhost:${PORT}`, req.protocol));
+});
+
+app.get("/api/neurosim/desktop/v1/status", (req, res) => {
+  const upstreamPath = resolveDesktopUpstream(req.url);
+  neurosimBridge.proxyHttpToPath(req, res, upstreamPath);
+});
+
+app.post("/api/neurosim/desktop/v1/control/:command", (req, res) => {
+  const upstreamPath = resolveDesktopUpstream(req.url);
+  if (!upstreamPath) {
+    return res.status(404).json({ error: `Unsupported NeuroSim desktop command: ${req.params.command}` });
+  }
+
+  neurosimBridge.proxyHttpToPath(req, res, upstreamPath);
+});
+
 app.get([
   "/api/neurosim/cluster-export",
   "/api/neurosim/datasets/:datasetId/cluster-export",
@@ -3415,6 +3437,12 @@ const server = app.listen(PORT, () => {
 });
 
 server.on("upgrade", (req, socket, head) => {
+  const desktopFramesPath = resolveDesktopUpstream(req.url || "");
+  if (desktopFramesPath === "/ws/desktop/v1/frames") {
+    neurosimBridge.proxyWebSocket(req, socket, head, desktopFramesPath);
+    return;
+  }
+
   if (req.url === "/api/neurosim/ws/tribal-simulation") {
     neurosimBridge.proxyWebSocket(req, socket, head);
   }

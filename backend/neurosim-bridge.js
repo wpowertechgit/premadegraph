@@ -76,6 +76,10 @@ function stopNeurosimBackend() {
  */
 function proxyHttp(req, res, pathPrefix = "/api/neurosim") {
   const upstreamPath = req.url.replace(pathPrefix, "") || "/";
+  proxyHttpToPath(req, res, upstreamPath);
+}
+
+function proxyHttpToPath(req, res, upstreamPath) {
   const options = {
     hostname: NEUROSIM_HOST,
     port: NEUROSIM_PORT,
@@ -158,6 +162,7 @@ module.exports = {
   startNeurosimBackend,
   stopNeurosimBackend,
   proxyHttp,
+  proxyHttpToPath,
   proxyWebSocket,
   resolveNeurosimBinary,
   triggerNeurosimRefresh,

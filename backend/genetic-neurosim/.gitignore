@@ -9,5 +9,7 @@ node_modules/
 dist/
 backend/target/
 backend/recordings/
+client-monogame/bin/
+client-monogame/obj/
 
 .DS_Store

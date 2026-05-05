@@ -1,66 +1,92 @@
-Role: You are a Lead Research Engineer specializing in Artificial Life, Machine Learning, and High-Performance Web Architectures.
-Objective: Build the MVP for "NeuroSim," a full-stack, real-time evolutionary simulation where agents driven by simple neural networks learn to survive via genetic algorithms.
+# AGENTS.md
 
-Phase 1: Backend Physics & Neural Engine (Python/FastAPI/NumPy)
+## Purpose
 
-Initialize a FastAPI application with a WebSocket endpoint at /ws/simulation.
+This subtree now serves Tribal NeuroSim v3, not the old browser-era NeuroSim prototype.
 
-Create an Environment class that manages an 800x800 2D grid. The environment should randomly spawn "Food" (adds energy) and "Poison" (drains energy).
+The active direction is:
 
-Create an Agent class. Each agent has:
+- Rust backend for simulation execution and protocol support
+- C# MonoGame desktop client for the main application
+- Node as the required middleman between the desktop client and Rust
+- asset and concept-art collection under `client-monogame/Content/`
 
-Position (X, Y), Velocity, and Energy.
+## Current Scope
 
-A Feed-Forward Neural Network (built from scratch using NumPy, no PyTorch/TensorFlow).
+Work in this subtree should support:
 
-Inputs: Distance to nearest food, distance to nearest poison, current energy.
+1. Tribal NeuroSim v3 desktop migration
+2. C# domain modeling for polity tiers and artifacts
+3. Rust-side simulation, event, and transport work
+4. Node-mediated desktop integration
+5. biome-aware and polity-tier-aware asset preparation
 
-Outputs: Rotation angle, thrust/speed.
+## Architecture Rules
 
-Implement a game loop that runs at 30 ticks per second:
+- Do not reintroduce the deleted browser cockpit.
+- Do not create new runtime dependencies on React or Next.js in this subtree.
+- Keep Rust focused on simulation execution, compact data handling, protocol output, and analytics support.
+- Keep C# focused on the desktop client, domain structure, rendering preparation, and asset-facing registries.
+- Keep Node thin as the required middleman and bootstrap layer.
 
-Update all agent positions based on their neural network outputs.
+## Domain Direction
 
-Handle collisions (eating food/poison).
+The C# side should be prepared to model:
 
-Kill agents when energy reaches 0.
+- `Tribe`
+- `City`
+- `Duchy`
+- `Kingdom`
+- `Empire`
 
-Implement the Genetic Algorithm: When all agents die, take the top 10% (those who lived longest), cross over their neural network weights, apply a 5% mutation rate, and spawn a new generation.
+It should also be prepared to define:
 
-Phase 2: Data Streaming (WebSockets)
+- artifact metadata
+- biome visual mappings
+- settlement visual mappings
+- icon and insignia registries
 
-Within the continuous backend game loop, serialize the current state of the simulation (Agent positions, Agent energy levels, Food positions, Poison positions, Current Generation number, and Top Fitness score).
+## Assets
 
-Broadcast this serialized JSON state via the WebSocket to any connected client.
+Asset collection belongs under:
 
-Phase 3: The Frontend Arena (Next.js & HTML5 Canvas)
+- `backend/genetic-neurosim/client-monogame/Content/`
 
-Initialize a Next.js application.
+Code belongs under:
 
-Create a dashboard layout. The main component is an HTML5 <canvas> element (or a WebGL canvas) that connects to the backend WebSocket.
+- `backend/genetic-neurosim/client-monogame/Assets/`
+- `backend/genetic-neurosim/client-monogame/Domain/`
+- `backend/genetic-neurosim/client-monogame/Net/`
+- `backend/genetic-neurosim/client-monogame/Protocol/`
 
-Rendering Logic: On every WebSocket message, clear the canvas and redraw the current frame:
+Do not mix raw downloaded assets into code folders.
 
-Draw Food as glowing green dots.
+## Source Of Truth
 
-Draw Poison as glowing red dots.
+When making decisions here, follow these docs first:
 
-Draw Agents as triangles (pointing in their direction of velocity).
+- `docs/tribal-neurosim-v3-monogame-migration-plan.md`
+- `docs/tribal-neurosim-v3-asset-plan.md`
+- `docs/Tribal Neurosim v3_ Architecture & Mechanics Redesign.md`
+- `docs/Tribal NeuroSim V3_ Territory & Expansion Mechanics.md`
+- `docs/Tribal NeuroSim v3_ Offspring Mechanics & Evolutionary Lineage.md`
+- `docs/Tribal NeuroSim v3 _ Information Theory Lineage Compression.md`
 
-Color-code the Agents based on their energy levels (e.g., bright white for high energy, fading to dark gray as they die).
+These V3 docs are not optional flavor notes. They define the direction.
 
-Leave a slight fading opacity trail behind the agents to visualize their movement paths.
+## What Not To Do
 
-Phase 4: Real-Time Analytics (Chart.js)
+- Do not rebuild the old web frontend here.
+- Do not add frontend-only polish work detached from the desktop client path.
+- Do not add random AI-life mechanics unrelated to the V3 documents.
+- Do not collect giant asset packs blindly without curating them into the `Content/` tree.
 
-Beside or below the simulation canvas, implement a real-time line chart using Chart.js or Recharts.
+## Practical Priority
 
-Track and graph the "Average Lifespan" and "Max Fitness" of the agents over each passing generation to visually prove that the AI is learning and evolving over time.
+When in doubt, favor:
 
-Execution Constraints:
-
-Provide fully functional code for all files.
-
-Do NOT use external machine learning libraries like PyTorch or Scikit-Learn; the neural network matrix multiplication must be written in raw Python/NumPy to demonstrate algorithmic understanding.
-
-Include a README.md with instructions on how to install dependencies and run the backend and frontend simultaneously.
+1. desktop architecture correctness
+2. protocol clarity
+3. asset organization
+4. simulation observability
+5. visual fidelity later

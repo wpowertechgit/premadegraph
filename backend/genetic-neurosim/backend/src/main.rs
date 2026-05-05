@@ -1,5 +1,6 @@
 mod simulation;
 mod db;
+mod desktop_protocol;
 pub mod world;
 pub mod tribes;
 pub mod events;
@@ -28,6 +29,7 @@ use simulation::{
 };
 use war::ActiveWarsResponse;
 use db::Database;
+use desktop_protocol::wrap_tribal_legacy_frame;
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -76,7 +78,9 @@ async fn main() {
         .route("/health", get(health))
         .route("/ws/simulation", get(ws_simulation))           // kept for compat
         .route("/ws/tribal-simulation", get(ws_simulation))    // new canonical name
+        .route("/ws/desktop/v1/frames", get(ws_desktop_v1_frames))
         .route("/api/status", get(get_status))
+        .route("/api/desktop/v1/status", get(get_status))
         .route("/api/config", get(get_config).post(update_config))
         .route("/api/config/refresh", post(refresh_from_db))
         .route("/api/god-mode", post(god_mode))
@@ -84,8 +88,11 @@ async fn main() {
         .route("/api/recordings/save", post(save_recording))
         .route("/api/recordings/replay", post(replay_recording))
         .route("/api/control/pause", post(control_pause))
+        .route("/api/desktop/v1/control/pause", post(control_pause))
         .route("/api/control/resume", post(control_resume))
+        .route("/api/desktop/v1/control/resume", post(control_resume))
         .route("/api/control/step-tick", post(control_step_tick))
+        .route("/api/desktop/v1/control/step-tick", post(control_step_tick))
         .route("/api/control/reset", post(control_reset))
         .route("/api/control/restart-seed", post(control_restart_seed))
         .route("/api/world-snapshot", get(get_world_snapshot))
@@ -337,6 +344,13 @@ async fn ws_simulation(
     ws.on_upgrade(move |socket| ws_client(socket, state))
 }
 
+async fn ws_desktop_v1_frames(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| ws_desktop_v1_client(socket, state))
+}
+
 async fn ws_client(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
     let mut rx = state.frame_tx.subscribe();
@@ -357,6 +371,46 @@ async fn ws_client(socket: WebSocket, state: Arc<AppState>) {
                     break;
                 };
                 if sender.send(Message::Binary(frame.as_ref().clone().into())).await.is_err() {
+                    break;
+                }
+            }
+            inbound = receiver.next() => {
+                match inbound {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Ping(payload))) => {
+                        if sender.send(Message::Pong(payload)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) => break,
+                }
+            }
+        }
+    }
+}
+
+async fn ws_desktop_v1_client(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = state.frame_tx.subscribe();
+
+    let initial_frame = wrap_tribal_legacy_frame(&state.simulation.read().current_packet());
+    if sender
+        .send(Message::Binary(initial_frame.into()))
+        .await
+        .is_err()
+    {
+        return;
+    }
+
+    loop {
+        tokio::select! {
+            frame = rx.recv() => {
+                let Ok(frame) = frame else {
+                    break;
+                };
+                let wrapped = wrap_tribal_legacy_frame(frame.as_ref());
+                if sender.send(Message::Binary(wrapped.into())).await.is_err() {
                     break;
                 }
             }
