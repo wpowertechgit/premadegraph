@@ -1347,12 +1347,28 @@ impl TribeSimulation {
         self.world.tick_food();
 
         // 2. Foraging: tribes in Foraging or Settling eat from their territory
-        for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
-            use crate::tribes::BehaviorState;
-            if matches!(tribe.behavior, BehaviorState::Foraging | BehaviorState::Settling) {
+        // R8: integration yield multiplier applied per-tile based on claim recency
+        {
+            // First pass: compute integration multipliers (read-only)
+            let mut tribe_multipliers: Vec<(usize, std::collections::HashMap<u16, f32>)> = Vec::new();
+            for (i, tribe) in self.tribes.iter().enumerate() {
+                use crate::tribes::BehaviorState;
+                if !tribe.alive || !matches!(tribe.behavior, BehaviorState::Foraging | BehaviorState::Settling) {
+                    continue;
+                }
+                let multipliers: std::collections::HashMap<u16, f32> = tribe.territory.iter()
+                    .map(|&tile_idx| (tile_idx, self.integration_multiplier(i, tile_idx)))
+                    .collect();
+                tribe_multipliers.push((i, multipliers));
+            }
+
+            // Second pass: apply foraging with multipliers
+            for (tribe_idx, multipliers) in tribe_multipliers {
+                let tribe = &mut self.tribes[tribe_idx];
                 let food_gathered: f32 = tribe.territory.iter().map(|&tile_idx| {
                     let tile = &self.world.tiles[tile_idx as usize];
-                    tile.food * 0.1
+                    let mult = multipliers.get(&tile_idx).copied().unwrap_or(1.0);
+                    tile.food * 0.1 * mult
                 }).sum();
                 tribe.food_stores += food_gathered;
                 for &tile_idx in &tribe.territory {
@@ -1365,10 +1381,8 @@ impl TribeSimulation {
         // 3. State machine transitions (Task 7)
         self.apply_state_machine();
 
-        // K1: Territory expansion — every 20 ticks for eligible settling/foraging tribes
-        if self.tick % 20 == 0 {
-            self.apply_territory_expansion();
-        }
+        // R8: Territory expansion — per-tribe cooldown + claim cost model
+    self.apply_territory_expansion();
 
         // 4. Combat resolution (Task 8)
         self.apply_combat();
@@ -1408,6 +1422,17 @@ impl TribeSimulation {
             }
 
             tribe.ticks_alive += 1;
+        }
+
+        // R8: Cleanup expired integration entries (tiles fully integrated after 75+ ticks)
+        {
+            let tick = self.tick;
+            let clean_threshold = tick.saturating_sub(Self::INTEGRATION_TICKS + 5); // 5-tick grace
+            for tribe in self.tribes.iter_mut() {
+                tribe.tile_integration.retain(|_tile_idx, &mut claimed_tick| {
+                    claimed_tick > clean_threshold
+                });
+            }
         }
 
         // 7. Generation boundary (Task 10)
@@ -1613,40 +1638,139 @@ impl TribeSimulation {
         }
     }
 
-    // ─── K1: Territory Expansion ──────────────────────────────────────────────
+    // ─── R8: Territory Expansion with Claim Cost & Cooldown ─────────────────────
+
+    /// Claim cost constants.
+    const CLAIM_BASE_COST: f32 = 40.0;
+    const CLAIM_TERRITORY_COST_PER_TILE: f32 = 12.0;
+    const CLAIM_DISTANCE_COST_PER_STEP: f32 = 8.0;
+    const CLAIM_PRESSURE_COST: f32 = 25.0;
+    const CLAIM_FOOD_FLOOR: f32 = 50.0;
+    const CLAIM_POP_BASE: u32 = 80;
+    const CLAIM_POP_PER_TILE: u32 = 25;
+    const INTEGRATION_TICKS: u64 = 75;
+    const INTEGRATION_START_YIELD: f32 = 0.25;
+    const INTEGRATION_END_YIELD: f32 = 1.0;
+    const OVEREXTENSION_POP_DIVISOR: u32 = 120;
+    const OVEREXTENSION_CLAIM_PENALTY: f32 = 10.0;
+
+    /// Compute food cost to claim a candidate tile for a tribe.
+    fn calculate_claim_cost(&self, tribe_idx: usize, tile_idx: usize, overextended: bool) -> f32 {
+        let tribe = &self.tribes[tribe_idx];
+        let territory_count = tribe.territory.len() as f32;
+
+        let territory_cost = Self::CLAIM_TERRITORY_COST_PER_TILE * territory_count;
+
+        let dist = self.world.hex_distance(tribe.main_camp_tile as usize, tile_idx);
+        let distance_cost = Self::CLAIM_DISTANCE_COST_PER_STEP * (dist.saturating_sub(1) as f32).max(0.0);
+
+        let terrain_cost = self.world.terrain_claim_cost(tile_idx, true);
+
+        let pressure_cost =
+            if self.world.non_neutral_adjacent_tiles(&[tile_idx as u16], tribe.id as u32).is_empty() {
+                0.0
+            } else {
+                Self::CLAIM_PRESSURE_COST
+            };
+
+        let mut total = Self::CLAIM_BASE_COST + territory_cost + distance_cost + terrain_cost + pressure_cost;
+        if overextended {
+            total += Self::OVEREXTENSION_CLAIM_PENALTY;
+        }
+        total
+    }
+
+    /// Current integration yield multiplier for a tile claimed by a tribe.
+    /// Starts at 0.25, rises linearly to 1.0 over 75 ticks.
+    /// Disputed or overextended tiles integrate at half speed.
+    fn integration_multiplier(&self, tribe_idx: usize, tile_idx: u16) -> f32 {
+        let tribe = &self.tribes[tribe_idx];
+        let claimed_tick = match tribe.tile_integration.get(&tile_idx) {
+            Some(&t) => t,
+            None => return 1.0, // fully integrated or not tracked
+        };
+        let elapsed = self.tick.saturating_sub(claimed_tick);
+        let tile_idx_usize = tile_idx as usize;
+
+        // Check if tile is disputed or tribe is overextended → half integration speed
+        let is_disputed = self.world.is_disputed(tile_idx_usize);
+        let overextended = tribe.territory.len() as u32 > 1 + tribe.population / Self::OVEREXTENSION_POP_DIVISOR;
+        let rate = if is_disputed || overextended { 0.5 } else { 1.0 };
+
+        let effective_ticks = (elapsed as f32 * rate).min(Self::INTEGRATION_TICKS as f32);
+        let progress = effective_ticks / Self::INTEGRATION_TICKS as f32;
+        Self::INTEGRATION_START_YIELD + (Self::INTEGRATION_END_YIELD - Self::INTEGRATION_START_YIELD) * progress
+    }
 
     fn apply_territory_expansion(&mut self) {
         use crate::tribes::BehaviorState;
-
-        let eligible: Vec<usize> = (0..self.tribes.len())
-            .filter(|&i| {
-                let t = &self.tribes[i];
-                t.alive && matches!(t.behavior, BehaviorState::Settling | BehaviorState::Foraging)
-            })
-            .collect();
 
         let tick = self.tick;
         let gen = self.generation;
         // Track tiles claimed this round to prevent two tribes claiming the same tile
         let mut newly_claimed: std::collections::HashSet<usize> = std::collections::HashSet::new();
-        let mut claims: Vec<(usize, usize)> = Vec::new(); // (tribe_idx, tile_idx)
+        let mut claims: Vec<(usize, usize, f32)> = Vec::new(); // (tribe_idx, tile_idx, cost)
 
-        for &tribe_idx in &eligible {
-            // resource_drive (output index 1) drives expansion
-            let resource_drive = self.tribes[tribe_idx].last_outputs[1];
-            if resource_drive < 0.4 {
+        // ── Evaluate all tribes for expansion eligibility ──
+        for tribe_idx in 0..self.tribes.len() {
+            if !self.tribes[tribe_idx].alive {
                 continue;
             }
-            let neutral = self.world.neutral_adjacent_tiles(&self.tribes[tribe_idx].territory);
-            if let Some(&tile_idx) = neutral.iter().find(|t| !newly_claimed.contains(t)) {
-                newly_claimed.insert(tile_idx);
-                claims.push((tribe_idx, tile_idx));
+            let tribe = &self.tribes[tribe_idx];
+            if !matches!(tribe.behavior, BehaviorState::Settling | BehaviorState::Foraging) {
+                continue;
+            }
+
+            // Cooldown check — must wait expansion_cooldown_ticks since last claim
+            if tick.saturating_sub(tribe.last_expansion_tick) < tribe.expansion_cooldown_ticks {
+                continue;
+            }
+
+            // Population gate
+            let tile_count = tribe.territory.len() as u32;
+            let required_pop = Self::CLAIM_POP_BASE + Self::CLAIM_POP_PER_TILE * tile_count;
+            if tribe.population < required_pop {
+                continue;
+            }
+
+            // Resource drive (output index 1) drives expansion — lowered threshold with cost model
+            let resource_drive = tribe.last_outputs[1];
+            if resource_drive < 0.25 {
+                continue;
+            }
+
+            let overextended = tile_count > 1 + tribe.population / Self::OVEREXTENSION_POP_DIVISOR;
+
+            let neutral = self.world.neutral_adjacent_tiles(&tribe.territory);
+            if neutral.is_empty() {
+                continue;
+            }
+
+            // Pick cheapest neutral tile not yet claimed this round
+            let candidate = neutral.iter()
+                .filter(|t| !newly_claimed.contains(t))
+                .map(|&tile_idx| (tile_idx, self.calculate_claim_cost(tribe_idx, tile_idx, overextended)))
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            if let Some((best_tile, cost)) = candidate {
+                // Food affordability check
+                if tribe.food_stores - cost < Self::CLAIM_FOOD_FLOOR {
+                    continue;
+                }
+                newly_claimed.insert(best_tile);
+                claims.push((tribe_idx, best_tile, cost));
             }
         }
 
-        for (tribe_idx, tile_idx) in claims {
-            let tribe_id = self.tribes[tribe_idx].id as u32;
-            self.tribes[tribe_idx].territory.push(tile_idx as u16);
+        // ── Apply claims ──
+        for (tribe_idx, tile_idx, cost) in claims {
+            let tribe = &mut self.tribes[tribe_idx];
+            tribe.food_stores = (tribe.food_stores - cost).max(0.0);
+            tribe.last_expansion_tick = tick;
+            tribe.territory.push(tile_idx as u16);
+            tribe.tile_integration.insert(tile_idx as u16, tick);
+
+            let tribe_id = tribe.id as u32;
             self.world.set_tile_owner(tile_idx, tribe_id);
 
             let mut ev = crate::events::SimulationEvent::new(

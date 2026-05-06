@@ -13,7 +13,19 @@ client-monogame/bin/
 client-monogame/obj/
 
 .DS_Store
-docs/
+docs/tribes-v2-firstrun-takeaways.md
+docs/neurosim-tribal-simulation-critical-redesign.md
+docs/Civ6ck3 inspiration.md
+docs/Tribal NeuroSim v3 _ Information Theory Lineage Compression.md
+docs/Tribal Neurosim v3_ Architecture & Mechanics Redesign.md
+docs/Tribal NeuroSim v3_ Offspring Mechanics & Evolutionary Lineage.md
+docs/Tribal NeuroSim v3_ Territory & Expansion Mechanics.md
+docs/tribal-neurosim-v3-asset-plan.md
+docs/tribal-neurosim-v3-desktop-contract-v1.md
+docs/tribal-neurosim-v3-monogame-migration-plan.md
+docs/tribal-neurosim-v3-monogame-next-task-list.md
+docs/tribes-v2-firstrun-takeaways.md
+docs/opscore-v2-local-formula.md
 instruction.md
 client-monogame-tests/bin/
 client-monogame-tests/obj/

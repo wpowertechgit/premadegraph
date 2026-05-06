@@ -1,14 +1,9 @@
 # Tribal NeuroSim
 
-This subtree is now centered on the Tribal NeuroSim v3 desktop migration.
-
-Current direction:
-
 - Rust backend for simulation execution, transport, and analytics support
 - C# MonoGame desktop client in `client-monogame/`
 - Node as the required middleman between the desktop client and Rust
 
-The old browser runtime frontend has been removed from this subtree.
 
 ## Layout
 
@@ -59,3 +54,5 @@ cargo check
 Desktop client:
 
 Use the MonoGame project under `backend/genetic-neurosim/client-monogame/`.
+- Launch: `dotnet run --empire-stress` → starts stress demo with 28 tribes
+- Launch: `dotnet run` → unchanged default demo (12 tribes)

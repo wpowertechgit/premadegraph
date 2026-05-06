@@ -2,12 +2,15 @@ using Microsoft.Xna.Framework;
 using TribalNeuroSim.Client.Assets;
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 
 namespace TribalNeuroSim.Client.Rendering;
 
 public sealed class PlayableRenderAdapter
 {
     private readonly float _tileSize;
+
+    public float TileSize => _tileSize;
 
     public PlayableRenderAdapter(float tileSize = 28f)
     {
@@ -24,18 +27,27 @@ public sealed class PlayableRenderAdapter
                 .Select(control => control.TribeId)
                 .FirstOrDefault(-1);
 
+            var contestingIds = tile.Controls.Count > 1
+                ? tile.Controls.Select(c => c.TribeId).ToArray()
+                : null;
+
             yield return new RenderableTile(
                 TileId: checked((ushort)tile.Id),
                 Center: TileCenter(tile.X, tile.Y),
                 Size: _tileSize,
                 BaseColor: BiomeColor(tile.Biome),
                 TextureKey: TextureKey(tile.Biome),
-                ModelKey: TerrainModelKey(tile.Biome, tile.Id),
+                ModelKey: null,
                 FoodAmount: 0f,
                 MaxFoodAmount: tile.MaxFood,
                 IsDisputed: tile.IsDisputed,
                 OwnerTribeId: ownerId,
-                HasCamp: hasCamp);
+                HasCamp: hasCamp,
+                X: tile.X,
+                Y: tile.Y,
+                VisualElevation: PlayableWorldGenerator.VisualElevation(simulation.Seed, simulation.Width, simulation.Height, tile.X, tile.Y, tile.Biome),
+                ContestingTribeIds: contestingIds,
+                Biome: tile.Biome);
         }
     }
 
@@ -44,7 +56,7 @@ public sealed class PlayableRenderAdapter
         foreach (var tribe in simulation.Tribes.Where(tribe => tribe.IsAlive))
         {
             var home = simulation.Tiles[tribe.MainCampTileId];
-        var radius = MathHelper.Clamp(5f + tribe.Population * 0.035f, 7f, 18f);
+            var radius = MathHelper.Clamp(5f + tribe.Population * 0.035f, 7f, 18f);
 
             yield return new RenderableTribe(
                 Id: tribe.Id,
@@ -54,7 +66,69 @@ public sealed class PlayableRenderAdapter
                 Population: tribe.Population,
                 HasCamp: true,
                 CampPosition: TileCenter(home.X, home.Y),
-                TerritoryRadius: MathF.Sqrt(Math.Max(1, tribe.Territory.Count)) * _tileSize * 0.85f);
+                TerritoryRadius: 0f,
+                Tier: tribe.Tier,
+                MainCampTileId: tribe.MainCampTileId,
+                Biome: home.Biome);
+        }
+    }
+
+    // ── Network mode: build renderables from SimulationViewModel (FrameV1 data) ──
+
+    public IEnumerable<RenderableTile> BuildTiles(SimulationViewModel viewModel, int mapWidth, int mapHeight)
+    {
+        foreach (var (tileId, tile) in viewModel.TileData)
+        {
+            var x = tileId % mapWidth;
+            var y = tileId / mapWidth;
+            var biome = (BiomeId)tile.BiomeId;
+
+            yield return new RenderableTile(
+                TileId: tileId,
+                Center: TileCenter(x, y),
+                Size: _tileSize,
+                BaseColor: BiomeColor(biome),
+                TextureKey: TextureKey(biome),
+                ModelKey: null,
+                FoodAmount: tile.FoodAmount,
+                MaxFoodAmount: 100f,
+                IsDisputed: tile.IsDisputed,
+                OwnerTribeId: -1,
+                HasCamp: false,
+                X: x,
+                Y: y,
+                VisualElevation: 0f,
+                ContestingTribeIds: null,
+                Biome: biome);
+        }
+    }
+
+    public IEnumerable<RenderableTribe> BuildTribes(SimulationViewModel viewModel, int mapWidth)
+    {
+        foreach (var (_, tribe) in viewModel.V1Tribes)
+        {
+            if (!tribe.IsAlive)
+                continue;
+
+            var homeX = tribe.MainCampTile % mapWidth;
+            var homeY = tribe.MainCampTile / mapWidth;
+            var biome = viewModel.TileData.TryGetValue(tribe.MainCampTile, out var tileData)
+                ? (BiomeId)tileData.BiomeId
+                : (BiomeId?)null;
+            var radius = MathHelper.Clamp(5f + tribe.Population * 0.035f, 7f, 18f);
+
+            yield return new RenderableTribe(
+                Id: (int)tribe.Id,
+                Position: TileCenter(homeX, homeY),
+                Radius: radius,
+                Color: TribeColor((int)tribe.Id),
+                Population: (int)tribe.Population,
+                HasCamp: true,
+                CampPosition: TileCenter(homeX, homeY),
+                TerritoryRadius: 0f,
+                Tier: (PolityTier)tribe.PolityTier,
+                MainCampTileId: tribe.MainCampTile,
+                Biome: biome);
         }
     }
 
@@ -98,34 +172,6 @@ public sealed class PlayableRenderAdapter
             BiomeId.DenseForest or BiomeId.SparseWoodland => RuntimeAssetCatalog.ForestGround,
             BiomeId.FertileValley or BiomeId.Plains => RuntimeAssetCatalog.GrassMedium,
             _ => RuntimeAssetCatalog.GrassMedium,
-        };
-    }
-
-    private static string TerrainModelKey(BiomeId biome, int tileId)
-    {
-        return biome switch
-        {
-            BiomeId.Mountains => (tileId % 4) switch
-            {
-                0 => RuntimeAssetCatalog.TerrainMountain1,
-                1 => RuntimeAssetCatalog.TerrainMountain2,
-                2 => RuntimeAssetCatalog.TerrainMountain3,
-                _ => RuntimeAssetCatalog.TerrainMountain4,
-            },
-            BiomeId.Hills => (tileId % 4) switch
-            {
-                0 => RuntimeAssetCatalog.TerrainEscarpmentTop,
-                1 => RuntimeAssetCatalog.TerrainEscarpmentBase,
-                _ => RuntimeAssetCatalog.TerrainHillyGrass,
-            },
-            BiomeId.Riverland => (tileId % 2) switch
-            {
-                0 => RuntimeAssetCatalog.TerrainBeachSand,
-                _ => RuntimeAssetCatalog.TerrainHillyWaterSlope,
-            },
-            BiomeId.Marsh => RuntimeAssetCatalog.TerrainHillyWaterFlat,
-            BiomeId.Cold => RuntimeAssetCatalog.TerrainMountain1,
-            _ => RuntimeAssetCatalog.TerrainHillyGrass,
         };
     }
 

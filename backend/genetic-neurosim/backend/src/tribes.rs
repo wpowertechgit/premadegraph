@@ -176,6 +176,14 @@ pub struct TribeState {
     pub main_camp_tile: u16,
     // V3: Entity-level population tracking
     pub citizens: Vec<CitizenRecord>,
+    // R8: Expansion pacing — last tick this tribe claimed a tile
+    pub last_expansion_tick: u64,
+    // R8: Minimum ticks between expansion attempts (default 25)
+    pub expansion_cooldown_ticks: u64,
+    // R8: Integration tracking — (claimed_tick, tile_idx) -> current yield multiplier
+    // New tiles start at 0.25 yield, rise linearly to 1.0 over 75 ticks.
+    #[serde(skip)]
+    pub tile_integration: std::collections::HashMap<u16, u64>,
 }
 
 impl TribeState {
@@ -228,6 +236,9 @@ impl TribeState {
             veterancy_xp: 0,
             main_camp_tile: home_tile,
             citizens: vec![],
+            last_expansion_tick: 0,
+            expansion_cooldown_ticks: 25,
+            tile_integration: std::collections::HashMap::new(),
         }
     }
 

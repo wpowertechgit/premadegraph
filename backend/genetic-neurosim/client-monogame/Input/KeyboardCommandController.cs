@@ -23,6 +23,13 @@ public sealed class KeyboardCommandController
             SelectNext: KeyPressedOnce(keyboard, previousKeyboard, Keys.Tab),
             SpeedUp: AnyKeyPressedOnce(keyboard, previousKeyboard, Keys.OemPlus, Keys.Add),
             SlowDown: AnyKeyPressedOnce(keyboard, previousKeyboard, Keys.OemMinus, Keys.Subtract),
+            ToggleIsolatedViewer: KeyPressedOnce(keyboard, previousKeyboard, Keys.F5),
+            CaptureScreenshots: KeyPressedOnce(keyboard, previousKeyboard, Keys.F6),
+            ToggleLineageInspector: KeyPressedOnce(keyboard, previousKeyboard, Keys.L),
+            ToggleTombstonePanel: KeyPressedOnce(keyboard, previousKeyboard, Keys.K),
+            TombstoneCycleSort: KeyPressedOnce(keyboard, previousKeyboard, Keys.N),
+            TombstoneScrollUp: KeyPressedOnce(keyboard, previousKeyboard, Keys.OemOpenBrackets),
+            TombstoneScrollDown: KeyPressedOnce(keyboard, previousKeyboard, Keys.OemCloseBrackets),
             SelectAtScreenPosition: selectAtScreenPosition,
             SelectionScreenPosition: selectAtScreenPosition ? new Vector2(mouse.X, mouse.Y) : null);
     }
@@ -67,5 +74,12 @@ public sealed record PlayableCommandSet(
     bool SelectNext,
     bool SpeedUp,
     bool SlowDown,
+    bool ToggleIsolatedViewer,
+    bool CaptureScreenshots,
+    bool ToggleLineageInspector,
+    bool ToggleTombstonePanel,
+    bool TombstoneCycleSort,
+    bool TombstoneScrollUp,
+    bool TombstoneScrollDown,
     bool SelectAtScreenPosition,
     Vector2? SelectionScreenPosition);

@@ -16,8 +16,11 @@ public sealed class VegetationRenderer : IDisposable
 {
     private readonly GraphicsDevice _graphicsDevice;
     private readonly string _contentRoot;
+    private readonly AssetLoadDiagnostics _diagnostics;
     private readonly Dictionary<string, ModelMeshData> _loadedModels = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, List<Matrix>> _instancesByModel = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Texture2D> _loadedTextures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _reportedMissingBatchModels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly PropInstanceBatch _batch = new();
     private BasicEffect? _effect;
     private GraphicsDevice? _effectDevice;
 
@@ -28,15 +31,15 @@ public sealed class VegetationRenderer : IDisposable
     private const float TentScale = 0.20f;
     private const float RockScale = 0.10f;
 
-    // Maximum instances per model key before we start culling (performance safety)
-    private const int MaxInstancesPerModel = 2000;
-
     public VegetationRenderer(GraphicsDevice graphicsDevice, string? contentRoot = null)
     {
         _graphicsDevice = graphicsDevice ?? throw new ArgumentNullException(nameof(graphicsDevice));
         _contentRoot = RuntimeAssetLoader.ResolveContentRoot(contentRoot)
                        ?? throw new InvalidOperationException(
                            "Cannot resolve Content root for VegetationRenderer.");
+        _diagnostics = new AssetLoadDiagnostics(_contentRoot);
+        _diagnostics.Reset();
+        _diagnostics.Info($"Content root: {_contentRoot}");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -44,13 +47,15 @@ public sealed class VegetationRenderer : IDisposable
     // ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Load a glTF/GLB model from disk. <paramref name="relativePath"/> should NOT include
-    /// an extension — we try .gltf then .glb automatically.
+    /// Load a runtime model from disk. Extensionless paths try .gltf, .glb, then .fbx.
     /// </summary>
     public void LoadModel(string modelKey, string relativePath)
     {
         if (_loadedModels.ContainsKey(modelKey))
+        {
+            _diagnostics.Info($"SKIP already loaded key={modelKey}");
             return;
+        }
 
         var basePath = Path.Combine(
             _contentRoot,
@@ -59,21 +64,37 @@ public sealed class VegetationRenderer : IDisposable
         var fullPath = ResolveModelPath(basePath);
         if (fullPath is null)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[VegetationRenderer] Model not found (tried .gltf/.glb): {basePath}");
+            _diagnostics.Error($"MISSING key={modelKey} basePath={basePath} tried=.gltf,.glb,.fbx");
             return;
         }
 
         try
         {
-            var modelRoot = ModelRoot.Load(fullPath);
-            var meshData = ExtractMeshData(_graphicsDevice, modelRoot);
+            var isFbx = Path.GetExtension(fullPath).Equals(".fbx", StringComparison.OrdinalIgnoreCase);
+            var importerLabel = isFbx ? "AssimpNet" : "SharpGLTF";
+            _diagnostics.Info($"LOAD begin key={modelKey} path={fullPath} importer={importerLabel}");
+            var meshData = isFbx
+                ? ModelMeshData.FromFbx(_graphicsDevice, fullPath, _diagnostics)
+                : ModelMeshData.FromGltf(_graphicsDevice, ModelRoot.Load(fullPath));
             _loadedModels[modelKey] = meshData;
+            if (TryLoadMaterialTextures(fullPath, modelKey))
+            {
+                _diagnostics.Info($"TEXTURE loaded key={modelKey} pbr=checked");
+            }
+            else
+            {
+                _diagnostics.Info($"TEXTURE none key={modelKey} fallback=diffuseColor");
+            }
+
+            _diagnostics.Info(
+                $"LOAD ok key={modelKey} vertices={meshData.VertexCount} indices={meshData.IndexCount} primitives={meshData.PrimitiveCount} " +
+                $"boundsMin={meshData.Bounds.Min} boundsMax={meshData.Bounds.Max} horizontalExtent={meshData.HorizontalExtent:0.###} " +
+                $"indexFormat=32bit culling=CullNone winding=unverified normals={meshData.HasNormals} " +
+                $"transformPolicy=PreTransformVertices+MakeLeftHanded+FlipUVs");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[VegetationRenderer] Failed to load {fullPath}: {ex.Message}");
+            _diagnostics.Error($"LOAD failed key={modelKey} path={fullPath}", ex);
         }
     }
 
@@ -92,6 +113,13 @@ public sealed class VegetationRenderer : IDisposable
         if (File.Exists(glb))
             return glb;
 
+        var fbx = basePath + ".fbx";
+        if (File.Exists(fbx))
+            return fbx;
+
+        if (File.Exists(basePath))
+            return basePath;
+
         return null;
     }
 
@@ -101,30 +129,44 @@ public sealed class VegetationRenderer : IDisposable
 
     public void ClearInstances()
     {
-        foreach (var list in _instancesByModel.Values)
-            list.Clear();
+        _batch.Clear();
     }
 
-    public void CollectInstances(PlayableSimulation simulation, AssetRegistry registry)
+    /// <summary>
+    /// Collect prop instances from the rule-driven placement planner.
+    /// Falls back to inline scattering if no biome prop rules are registered.
+    /// </summary>
+    public void CollectInstances(PlayableSimulation simulation, AssetRegistry registry, float cameraDistance = 200f)
     {
         ClearInstances();
 
+        var rules = AssetManifest.BiomePropRules;
+        var profiles = AssetManifest.PropProfiles;
+
+        if (rules.Count > 0 && profiles.Count > 0)
+        {
+            var planned = PropPlacementPlanner.Plan(simulation, rules, profiles, cameraDistance);
+            _batch.Build(planned, cameraDistance);
+        }
+        else
+        {
+            // Fallback: inline scattering for backward compatibility
+            CollectInstancesInline(simulation, registry);
+        }
+    }
+
+    /// <summary>
+    /// Legacy inline prop collection — used when manifest rules are not available.
+    /// </summary>
+    private void CollectInstancesInline(PlayableSimulation simulation, AssetRegistry registry)
+    {
         foreach (var tile in simulation.Tiles)
         {
             var biome = tile.Biome;
             var profile = registry.ResolveBiome(biome);
-            var center = TileToWorld(tile);
-            var rng = new Random(tile.Id * 1337 + 42); // Deterministic per tile
+            var center = TileToWorld(simulation, tile);
+            var rng = new Random(tile.Id * 1337 + 42);
 
-            // --- Camp tent ---
-            var hasCamp = simulation.Tribes.Any(
-                t => t.MainCampTileId == tile.Id && t.IsAlive);
-            if (hasCamp)
-            {
-                PlaceTent(center, rng);
-            }
-
-            // --- Vegetation by biome ---
             switch (biome)
             {
                 case BiomeId.DenseForest:
@@ -135,7 +177,7 @@ public sealed class VegetationRenderer : IDisposable
                     break;
                 case BiomeId.Plains:
                 case BiomeId.FertileValley:
-                    ScatterProps(center, rng, profile.PropAssetKeys, 0, 3);
+                    ScatterProps(center, rng, profile.PropAssetKeys, 5, 11);
                     break;
                 case BiomeId.Marsh:
                     ScatterProps(center, rng, profile.PropAssetKeys, 1, 4);
@@ -153,7 +195,6 @@ public sealed class VegetationRenderer : IDisposable
                     ScatterProps(center, rng, profile.PropAssetKeys, 1, 3);
                     break;
                 default:
-                    // Riverland, Unknown: no vegetation props (river/docks are structures)
                     break;
             }
         }
@@ -163,9 +204,9 @@ public sealed class VegetationRenderer : IDisposable
     //  Render
     // ─────────────────────────────────────────────────────────────
 
-    public void Render(IsometricCamera camera, GraphicsDevice graphicsDevice)
+    public void Render(IsometricCamera camera, GraphicsDevice graphicsDevice, float totalSeconds)
     {
-        if (_loadedModels.Count == 0 || _instancesByModel.Count == 0)
+        if (_loadedModels.Count == 0 || _batch.TotalInstanceCount == 0)
             return;
 
         EnsureEffect(graphicsDevice);
@@ -175,23 +216,38 @@ public sealed class VegetationRenderer : IDisposable
 
         graphicsDevice.BlendState = BlendState.AlphaBlend;
         graphicsDevice.DepthStencilState = DepthStencilState.Default;
-        graphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+        graphicsDevice.RasterizerState = RasterizerState.CullNone;
         graphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
 
-        foreach (var (modelKey, instances) in _instancesByModel)
+        foreach (var (modelKey, instances) in _batch.Batches)
         {
             if (instances.Count == 0)
                 continue;
 
             if (!_loadedModels.TryGetValue(modelKey, out var meshData))
+            {
+                if (_reportedMissingBatchModels.Add(modelKey))
+                    _diagnostics.Error($"BATCH skipped missing model key={modelKey} instances={instances.Count}");
                 continue;
+            }
 
             graphicsDevice.SetVertexBuffer(meshData.VertexBuffer);
             graphicsDevice.Indices = meshData.IndexBuffer;
-
-            foreach (var world in instances)
+            if (_loadedTextures.TryGetValue(modelKey, out var texture))
             {
-                _effect!.World = world;
+                _effect!.TextureEnabled = true;
+                _effect.Texture = texture;
+            }
+            else
+            {
+                _effect!.TextureEnabled = false;
+                _effect.Texture = null;
+            }
+
+            foreach (var instance in instances)
+            {
+                _effect!.World = ApplyWind(modelKey, instance.World, instance.WindPhase, totalSeconds);
+                _effect.DiffuseColor = DiffuseColorFor(modelKey);
                 _effect.View = view;
                 _effect.Projection = projection;
 
@@ -213,11 +269,92 @@ public sealed class VegetationRenderer : IDisposable
         foreach (var mesh in _loadedModels.Values)
             mesh.Dispose();
         _loadedModels.Clear();
-        _instancesByModel.Clear();
+        foreach (var texture in _loadedTextures.Values)
+            texture.Dispose();
+        _loadedTextures.Clear();
+        _batch.Clear();
         _effect?.Dispose();
         _effect = null;
         _effectDevice = null;
     }
+
+    // ─────────────────────────────────────────────────────────────
+    //  M12E: Isolated viewer mode — render one model at origin
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Render a single model at world origin with basic lighting for validation.
+    /// Culling disabled so unverified winding still produces visible geometry.
+    /// Caller provides a fixed camera already aimed at origin.
+    /// </summary>
+    public void RenderIsolatedModel(
+        string modelKey,
+        GraphicsDevice graphicsDevice,
+        IsometricCamera camera,
+        float scale,
+        float rotationRadians,
+        float totalSeconds)
+    {
+        if (!_loadedModels.TryGetValue(modelKey, out var meshData))
+        {
+            _diagnostics.Error($"ISOLATED missing key={modelKey}");
+            return;
+        }
+
+        EnsureEffect(graphicsDevice);
+
+        var view = camera.GetView();
+        var projection = camera.GetProjection();
+
+        graphicsDevice.BlendState = BlendState.AlphaBlend;
+        graphicsDevice.DepthStencilState = DepthStencilState.Default;
+        graphicsDevice.RasterizerState = RasterizerState.CullNone;
+        graphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
+
+        graphicsDevice.SetVertexBuffer(meshData.VertexBuffer);
+        graphicsDevice.Indices = meshData.IndexBuffer;
+
+        if (_loadedTextures.TryGetValue(modelKey, out var texture))
+        {
+            _effect!.TextureEnabled = true;
+            _effect.Texture = texture;
+        }
+        else
+        {
+            _effect!.TextureEnabled = false;
+            _effect.Texture = null;
+        }
+
+        var world = Matrix.CreateScale(scale)
+                  * Matrix.CreateRotationY(rotationRadians)
+                  * Matrix.CreateTranslation(Vector3.Zero);
+
+        _effect!.World = world;
+        _effect.DiffuseColor = DiffuseColorFor(modelKey);
+        _effect.View = view;
+        _effect.Projection = projection;
+
+        foreach (var pass in _effect.CurrentTechnique.Passes)
+        {
+            pass.Apply();
+            graphicsDevice.DrawIndexedPrimitives(
+                PrimitiveType.TriangleList,
+                0,
+                0,
+                meshData.PrimitiveCount);
+        }
+
+        _diagnostics.Info(
+            $"ISOLATED render key={modelKey} vertices={meshData.VertexCount} indices={meshData.IndexCount} " +
+            $"primitives={meshData.PrimitiveCount} boundsMin={meshData.Bounds.Min} boundsMax={meshData.Bounds.Max} " +
+            $"horizontalExtent={meshData.HorizontalExtent:0.###} hasNormals={meshData.HasNormals} " +
+            $"scale={scale:0.###} rotation={rotationRadians:0.###}");
+    }
+
+    public IReadOnlyList<string> LoadedModelKeys => _loadedModels.Keys.ToArray();
+
+    /// <summary>Total prop instances across all batches (for M17 performance HUD).</summary>
+    public int BatchTotalInstances => _batch.TotalInstanceCount;
 
     // ─────────────────────────────────────────────────────────────
     //  Internal helpers
@@ -263,43 +400,13 @@ public sealed class VegetationRenderer : IDisposable
                           0f, // Ground plane
                           center.Z + offsetZ);
 
-            AddInstance(propKey, world);
+            AddInstance(propKey, world, (float)rng.NextDouble() * MathHelper.TwoPi);
         }
     }
 
-    private void PlaceTent(Vector3 center, Random rng)
+    private void AddInstance(string modelKey, Matrix world, float windPhase)
     {
-        const string tentKey = "Models/Structures/KenneySurvivalKit/tent";
-        const string campfireKey = "Models/Structures/KenneySurvivalKit/campfire-pit";
-
-        if (_loadedModels.ContainsKey(tentKey))
-        {
-            var rot = (float)(rng.NextDouble() * Math.Tau * 0.5); // Limited rotation
-            var world = Matrix.CreateScale(TentScale)
-                      * Matrix.CreateRotationY(rot)
-                      * Matrix.CreateTranslation(center + new Vector3(0f, 0.05f, 0f));
-            AddInstance(tentKey, world);
-        }
-
-        if (_loadedModels.ContainsKey(campfireKey))
-        {
-            var world = Matrix.CreateScale(TentScale * 0.7f)
-                      * Matrix.CreateTranslation(
-                          center + new Vector3(2.5f, 0f, -2f));
-            AddInstance(campfireKey, world);
-        }
-    }
-
-    private void AddInstance(string modelKey, Matrix world)
-    {
-        if (!_instancesByModel.TryGetValue(modelKey, out var list))
-        {
-            list = new List<Matrix>();
-            _instancesByModel[modelKey] = list;
-        }
-
-        if (list.Count < MaxInstancesPerModel)
-            list.Add(world);
+        _batch.Add(modelKey, world, windPhase);
     }
 
     private static float GetModelScale(string modelKey)
@@ -324,7 +431,7 @@ public sealed class VegetationRenderer : IDisposable
         return TreeScale;
     }
 
-    private static Vector3 TileToWorld(PlayableTile tile)
+    private static Vector3 TileToWorld(PlayableSimulation simulation, PlayableTile tile)
     {
         // Match PlayableRenderAdapter.TileCenter() hex layout
         const float tileSize = 28f;
@@ -332,7 +439,14 @@ public sealed class VegetationRenderer : IDisposable
         var rowOffset = tile.Y % 2 == 0 ? 0f : horizontalSpacing * 0.5f;
         var x = tile.X * horizontalSpacing + rowOffset;
         var z = tile.Y * tileSize * 1.5f;
-        return new Vector3(x, 0f, z);
+        var y = PlayableWorldGenerator.VisualElevation(
+            simulation.Seed,
+            simulation.Width,
+            simulation.Height,
+            tile.X,
+            tile.Y,
+            tile.Biome);
+        return new Vector3(x, y, z);
     }
 
     private void EnsureEffect(GraphicsDevice graphicsDevice)
@@ -345,7 +459,7 @@ public sealed class VegetationRenderer : IDisposable
         _effect = new BasicEffect(graphicsDevice)
         {
             TextureEnabled = false,
-            VertexColorEnabled = true,
+            VertexColorEnabled = false,
             LightingEnabled = true,
             AmbientLightColor = new Vector3(0.22f, 0.24f, 0.20f),
             DiffuseColor = new Vector3(0.35f, 0.48f, 0.22f),
@@ -353,106 +467,112 @@ public sealed class VegetationRenderer : IDisposable
         _effect.EnableDefaultLighting();
     }
 
-    // ─────────────────────────────────────────────────────────────
-    //  glTF mesh extraction via SharpGLTF
-    // ─────────────────────────────────────────────────────────────
-
-    private static ModelMeshData ExtractMeshData(GraphicsDevice graphicsDevice, ModelRoot modelRoot)
+    private static Matrix ApplyWind(string modelKey, Matrix world, float windPhase, float totalSeconds)
     {
-        var allVertices = new List<VertexPositionNormalTexture>();
-        var allIndices = new List<ushort>();
-        var primitiveCount = 0;
+        if (!IsWindAffected(modelKey))
+            return world;
 
-        foreach (var mesh in modelRoot.LogicalMeshes)
-        {
-            foreach (var primitive in mesh.Primitives)
-            {
-                var positions = primitive.GetVertexAccessor("POSITION")?.AsVector3Array();
-                var normals = primitive.GetVertexAccessor("NORMAL")?.AsVector3Array();
-                var texCoords = primitive.GetVertexAccessor("TEXCOORD_0")?.AsVector2Array();
-                var indices = primitive.GetIndices();
+        var translation = world.Translation;
+        var local = world;
+        local.Translation = Vector3.Zero;
 
-                if (positions is null || indices is null)
-                    continue;
+        var sway = MathF.Sin(totalSeconds * 1.7f + windPhase + translation.X * 0.04f + translation.Z * 0.03f) * 0.055f;
+        return local
+             * Matrix.CreateRotationX(sway)
+             * Matrix.CreateRotationZ(sway * 0.42f)
+             * Matrix.CreateTranslation(translation);
+    }
 
-                var baseVertex = allVertices.Count;
+    private static bool IsWindAffected(string modelKey)
+    {
+        var lower = modelKey.ToLowerInvariant();
+        return lower.Contains("grass")
+            || lower.Contains("plant")
+            || lower.Contains("fern")
+            || lower.Contains("flower")
+            || lower.Contains("bush");
+    }
 
-                for (var i = 0; i < positions.Count; i++)
-                {
-                    var pos = positions[i];
-                    var nrm = normals is not null && i < normals.Count
-                        ? normals[i] : Vector3.UnitY;
-                    var tex = texCoords is not null && i < texCoords.Count
-                        ? texCoords[i] : Vector2.Zero;
+    private static Vector3 DiffuseColorFor(string modelKey)
+    {
+        var lower = modelKey.ToLowerInvariant();
+        if (lower.Contains("rock") || lower.Contains("stone"))
+            return new Vector3(0.48f, 0.48f, 0.43f);
+        if (lower.Contains("dead"))
+            return new Vector3(0.42f, 0.36f, 0.28f);
+        if (lower.Contains("tent") || lower.Contains("structure") || lower.Contains("fence") || lower.Contains("workbench"))
+            return new Vector3(0.58f, 0.45f, 0.31f);
+        if (lower.Contains("resource-wood"))
+            return new Vector3(0.45f, 0.33f, 0.22f);
+        if (lower.Contains("campfire"))
+            return new Vector3(0.70f, 0.42f, 0.22f);
+        if (lower.Contains("pine") || lower.Contains("tree"))
+            return new Vector3(0.25f, 0.40f, 0.20f);
+        if (lower.Contains("grass") || lower.Contains("fern") || lower.Contains("plant"))
+            return new Vector3(0.38f, 0.56f, 0.22f);
 
-                    // glTF Y-up → MonoGame Y-up (same), no conversion needed.
-                    // Flip texture V coordinate (glTF origin bottom-left, MonoGame top-left).
-                    allVertices.Add(new VertexPositionNormalTexture(
-                        new Vector3(pos.X, pos.Y, pos.Z),
-                        new Vector3(nrm.X, nrm.Y, nrm.Z),
-                        new Vector2(tex.X, 1f - tex.Y)));
-                }
-
-                foreach (var idx in indices)
-                {
-                    allIndices.Add((ushort)(baseVertex + idx));
-                }
-
-                primitiveCount += indices.Count / 3;
-            }
-        }
-
-        if (allVertices.Count == 0 || allIndices.Count == 0)
-            throw new InvalidOperationException("Model contains no usable geometry.");
-
-        var vertexArray = new VertexPositionNormalTexture[allVertices.Count];
-        allVertices.CopyTo(vertexArray);
-
-        var indexArray = new ushort[allIndices.Count];
-        allIndices.CopyTo(indexArray);
-
-        return new ModelMeshData(graphicsDevice, vertexArray, indexArray, primitiveCount);
+        return new Vector3(0.36f, 0.48f, 0.24f);
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  GPU buffer holder (eagerly created at load time)
+    //  glTF / FBX helpers
     // ─────────────────────────────────────────────────────────────
 
-    private sealed class ModelMeshData : IDisposable
+    private bool TryLoadMaterialTextures(string modelPath, string modelKey)
     {
-        public VertexBuffer VertexBuffer { get; }
-        public IndexBuffer IndexBuffer { get; }
-        public int VertexCount { get; }
-        public int PrimitiveCount { get; }
+        var extensionless = Path.Combine(
+            Path.GetDirectoryName(modelPath) ?? string.Empty,
+            Path.GetFileNameWithoutExtension(modelPath));
 
-        public ModelMeshData(
-            GraphicsDevice graphicsDevice,
-            VertexPositionNormalTexture[] vertices,
-            ushort[] indices,
-            int primitiveCount)
+        // 1. Diffuse (primary — always try first)
+        var diffuse = FindFirstExisting([
+            extensionless + ".png",
+            extensionless + "_diffuse.png",
+            extensionless + "_albedo.png",
+            extensionless + "_AlbedoTransparency.png",
+        ]);
+
+        if (diffuse is null)
+            return false;
+
+        using var stream = File.OpenRead(diffuse);
+        _loadedTextures[modelKey] = Texture2D.FromStream(_graphicsDevice, stream);
+        _diagnostics.Info($"TEXTURE diffuse key={modelKey} path={Path.GetFileName(diffuse)} size={_loadedTextures[modelKey].Width}x{_loadedTextures[modelKey].Height}");
+
+        // 2. Normal (optional)
+        var normal = FindFirstExisting([
+            extensionless + "_normal.png",
+            extensionless + "_Normal.png",
+        ]);
+        if (normal is not null)
+            _diagnostics.Info($"TEXTURE normal key={modelKey} path={Path.GetFileName(normal)} found");
+
+        // 3. Metallic (optional)
+        var metallic = FindFirstExisting([
+            extensionless + "_metallic.png",
+            extensionless + "_Metallic.png",
+        ]);
+        if (metallic is not null)
+            _diagnostics.Info($"TEXTURE metallic key={modelKey} path={Path.GetFileName(metallic)} found");
+
+        // 4. Roughness (optional)
+        var roughness = FindFirstExisting([
+            extensionless + "_roughness.png",
+            extensionless + "_Roughness.png",
+        ]);
+        if (roughness is not null)
+            _diagnostics.Info($"TEXTURE roughness key={modelKey} path={Path.GetFileName(roughness)} found");
+
+        return true;
+    }
+
+    private static string? FindFirstExisting(string[] candidates)
+    {
+        foreach (var candidate in candidates)
         {
-            VertexCount = vertices.Length;
-            PrimitiveCount = primitiveCount;
-
-            VertexBuffer = new VertexBuffer(
-                graphicsDevice,
-                typeof(VertexPositionNormalTexture),
-                vertices.Length,
-                BufferUsage.WriteOnly);
-            VertexBuffer.SetData(vertices);
-
-            IndexBuffer = new IndexBuffer(
-                graphicsDevice,
-                IndexElementSize.SixteenBits,
-                indices.Length,
-                BufferUsage.WriteOnly);
-            IndexBuffer.SetData(indices);
+            if (File.Exists(candidate))
+                return candidate;
         }
-
-        public void Dispose()
-        {
-            VertexBuffer.Dispose();
-            IndexBuffer.Dispose();
-        }
+        return null;
     }
 }

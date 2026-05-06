@@ -9,7 +9,7 @@ public static class RuntimeAssetCatalog
     public const string BridgeA = "terrain/bridge-a";
     public const string WallStoneA = "terrain/wall-stone-a";
     public const string WallEarthA = "terrain/wall-earth-a";
-    public const string GrassMedium = "terrain/grass-medium";
+    public const string GrassMedium = "terrain/rocky-terrain";
     public const string ForestGround = "terrain/forest-ground";
     public const string BrownMud = "terrain/brown-mud";
     public const string Dirt = "terrain/dirt";
@@ -45,7 +45,7 @@ public static class RuntimeAssetCatalog
 
     public static IReadOnlyList<RuntimeAssetDefinition> Terrain { get; } =
     [
-        new(GrassMedium, "Materials/Terrain/grass_medium_01_diff_1k.png"),
+        new(GrassMedium, "Materials/Terrain/rocky_terrain_02_diff_1k.png"),
         new(ForestGround, "Materials/Terrain/forrest_ground_01_diff_1k.png"),
         new(BrownMud, "Materials/Terrain/brown_mud_diff_1k.png"),
         new(Dirt, "Materials/Terrain/dirt_diff_1k.png"),
@@ -108,12 +108,96 @@ public static class RuntimeAssetCatalog
         new(SettlementEmpireGreen, "Models/Settlements/Empire_Green/empire_green.fbx"),
     ];
 
+    // ── Insignia: faction icon emblems (44 icons, 512x512 black-bg white-symbol) ──
+    public const string InsigniaTribePolity = "insignia/tribe_polity";
+    public const string InsigniaCityPolity = "insignia/city_polity";
+    public const string InsigniaDuchyPolity = "insignia/duchy_polity";
+    public const string InsigniaKingdomPolity = "insignia/kingdom_polity";
+    public const string InsigniaEmpirePolity = "insignia/empire_polity";
+    public const string InsigniaRibbon = "insignia/ribbon";
+
+    public const string InsigniaTribeBanner = "insignia/tribe_banner";
+    public const string InsigniaCityBanner = "insignia/city_banner";
+    public const string InsigniaDuchyBanner = "insignia/duchy_banner";
+    public const string InsigniaKingdomBanner = "insignia/kingdom_banner";
+    public const string InsigniaEmpireBanner = "insignia/empire_banner";
+
+    public static IReadOnlyList<RuntimeAssetDefinition> InsigniaIcons { get; } =
+    [
+        new("icons/anarchy", "Image/icons/anarchy.png"),
+        new("icons/brazil-flag", "Image/icons/brazil-flag.png"),
+        new("icons/brutal-helm", "Image/icons/brutal-helm.png"),
+        new("icons/carnyx", "Image/icons/carnyx.png"),
+        new("icons/cloud-ring", "Image/icons/cloud-ring.png"),
+        new("icons/croissant", "Image/icons/croissant.png"),
+        new("icons/cross-mark", "Image/icons/cross-mark.png"),
+        new("icons/cross-shield", "Image/icons/cross-shield.png"),
+        new("icons/crossbow", "Image/icons/crossbow.png"),
+        new("icons/cruiser", "Image/icons/cruiser.png"),
+        new("icons/curly-wing", "Image/icons/curly-wing.png"),
+        new("icons/curvy-knife", "Image/icons/curvy-knife.png"),
+        new("icons/death-juice", "Image/icons/death-juice.png"),
+        new("icons/dervish-swords", "Image/icons/dervish-swords.png"),
+        new("icons/dread", "Image/icons/dread.png"),
+        new("icons/eclipse-flare", "Image/icons/eclipse-flare.png"),
+        new("icons/eclipse", "Image/icons/eclipse.png"),
+        new("icons/energy-arrow", "Image/icons/energy-arrow.png"),
+        new("icons/flame", "Image/icons/flame.png"),
+        new("icons/halberd-shuriken", "Image/icons/halberd-shuriken.png"),
+        new("icons/hammer-sickle", "Image/icons/hammer-sickle.png"),
+        new("icons/imprisoned", "Image/icons/imprisoned.png"),
+        new("icons/locked-fortress", "Image/icons/locked-fortress.png"),
+        new("icons/magic-gate", "Image/icons/magic-gate.png"),
+        new("icons/magic-lamp", "Image/icons/magic-lamp.png"),
+        new("icons/medusa-head", "Image/icons/medusa-head.png"),
+        new("icons/mighty-force", "Image/icons/mighty-force.png"),
+        new("icons/moebius-star", "Image/icons/moebius-star.png"),
+        new("icons/moebius-triangle", "Image/icons/moebius-triangle.png"),
+        new("icons/octogonal-eye", "Image/icons/octogonal-eye.png"),
+        new("icons/oppidum", "Image/icons/oppidum.png"),
+        new("icons/orange", "Image/icons/orange.png"),
+        new("icons/polar-star", "Image/icons/polar-star.png"),
+        new("icons/prism", "Image/icons/prism.png"),
+        new("icons/queen-crown", "Image/icons/queen-crown.png"),
+        new("icons/ram", "Image/icons/ram.png"),
+        new("icons/revolt", "Image/icons/revolt.png"),
+        new("icons/sharp-shuriken", "Image/icons/sharp-shuriken.png"),
+        new("icons/slumbering-sanctuary", "Image/icons/slumbering-sanctuary.png"),
+        new("icons/swordman", "Image/icons/swordman.png"),
+        new("icons/union-jack", "Image/icons/union-jack.png"),
+        new("icons/usa-flag", "Image/icons/usa-flag.png"),
+        new("icons/zebra-shield", "Image/icons/zebra-shield.png"),
+        new("icons/zeus-sword", "Image/icons/zeus-sword.png"),
+    ];
+
+    public static IReadOnlyList<RuntimeAssetDefinition> InsigniaFrames { get; } =
+    [
+        new(InsigniaTribePolity, "Image/polity/tribe_polity.png"),
+        new(InsigniaCityPolity, "Image/polity/city_polity.png"),
+        new(InsigniaDuchyPolity, "Image/polity/duchy_polity.png"),
+        new(InsigniaKingdomPolity, "Image/polity/kingdom_polity.png"),
+        new(InsigniaEmpirePolity, "Image/polity/empire_polity.png"),
+        new(InsigniaTribeBanner, "Image/polity/tribe_banner.png"),
+        new(InsigniaCityBanner, "Image/polity/city_banner.png"),
+        new(InsigniaDuchyBanner, "Image/polity/duchy_banner.png"),
+        new(InsigniaKingdomBanner, "Image/polity/kingdom_banner.png"),
+        new(InsigniaEmpireBanner, "Image/polity/empire_banner.png"),
+    ];
+
+    public static IReadOnlyList<RuntimeAssetDefinition> InsigniaRibbons { get; } =
+    [
+        new(InsigniaRibbon, "Image/location-ribbon-banner.png"),
+    ];
+
     public static IReadOnlyDictionary<string, RuntimeAssetDefinition> AssetsByKey { get; } =
         Terrain
             .Concat(Vegetation)
             .Concat(Concept)
             .Concat(TerrainModels)
             .Concat(SettlementModels)
+            .Concat(InsigniaIcons)
+            .Concat(InsigniaFrames)
+            .Concat(InsigniaRibbons)
             .ToDictionary(asset => asset.Key, StringComparer.OrdinalIgnoreCase);
 }
 

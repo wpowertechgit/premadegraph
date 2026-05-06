@@ -119,9 +119,21 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "AssimpNet": {
+              "target": "Package",
+              "version": "[4.1.0, )"
+            },
             "MonoGame.Framework.DesktopGL": {
               "target": "Package",
               "version": "[3.8.1.303, )"
+            },
+            "SharpGLTF.Core": {
+              "target": "Package",
+              "version": "[1.0.3, )"
+            },
+            "System.Drawing.Common": {
+              "target": "Package",
+              "version": "[8.0.0, )"
             }
           },
           "imports": [

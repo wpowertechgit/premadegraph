@@ -7,6 +7,8 @@ using TribalNeuroSim.Client.Launcher;
 using TribalNeuroSim.Client.Models;
 using TribalNeuroSim.Client.Net;
 using TribalNeuroSim.Client.Protocol;
+using TribalNeuroSim.Client.Diagnostics;
+using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Rendering;
 using TribalNeuroSim.Client.UI;
 
@@ -30,20 +32,52 @@ public sealed class GameRoot : Game
     private Task? _receiverTask;
     private SpriteBatch? _spriteBatch;
     private WorldRenderer? _worldRenderer;
+    private TabletopRenderer? _tabletopRenderer;
     private VegetationRenderer? _vegetationRenderer;
+    private SettlementRenderer? _settlementRenderer;
+    private BannerRenderer? _bannerRenderer;
     private DebugHud? _debugHud;
+    private FontRenderer? _panelFontRenderer;
+    private SelectionSystem? _selectionSystem;
+    private SelectionPanel? _selectionPanel;
     private RuntimeAssetLoader? _runtimeAssets;
     private readonly Dictionary<string, Texture2D> _terrainTextures = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, RuntimeModel> _terrainModels = new(StringComparer.OrdinalIgnoreCase);
+
     private KeyboardState _previousKeyboard;
     private MouseState _previousMouse;
     private double _simulationAccumulator;
     private double _titleAccumulator;
     private int _ticksPerSecond = 12;
 
+    // M6: Network mode
+    private readonly bool _isNetworkMode;
+    private int _mapWidth;
+    private int _mapHeight;
+
+    // M17: Performance metrics
+    private float _smoothedFps;
+    private readonly RenderMetrics _renderMetrics = new();
+
+    // M19: Screenshot capture
+    private readonly Diagnostics.ScreenshotCapture _screenshotCapture = new();
+
+    // M12E: Isolated viewer state
+    private bool _isolatedViewerEnabled;
+    private int _isolatedModelIndex;
+    private IsometricCamera? _isolatedCamera;
+
+    // M9: Lineage & Tombstone inspection panels
+    private readonly LineageInspectorPanel _lineageInspector = new();
+    private readonly TombstonePanel _tombstonePanel = new();
+    private bool _lineagePanelVisible;
+    private bool _tombstonePanelVisible;
+
     public GameRoot(LaunchOptions launchOptions)
     {
         _launchOptions = launchOptions;
+        _isNetworkMode = launchOptions.ConnectMode;
+        _mapWidth = launchOptions.MapWidth;
+        _mapHeight = launchOptions.MapHeight;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = 1600,
@@ -59,15 +93,32 @@ public sealed class GameRoot : Game
         _viewModel = new SimulationViewModel();
         _assetRegistry = AssetRegistry.CreateWithFallbacks();
         _diagnostics = new ClientDiagnostics();
-        _playableSimulation = PlayableSimulation.CreateDemo();
+        _playableSimulation = launchOptions.IsEmpireStress
+            ? PlayableSimulation.CreateEmpireStress()
+            : PlayableSimulation.CreateDemo();
+
+        // M18B: Empire stress uses a farther-out camera to fit the larger map
+        if (launchOptions.IsEmpireStress)
+        {
+            _camera = new IsometricCamera
+            {
+                FocalPoint = new Vector3(280f, 0f, 200f),
+                Distance = 480f,
+                Pitch = MathHelper.ToRadians(35f),
+            };
+        }
+        else
+        {
+            _camera = new IsometricCamera
+            {
+                FocalPoint = new Vector3(220f, 0f, 160f),
+                Distance = 400f,
+                Pitch = MathHelper.ToRadians(35f),
+            };
+        }
+
         _renderAdapter = new PlayableRenderAdapter();
         _commandController = new KeyboardCommandController();
-        _camera = new IsometricCamera
-        {
-            FocalPoint = new Vector3(220f, 0f, 160f),
-            Distance = 400f,
-            Pitch = MathHelper.ToRadians(35f),
-        };
     }
 
     protected override void Initialize()
@@ -82,12 +133,23 @@ public sealed class GameRoot : Game
     {
         _spriteBatch = new SpriteBatch(GraphicsDevice);
         _worldRenderer = new WorldRenderer();
+        _tabletopRenderer = new TabletopRenderer();
+        _tabletopRenderer.Initialize(GraphicsDevice);
+        _tabletopRenderer.EnsureParchmentTexture(GraphicsDevice);
         _debugHud = new DebugHud();
+        _panelFontRenderer = new FontRenderer(GraphicsDevice, FontRole.Display);
+        _selectionSystem = new SelectionSystem(tileSize: 28f);
+        _selectionPanel = new SelectionPanel();
         _runtimeAssets = new RuntimeAssetLoader(GraphicsDevice);
         _vegetationRenderer = new VegetationRenderer(GraphicsDevice);
+        _settlementRenderer = new SettlementRenderer(GraphicsDevice);
+        _bannerRenderer = new BannerRenderer();
+        if (_runtimeAssets is not null)
+            _bannerRenderer.Initialize(GraphicsDevice, _runtimeAssets);
         LoadRuntimeTextures();
-        LoadRuntimeModels();
+
         LoadVegetationModels();
+        LoadSettlementModels();
         base.LoadContent();
     }
 
@@ -103,8 +165,29 @@ public sealed class GameRoot : Game
             return;
         }
 
+        // M4: Compute map bounds from simulation grid and clamp camera focal point.
+        // TileCenter maps old 2D coords: X→right, Y→down → 3D: X→X, Y→Z.
+        // topLeft has low Z, bottomRight has high Z.
+        {
+            var mapW = _isNetworkMode && _mapWidth > 0 ? _mapWidth : _playableSimulation.Width;
+            var mapH = _isNetworkMode && _mapHeight > 0 ? _mapHeight : _playableSimulation.Height;
+            var topLeft = _renderAdapter.TileCenter(0, 0);
+            var bottomRight = _renderAdapter.TileCenter(mapW - 1, mapH - 1);
+            var pad = _renderAdapter.TileSize * 1.5f;
+            _camera.SetMapBounds(
+                minX: topLeft.X - pad,
+                minZ: topLeft.Y - pad,
+                maxX: bottomRight.X + pad,
+                maxZ: bottomRight.Y + pad);
+        }
+
         _camera.Update(gameTime, keyboard, mouse, _previousMouse, GraphicsDevice.Viewport);
         HandlePlayableInput(commands);
+
+        // M5: Toggle V3 stats panel with 'V' key
+        if (KeyPressedOnce(keyboard, _previousKeyboard, Keys.V) && _debugHud is not null)
+            _debugHud.ShowV3Stats = !_debugHud.ShowV3Stats;
+
         UpdatePlayableSimulation(gameTime);
         DrainReceivedFrames();
         UpdateWindowTitle(gameTime);
@@ -116,24 +199,166 @@ public sealed class GameRoot : Game
 
     protected override void Draw(GameTime gameTime)
     {
-        GraphicsDevice.Clear(new Color(18, 19, 17));
+        // M17: FPS tracking (exponential moving average, α ≈ 0.1, ~0.5s smoothing at 60fps)
+        var dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        if (dt > 0.0001f)
+        {
+            var instantFps = 1f / dt;
+            _smoothedFps = _smoothedFps <= 0f
+                ? instantFps
+                : _smoothedFps + 0.10f * (instantFps - _smoothedFps);
+        }
+
+        GraphicsDevice.Clear(new Color(28, 22, 15)); // dark wood-table brown, no black void
+
+        // M12E: Isolated viewer renders one model at origin with a fixed camera
+        if (_isolatedViewerEnabled)
+        {
+            DrawIsolatedViewer(gameTime);
+            UpdateRenderMetrics(0, default, 0);
+            return;
+        }
 
         if (_spriteBatch is not null && _worldRenderer is not null)
         {
-            var tiles = _renderAdapter.BuildTiles(_playableSimulation).ToArray();
-            var tribes = _renderAdapter.BuildTribes(_playableSimulation).ToArray();
+            // M19: Screenshot capture — override camera for deterministic zoom levels
+            var originalDistance = _camera.Distance;
+            var originalFocalPoint = _camera.FocalPoint;
+            var originalYaw = _camera.Yaw;
+            var originalPitch = _camera.Pitch;
 
-            _vegetationRenderer?.CollectInstances(_playableSimulation, _assetRegistry);
-            _vegetationRenderer?.Render(_camera, GraphicsDevice);
+            if (_screenshotCapture.IsCapturing)
+            {
+                _camera.FocalPoint = _screenshotCapture.OverrideFocalPoint;
+                _camera.Distance = _screenshotCapture.OverrideDistance;
+                _camera.Yaw = MathHelper.ToRadians(35f);
+                _camera.Pitch = MathHelper.ToRadians(35f);
+            }
 
-            _worldRenderer.DrawWorld(
+            var captureRt = _screenshotCapture.BeginDraw(GraphicsDevice);
+            if (captureRt is not null)
+                GraphicsDevice.SetRenderTarget(captureRt);
+
+            // M6: In network mode with V1 data, render from Rust frame data.
+            // Otherwise render the local PlayableSimulation demo.
+            var useNetworkRender = _isNetworkMode && _viewModel.HasV1Data && _mapWidth > 0;
+
+            var tiles = useNetworkRender
+                ? _renderAdapter.BuildTiles(_viewModel, _mapWidth, _mapHeight).ToArray()
+                : _renderAdapter.BuildTiles(_playableSimulation).ToArray();
+            var tribes = useNetworkRender
+                ? _renderAdapter.BuildTribes(_viewModel, _mapWidth).ToArray()
+                : _renderAdapter.BuildTribes(_playableSimulation).ToArray();
+            var selectedTribeId = useNetworkRender ? -1 : _playableSimulation.SelectedTribeId;
+
+            // 0. Table and parchment under the map (world-space 3D presentation).
+            if (_tabletopRenderer is not null)
+            {
+                var mapMinX = float.MaxValue;
+                var mapMinZ = float.MaxValue;
+                var mapMaxX = float.MinValue;
+                var mapMaxZ = float.MinValue;
+                foreach (var tile in tiles)
+                {
+                    var r = tile.Size;
+                    mapMinX = MathF.Min(mapMinX, tile.Center.X - r);
+                    mapMaxX = MathF.Max(mapMaxX, tile.Center.X + r);
+                    mapMinZ = MathF.Min(mapMinZ, tile.Center.Y - r);
+                    mapMaxZ = MathF.Max(mapMaxZ, tile.Center.Y + r);
+                }
+
+                _tabletopRenderer.Draw(GraphicsDevice, _camera, mapMinX, mapMinZ, mapMaxX, mapMaxZ);
+            }
+
+            // 1. Hex terrain tiles (heightmap relief, no chunk models) and territory borders.
+            _worldRenderer.DrawTerrainLayers(
+                _spriteBatch,
+                tiles,
+                _camera);
+
+            // 2. Vegetation dressing (trees, grass, bushes, rocks).
+            // Network tile data drives terrain; local playable sim still drives deterministic prop instances.
+            _vegetationRenderer?.CollectInstances(_playableSimulation, _assetRegistry, _camera.Distance);
+            _vegetationRenderer?.Render(_camera, GraphicsDevice, (float)gameTime.TotalGameTime.TotalSeconds);
+
+            // 3. Settlement 3D models on capital tiles (LOD-aware).
+            if (!useNetworkRender)
+            {
+                _settlementRenderer?.CollectInstances(_playableSimulation, _assetRegistry);
+            }
+            _settlementRenderer?.Render(GraphicsDevice, _camera, selectedTribeId);
+
+            // 3.5 Faction banners at mid-to-far zoom (M8).
+            if (_bannerRenderer is not null)
+            {
+                _bannerRenderer.DrawBanners(
+                    _spriteBatch,
+                    tribes,
+                    _camera,
+                    GraphicsDevice.Viewport,
+                    _assetRegistry);
+            }
+
+            // 4. Readable tribe/camp symbols above 3D scene dressing.
+            _worldRenderer.DrawSymbolOverlays(
                 _spriteBatch,
                 tiles,
                 tribes,
                 _camera,
-                _playableSimulation.SelectedTribeId,
-                _terrainTextures,
-                _terrainModels);
+                selectedTribeId);
+
+            // M19: End screenshot capture frame if active (saves PNG, presents to back buffer)
+            if (captureRt is not null)
+            {
+                _screenshotCapture.EndDraw(GraphicsDevice, captureRt, _spriteBatch);
+            }
+
+            // Restore camera after capture override
+            if (_screenshotCapture.IsCapturing || originalDistance != _camera.Distance)
+            {
+                _camera.FocalPoint = originalFocalPoint;
+                _camera.Distance = originalDistance;
+                _camera.Yaw = originalYaw;
+                _camera.Pitch = originalPitch;
+            }
+
+            // M17: Collect render metrics
+            UpdateRenderMetrics(
+                tiles.Length,
+                _settlementRenderer?.LastStats ?? default,
+                _vegetationRenderer?.BatchTotalInstances ?? 0);
+
+            if (_selectionPanel is not null && _panelFontRenderer is not null && !useNetworkRender)
+            {
+                _selectionPanel.Draw(
+                    _spriteBatch,
+                    _playableSimulation,
+                    _panelFontRenderer,
+                    new Point(GraphicsDevice.Viewport.Width - 310, 12));
+            }
+
+            // M9: Lineage inspector (toggled with L)
+            if (_panelFontRenderer is not null && !useNetworkRender)
+            {
+                _lineageInspector.Draw(
+                    _spriteBatch,
+                    _playableSimulation,
+                    _panelFontRenderer,
+                    new Point(GraphicsDevice.Viewport.Width - 660, 12),
+                    _lineagePanelVisible);
+            }
+
+            // M9: Tombstone ledger (toggled with K) — positioned below debug HUD
+            if (_panelFontRenderer is not null && !useNetworkRender)
+            {
+                _tombstonePanel.Draw(
+                    _spriteBatch,
+                    _playableSimulation,
+                    _panelFontRenderer,
+                    new Point(12, 280),
+                    _tombstonePanelVisible);
+            }
+
             _debugHud?.Draw(_spriteBatch, BuildHudState());
         }
 
@@ -160,10 +385,15 @@ public sealed class GameRoot : Game
             _receiverCancellation?.Dispose();
             _connection.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _worldRenderer?.Dispose();
+            _tabletopRenderer?.Dispose();
             _vegetationRenderer?.Dispose();
+            _settlementRenderer?.Dispose();
+            _bannerRenderer?.Dispose();
             _debugHud?.Dispose();
+            _panelFontRenderer?.Dispose();
             _runtimeAssets?.Dispose();
             _spriteBatch?.Dispose();
+            // M9 panel resources freed by GC (Texture2D/FontRenderer owned by panels)
             _graphics.Dispose();
         }
 
@@ -214,6 +444,22 @@ public sealed class GameRoot : Game
         while (_frameReceiver.TryDequeueFrame(out var frame))
         {
             _viewModel.ApplyFrame(frame);
+
+            // M6: Derive map dimensions from tile data if not explicitly configured
+            if (_isNetworkMode && _mapWidth <= 0 && _viewModel.TileData.Count > 0)
+            {
+                var maxTileId = _viewModel.TileData.Keys.Max();
+                var totalCells = (int)maxTileId + 1;
+                if (_mapHeight > 0)
+                {
+                    _mapWidth = totalCells / _mapHeight;
+                }
+                else
+                {
+                    _mapHeight = (int)MathF.Sqrt(totalCells);
+                    _mapWidth = totalCells / _mapHeight;
+                }
+            }
         }
     }
 
@@ -253,10 +499,86 @@ public sealed class GameRoot : Game
         {
             SelectTribeAtScreenPosition(screenPosition);
         }
+
+        if (commands.ToggleIsolatedViewer)
+        {
+            ToggleIsolatedViewer();
+        }
+
+        if (commands.CaptureScreenshots)
+        {
+            // Compute map center from current tiles
+            var tiles = _renderAdapter.BuildTiles(_playableSimulation).ToArray();
+            if (tiles.Length > 0)
+            {
+                var minX = float.MaxValue;
+                var maxX = float.MinValue;
+                var minZ = float.MaxValue;
+                var maxZ = float.MinValue;
+                foreach (var t in tiles)
+                {
+                    minX = MathF.Min(minX, t.Center.X);
+                    maxX = MathF.Max(maxX, t.Center.X);
+                    minZ = MathF.Min(minZ, t.Center.Y);
+                    maxZ = MathF.Max(maxZ, t.Center.Y);
+                }
+                var mapCenter = new Vector3((minX + maxX) * 0.5f, 0f, (minZ + maxZ) * 0.5f);
+                _screenshotCapture.QueueCapture(mapCenter);
+            }
+        }
+
+        // M9: Lineage inspector toggle
+        if (commands.ToggleLineageInspector)
+        {
+            _lineagePanelVisible = !_lineagePanelVisible;
+        }
+
+        // M9: Tombstone panel toggle
+        if (commands.ToggleTombstonePanel)
+        {
+            _tombstonePanelVisible = !_tombstonePanelVisible;
+            if (_tombstonePanelVisible)
+                _tombstonePanel.ResetScroll();
+        }
+
+        // M9: Tombstone panel sort/scroll forwarded to panel
+        _tombstonePanel.HandleInput(
+            nextSortRequested: commands.TombstoneCycleSort,
+            prevSortRequested: false,
+            scrollUp: commands.TombstoneScrollUp,
+            scrollDown: commands.TombstoneScrollDown,
+            totalTombstones: _playableSimulation.Tombstones.Count);
+
+        // M12E: Cycle isolated model with arrow keys when viewer active
+        if (_isolatedViewerEnabled)
+        {
+            var vegKeys = _vegetationRenderer?.LoadedModelKeys ?? Array.Empty<string>();
+            var settlementKeys = _settlementRenderer?.LoadedModelKeys ?? Array.Empty<string>();
+            var allKeys = vegKeys.Concat(settlementKeys).ToArray();
+
+            var kbd = Keyboard.GetState();
+            if (KeyPressedOnce(kbd, _previousKeyboard, Keys.Right))
+            {
+                if (allKeys.Length > 0)
+                    _isolatedModelIndex = (_isolatedModelIndex + 1) % allKeys.Length;
+            }
+            else if (KeyPressedOnce(kbd, _previousKeyboard, Keys.Left))
+            {
+                if (allKeys.Length > 0)
+                    _isolatedModelIndex = (_isolatedModelIndex - 1 + allKeys.Length) % allKeys.Length;
+            }
+        }
     }
 
     private void UpdatePlayableSimulation(GameTime gameTime)
     {
+        // M6: In network mode, simulation is driven by the Rust backend.
+        // No local stepping.
+        if (_isNetworkMode)
+        {
+            return;
+        }
+
         if (_playableSimulation.IsPaused)
         {
             return;
@@ -291,19 +613,12 @@ public sealed class GameRoot : Game
 
     private void SelectTribeAtScreenPosition(Vector2 screenPosition)
     {
-        var worldPosition = _camera.ScreenToWorld2D(screenPosition, GraphicsDevice.Viewport);
-        var nearest = _renderAdapter.BuildTribes(_playableSimulation)
-            .Select(tribe => new
-            {
-                Tribe = tribe,
-                Distance = Vector2.Distance(tribe.Position, worldPosition),
-            })
-            .OrderBy(candidate => candidate.Distance)
-            .FirstOrDefault();
+        if (_selectionSystem is null) return;
 
-        if (nearest is not null && nearest.Distance <= Math.Max(18f, nearest.Tribe.Radius * 1.8f))
+        var result = _selectionSystem.Pick(screenPosition, GraphicsDevice.Viewport, _camera, _playableSimulation, _renderAdapter);
+        if (result is { TribeId: >= 0 })
         {
-            _playableSimulation.SelectedTribeId = nearest.Tribe.Id;
+            _playableSimulation.SelectedTribeId = result.TribeId;
         }
     }
 
@@ -316,16 +631,29 @@ public sealed class GameRoot : Game
         }
 
         _titleAccumulator = 0;
+
+        // M6: In network mode, show ViewModel data in the title bar
+        if (_isNetworkMode && _viewModel.HasV1Data)
+        {
+            var livingTribes = _viewModel.V1Tribes.Count(kv => kv.Value.IsAlive);
+            var disputedTiles = _viewModel.TileData.Count(kv => kv.Value.IsDisputed);
+            var tick = _viewModel.Tick;
+            var endpoint = _diagnostics.IsConnected ? "node connected" : "node connecting...";
+
+            Window.Title = $"Tribal NeuroSim v3 | network | tick {tick} | tribes {livingTribes} | disputes {disputedTiles} | {endpoint}";
+            return;
+        }
+
         var selected = _playableSimulation.Tribes.FirstOrDefault(tribe => tribe.Id == _playableSimulation.SelectedTribeId);
-        var disputedTiles = _playableSimulation.Tiles.Count(tile => tile.IsDisputed);
-        var livingTribes = _playableSimulation.Tribes.Count(tribe => tribe.IsAlive);
+        var localDisputedTiles = _playableSimulation.Tiles.Count(tile => tile.IsDisputed);
+        var localLivingTribes = _playableSimulation.Tribes.Count(tribe => tribe.IsAlive);
         var selectedSummary = selected is null
             ? "none"
             : $"{selected.Name} pop {selected.Population} food {selected.FoodStores:0}";
         var mode = _playableSimulation.IsPaused ? "paused" : $"{_ticksPerSecond} tps";
-        var endpoint = _diagnostics.IsConnected ? "node connected" : "local demo";
+        var localEndpoint = _diagnostics.IsConnected ? "node connected" : "local demo";
 
-        Window.Title = $"Tribal NeuroSim v3 | {mode} | tick {_playableSimulation.Tick} | tribes {livingTribes} | disputes {disputedTiles} | selected {selectedSummary} | {endpoint}";
+        Window.Title = $"Tribal NeuroSim v3 | {mode} | tick {_playableSimulation.Tick} | tribes {localLivingTribes} | disputes {localDisputedTiles} | selected {selectedSummary} | {localEndpoint}";
     }
 
     private void LoadRuntimeTextures()
@@ -343,7 +671,6 @@ public sealed class GameRoot : Game
     {
         if (_vegetationRenderer is null) return;
 
-        // Collect unique prop keys from all biome profiles
         var modelKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in AssetManifest.BiomeProfiles)
         {
@@ -351,28 +678,205 @@ public sealed class GameRoot : Game
                 modelKeys.Add(propKey);
         }
 
-        // Also load structure models used by PlaceTent
-        modelKeys.Add("Models/Structures/KenneySurvivalKit/tent");
-        modelKeys.Add("Models/Structures/KenneySurvivalKit/campfire-pit");
+        foreach (var profile in AssetManifest.PropProfiles)
+            modelKeys.Add(profile.ModelKey);
 
         foreach (var key in modelKeys)
             _vegetationRenderer.LoadModel(key, key);
     }
 
-    private void LoadRuntimeModels()
+    private void LoadSettlementModels()
     {
-        if (_runtimeAssets is null) return;
+        if (_settlementRenderer is null) return;
 
-        foreach (var asset in RuntimeAssetCatalog.TerrainModels)
+        // Settlement FBX models (polity tier visuals)
+        foreach (var asset in RuntimeAssetCatalog.SettlementModels)
+            _settlementRenderer.LoadModel(asset.Key, asset.RelativePath);
+
+        // Kenney Survival Kit models for tribal compound fallback
+        var kenneyKeys = new[]
         {
-            if (_runtimeAssets.LoadModel(asset.Key) is { } model)
-                _terrainModels[asset.Key] = model;
+            "Models/Structures/KenneySurvivalKit/tent",
+            "Models/Structures/KenneySurvivalKit/tent-canvas",
+            "Models/Structures/KenneySurvivalKit/structure",
+            "Models/Structures/KenneySurvivalKit/fence",
+            "Models/Structures/KenneySurvivalKit/campfire-pit",
+            "Models/Structures/KenneySurvivalKit/resource-wood",
+            "Models/Structures/KenneySurvivalKit/resource-stone",
+            "Models/Structures/KenneySurvivalKit/workbench",
+        };
+
+        foreach (var key in kenneyKeys)
+            _settlementRenderer.LoadModel(key, key);
+    }
+
+    private void ToggleIsolatedViewer()
+    {
+        _isolatedViewerEnabled = !_isolatedViewerEnabled;
+        if (_isolatedViewerEnabled)
+        {
+            _isolatedModelIndex = 0;
+            _camera.PauseInput = true;
+
+            // Create a fixed camera looking at origin from a comfortable angle
+            _isolatedCamera = new IsometricCamera
+            {
+                FocalPoint = Vector3.Zero,
+                Distance = 30f,
+                Pitch = MathHelper.ToRadians(25f),
+                Yaw = MathHelper.ToRadians(45f),
+            };
         }
+        else
+        {
+            _camera.PauseInput = false;
+            _isolatedCamera = null;
+        }
+    }
+
+    private void DrawIsolatedViewer(GameTime gameTime)
+    {
+        // Combine vegetation and settlement model keys for the isolated viewer
+        var vegKeys = _vegetationRenderer?.LoadedModelKeys ?? Array.Empty<string>();
+        var settlementKeys = _settlementRenderer?.LoadedModelKeys ?? Array.Empty<string>();
+        var modelKeys = vegKeys.Concat(settlementKeys).ToArray();
+
+        if (modelKeys.Length == 0)
+        {
+            _debugHud?.Draw(_spriteBatch!, new DebugHudState(
+                ModeText: "ISOLATED VIEWER (no models loaded)",
+                Tick: checked((long)Math.Min(_playableSimulation.Tick, long.MaxValue)),
+                LivingTribes: 0,
+                DisputedTiles: 0,
+                SelectedName: null,
+                SelectedPopulation: 0,
+                SelectedFood: 0f,
+                IsConnected: false,
+                TicksPerSecond: 0,
+                Paused: true,
+                LastError: "No vegetation/settlement models registered"));
+            return;
+        }
+
+        // Snap focal point to origin, let camera orbit with mouse
+        _isolatedCamera!.FocalPoint = Vector3.Zero;
+        _isolatedCamera.Update(gameTime, Keyboard.GetState(), Mouse.GetState(), _previousMouse, GraphicsDevice.Viewport);
+
+        var modelKey = modelKeys[_isolatedModelIndex % modelKeys.Length];
+        var isSettlement = modelKey.StartsWith("settlement/", StringComparison.OrdinalIgnoreCase);
+
+        _vegetationRenderer!.RenderIsolatedModel(
+            modelKey,
+            GraphicsDevice,
+            _isolatedCamera,
+            scale: isSettlement ? 0.25f : 1f,
+            rotationRadians: 0f,
+            totalSeconds: (float)gameTime.TotalGameTime.TotalSeconds);
+
+        _debugHud?.Draw(_spriteBatch!, new DebugHudState(
+            ModeText: $"ISOLATED VIEWER [{_isolatedModelIndex + 1}/{modelKeys.Length}] {modelKey}",
+            Tick: checked((long)Math.Min(_playableSimulation.Tick, long.MaxValue)),
+            LivingTribes: 0,
+            DisputedTiles: 0,
+            SelectedName: modelKey,
+            SelectedPopulation: 0,
+            SelectedFood: 0f,
+            IsConnected: false,
+            TicksPerSecond: 0,
+            Paused: true,
+            LastError: "Arrow keys cycle models | F5 to exit isolated viewer"));
+    }
+
+    private static bool KeyPressedOnce(KeyboardState current, KeyboardState previous, Keys key)
+    {
+        return current.IsKeyDown(key) && !previous.IsKeyDown(key);
+    }
+
+    private void UpdateRenderMetrics(int terrainTiles, SettlementRenderStats settlementStats, int vegetationInstances)
+    {
+        _renderMetrics.Fps = _smoothedFps;
+        _renderMetrics.TerrainTilesDrawn = terrainTiles;
+        _renderMetrics.SettlementCloseCount = settlementStats.CloseCount;
+        _renderMetrics.SettlementMidCount = settlementStats.MidCount;
+        _renderMetrics.SettlementFarCulledCount = settlementStats.FarCulledCount;
+        _renderMetrics.VegetationInstanceCount = vegetationInstances;
+        _renderMetrics.EstimatedPrimitives = EstimatePrimitives(terrainTiles, settlementStats.TotalPrimitives, vegetationInstances);
+        _renderMetrics.AssetLoadFailures = _diagnostics.LastDecodeError is not null || _diagnostics.LastConnectionError is not null ? 1 : 0;
+        _renderMetrics.FrameDecodeLatencyMs = _diagnostics.LastFrameReceivedAt is { } lastFrame
+            ? (DateTimeOffset.UtcNow - lastFrame).TotalMilliseconds
+            : -1;
+        _renderMetrics.CameraDistance = _camera.Distance;
+        _renderMetrics.ZoomLevelLabel = _camera.Distance > 500f ? "far" : _camera.Distance > 200f ? "mid" : "close";
+        _renderMetrics.VSyncEnabled = GraphicsDevice.PresentationParameters.PresentationInterval != PresentInterval.Immediate;
+    }
+
+    private static int EstimatePrimitives(int terrainTiles, int settlementPrimitives, int vegetationInstances)
+    {
+        // Hex terrain: ~4 triangles (2 primitives) per tile
+        var terrainPrim = terrainTiles * 2;
+        // Vegetation: ~150 triangles (50 primitives) avg per instance (trees ~200, grass ~20)
+        var vegPrim = vegetationInstances * 50;
+        return terrainPrim + settlementPrimitives + vegPrim;
     }
 
     private DebugHudState BuildHudState()
     {
+        // M6: In network mode, show ViewModel data in the debug HUD
+        if (_isNetworkMode && _viewModel.HasV1Data)
+        {
+            var v1Living = _viewModel.V1Tribes.Count(kv => kv.Value.IsAlive);
+            var v1Disputed = _viewModel.TileData.Count(kv => kv.Value.IsDisputed);
+            var v1PolityTiers = _viewModel.V1Tribes
+                .Where(kv => kv.Value.IsAlive)
+                .GroupBy(kv => kv.Value.PolityTier)
+                .ToDictionary(g => g.Key, g => g.Count());
+            var tierStr = string.Join(" ", v1PolityTiers.OrderBy(kv => kv.Key).Select(kv => $"T{GetTierLabel(kv.Key)}:{kv.Value}"));
+            var warCount = _viewModel.Wars.Count;
+            var entityCount = (int)_viewModel.V1Tribes.Where(kv => kv.Value.IsAlive).Sum(kv => (long)kv.Value.EntityCount);
+
+            return new DebugHudState(
+                ModeText: _diagnostics.IsConnected ? "NETWORK (FrameV1)" : "NETWORK (connecting...)",
+                Tick: checked((long)_viewModel.Tick),
+                LivingTribes: v1Living,
+                DisputedTiles: v1Disputed,
+                SelectedName: null,
+                SelectedPopulation: 0,
+                SelectedFood: 0f,
+                IsConnected: _diagnostics.IsConnected,
+                TicksPerSecond: _ticksPerSecond,
+                Paused: true,
+                LastError: _diagnostics.LastDecodeError ?? _diagnostics.LastConnectionError,
+                Fps: _renderMetrics.Fps,
+                TerrainTiles: _renderMetrics.TerrainTilesDrawn,
+                SettlementClose: _renderMetrics.SettlementCloseCount,
+                SettlementMid: _renderMetrics.SettlementMidCount,
+                SettlementFarCulled: _renderMetrics.SettlementFarCulledCount,
+                VegetationInstances: _renderMetrics.VegetationInstanceCount,
+                EstimatedPrimitives: _renderMetrics.EstimatedPrimitives,
+                AssetLoadFailures: _renderMetrics.AssetLoadFailures,
+                FrameDecodeLatencyMs: _renderMetrics.FrameDecodeLatencyMs,
+                CameraDistance: _renderMetrics.CameraDistance,
+                ZoomLevelLabel: _renderMetrics.ZoomLevelLabel,
+                SelectedTerritoryCount: 0,
+                ExpansionCooldownRemaining: 0,
+                SelectedExpansionCost: 0f,
+                SelectedOverextended: false,
+                // M5: V3 fields display
+                ProtocolVersion: _viewModel.ProtocolVersion,
+                PolityTierCounts: tierStr,
+                ActiveWarCount: warCount,
+                TotalEntityCount: entityCount,
+                TombstoneCount: 0, // not yet available from ViewModel
+                LineageDepth: 0,
+                AssetDiagSummary: _diagnostics.LastDecodeError is not null ? "decode err" : "ok");
+        }
+
         var selected = _playableSimulation.Tribes.FirstOrDefault(tribe => tribe.Id == _playableSimulation.SelectedTribeId);
+        var overextended = selected is { IsAlive: true }
+            && selected.Territory.Count > 1 + selected.Population / 120;
+        var cooldownRemaining = selected is { IsAlive: true }
+            ? (long)selected.ExpansionCooldownTicks - (long)(_playableSimulation.Tick - selected.LastExpansionTick)
+            : 0L;
         return new DebugHudState(
             ModeText: _diagnostics.IsConnected ? "NODE" : "LOCAL",
             Tick: checked((long)Math.Min(_playableSimulation.Tick, long.MaxValue)),
@@ -384,6 +888,56 @@ public sealed class GameRoot : Game
             IsConnected: _diagnostics.IsConnected,
             TicksPerSecond: _ticksPerSecond,
             Paused: _playableSimulation.IsPaused,
-            LastError: _diagnostics.LastDecodeError ?? _diagnostics.LastConnectionError);
+            LastError: _diagnostics.LastDecodeError ?? _diagnostics.LastConnectionError,
+            Fps: _renderMetrics.Fps,
+            TerrainTiles: _renderMetrics.TerrainTilesDrawn,
+            SettlementClose: _renderMetrics.SettlementCloseCount,
+            SettlementMid: _renderMetrics.SettlementMidCount,
+            SettlementFarCulled: _renderMetrics.SettlementFarCulledCount,
+            VegetationInstances: _renderMetrics.VegetationInstanceCount,
+            EstimatedPrimitives: _renderMetrics.EstimatedPrimitives,
+            AssetLoadFailures: _renderMetrics.AssetLoadFailures,
+            FrameDecodeLatencyMs: _renderMetrics.FrameDecodeLatencyMs,
+            CameraDistance: _renderMetrics.CameraDistance,
+            ZoomLevelLabel: _renderMetrics.ZoomLevelLabel,
+            // R8: Expansion metrics
+            SelectedTerritoryCount: selected?.Territory.Count ?? 0,
+            ExpansionCooldownRemaining: Math.Max(0L, cooldownRemaining),
+            SelectedExpansionCost: selected?.LastClaimCost ?? 0f,
+            SelectedOverextended: overextended,
+            // M5: V3 fields display
+            ProtocolVersion: 0,
+            PolityTierCounts: BuildPolityTierString(),
+            ActiveWarCount: 0, // local demo has no war tracking
+            TotalEntityCount: _playableSimulation.Tribes.Where(t => t.IsAlive).Sum(t => t.Population),
+            TombstoneCount: _playableSimulation.Tombstones.Count,
+            LineageDepth: 0, // entity-level lineage requires Rust backend
+            AssetDiagSummary: _diagnostics.LastDecodeError is not null ? "decode err" : "ok",
+            // M18B: Polity tier tracking
+            HighestTierLabel: GetTierLabel((byte)_playableSimulation.HighestTierReached),
+            MergeCount: _playableSimulation.ActiveMergeCount);
     }
+
+    /// M5: Format polity tier counts for debug HUD (e.g. "T:10 C:2 D:0 K:1 E:0")
+    private string BuildPolityTierString()
+    {
+        var tiers = _playableSimulation.Tribes
+            .Where(t => t.IsAlive)
+            .GroupBy(t => t.Tier)
+            .ToDictionary(g => g.Key, g => g.Count());
+        return string.Join(" ", new[] { PolityTier.Tribe, PolityTier.City, PolityTier.Duchy, PolityTier.Kingdom, PolityTier.Empire }
+            .Select(t => $"{(char)t.ToString()[0]}:{tiers.GetValueOrDefault(t, 0)}"));
+    }
+
+    /// M6: Compact tier label for HUD line
+    private static string GetTierLabel(byte tier) => tier switch
+    {
+        0 => "ribe",
+        1 => "City",
+        2 => "County",
+        3 => "Duchy",
+        4 => "Kingd",
+        5 => "Emp",
+        _ => $"?{tier}",
+    };
 }

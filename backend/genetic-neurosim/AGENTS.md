@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This subtree now serves Tribal NeuroSim v3, not the old browser-era NeuroSim prototype.
+This subtree now serves Tribal NeuroSim v3.
 
 The active direction is:
 
@@ -22,9 +22,6 @@ Work in this subtree should support:
 5. biome-aware and polity-tier-aware asset preparation
 
 ## Architecture Rules
-
-- Do not reintroduce the deleted browser cockpit.
-- Do not create new runtime dependencies on React or Next.js in this subtree.
 - Keep Rust focused on simulation execution, compact data handling, protocol output, and analytics support.
 - Keep C# focused on the desktop client, domain structure, rendering preparation, and asset-facing registries.
 - Keep Node thin as the required middleman and bootstrap layer.
@@ -76,8 +73,6 @@ These V3 docs are not optional flavor notes. They define the direction.
 
 ## What Not To Do
 
-- Do not rebuild the old web frontend here.
-- Do not add frontend-only polish work detached from the desktop client path.
 - Do not add random AI-life mechanics unrelated to the V3 documents.
 - Do not collect giant asset packs blindly without curating them into the `Content/` tree.
 
@@ -85,8 +80,7 @@ These V3 docs are not optional flavor notes. They define the direction.
 
 When in doubt, favor:
 
-1. desktop architecture correctness
-2. protocol clarity
-3. asset organization
-4. simulation observability
-5. visual fidelity later
+1. protocol clarity
+2. asset organization
+3. simulation observability
+4. visual fidelity later

@@ -12,7 +12,6 @@ public sealed class SimulationViewModel
     private readonly Dictionary<ushort, TileFrameV1Record> _tileData = new();
     private readonly List<WarFrameV1Record> _wars = new();
     private readonly List<EventDeltaRecord> _events = new();
-    private byte _lastSectionFlags;
 
     public ushort ProtocolVersion { get; private set; }
 
@@ -35,7 +34,7 @@ public sealed class SimulationViewModel
 
     public IReadOnlyList<EventDeltaRecord> Events => _events;
 
-    public byte LastSectionFlags => _lastSectionFlags;
+    public byte LastSectionFlags => 0;
 
     public void ApplyFrame(SimulationFrame frame)
     {

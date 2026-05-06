@@ -599,6 +599,51 @@ impl WorldGrid {
 
         neighbors
     }
+
+    /// Hex distance between two tiles using odd-r offset coordinates.
+    /// Converts to cube coordinates for the standard axial distance formula.
+    pub fn hex_distance(&self, tile_a: usize, tile_b: usize) -> u32 {
+        if tile_a >= self.total_tiles || tile_b >= self.total_tiles {
+            return u32::MAX;
+        }
+        let (col_a, row_a) = self.tile_xy(tile_a);
+        let (col_b, row_b) = self.tile_xy(tile_b);
+        // odd-r offset → cube
+        let q_a = col_a as i32 - (row_a as i32 - (row_a as i32 & 1)) / 2;
+        let r_a = row_a as i32;
+        let q_b = col_b as i32 - (row_b as i32 - (row_b as i32 & 1)) / 2;
+        let r_b = row_b as i32;
+        let s_a = -q_a - r_a;
+        let s_b = -q_b - r_b;
+        ((q_a - q_b).abs().max((r_a - r_b).abs().max((s_a - s_b).abs()))) as u32
+    }
+
+    /// R8: Extra food cost to claim a tile based on its biome and surrounding conditions.
+    /// Returns the terrain portion of the claim cost.
+    pub fn terrain_claim_cost(&self, tile_idx: usize, river_adjacent: bool) -> f32 {
+        if tile_idx >= self.total_tiles {
+            return 100.0;
+        }
+        let biome = self.tiles[tile_idx].biome;
+        let base = match biome {
+            Biome::Plains => 0.0,
+            Biome::Forest => 10.0,
+            Biome::Desert => 15.0,
+            Biome::Mountain => 20.0,
+            Biome::Swamp => 20.0,
+            Biome::River => 0.0,
+        };
+        if river_adjacent {
+            // Check if tile borders a river
+            let has_river_neighbor = self.hex_adjacent_tiles(tile_idx).iter().any(|&n| {
+                n < self.total_tiles && self.tiles[n].biome == Biome::River
+            });
+            if has_river_neighbor {
+                return base + 25.0;
+            }
+        }
+        base
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

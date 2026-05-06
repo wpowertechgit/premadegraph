@@ -1,12 +1,23 @@
 namespace TribalNeuroSim.Client.Launcher;
 
-public sealed record LaunchOptions(Uri NodeWebSocketEndpoint, Uri NodeHttpEndpoint, string? SessionId)
+public sealed record LaunchOptions(
+    Uri NodeWebSocketEndpoint,
+    Uri NodeHttpEndpoint,
+    string? SessionId,
+    bool ConnectMode = false,
+    int MapWidth = 0,
+    int MapHeight = 0,
+    bool IsEmpireStress = false)
 {
     public static LaunchOptions FromArgs(IReadOnlyList<string> args)
     {
         var endpoint = new Uri("ws://127.0.0.1:3001/api/neurosim/desktop/v1/frames");
         var httpEndpoint = new Uri("http://127.0.0.1:3001/api/neurosim/desktop/v1");
         string? sessionId = null;
+        var connectMode = false;
+        var mapWidth = 0;
+        var mapHeight = 0;
+        var isEmpireStress = false;
 
         foreach (var arg in args)
         {
@@ -14,6 +25,7 @@ public sealed record LaunchOptions(Uri NodeWebSocketEndpoint, Uri NodeHttpEndpoi
                 Uri.TryCreate(nodeWs, UriKind.Absolute, out var parsedEndpoint))
             {
                 endpoint = parsedEndpoint;
+                connectMode = true;
                 continue;
             }
 
@@ -21,12 +33,40 @@ public sealed record LaunchOptions(Uri NodeWebSocketEndpoint, Uri NodeHttpEndpoi
                 Uri.TryCreate(nodeHttp, UriKind.Absolute, out var parsedHttpEndpoint))
             {
                 httpEndpoint = parsedHttpEndpoint;
+                connectMode = true;
+                continue;
+            }
+
+            if (TryReadOption(arg, "--connect", out _))
+            {
+                connectMode = true;
                 continue;
             }
 
             if (TryReadOption(arg, "--session=", out var parsedSession))
             {
                 sessionId = parsedSession;
+                connectMode = true;
+                continue;
+            }
+
+            if (TryReadOption(arg, "--map-width=", out var mw) &&
+                int.TryParse(mw, out var parsedMw) && parsedMw > 0)
+            {
+                mapWidth = parsedMw;
+                continue;
+            }
+
+            if (TryReadOption(arg, "--map-height=", out var mh) &&
+                int.TryParse(mh, out var parsedMh) && parsedMh > 0)
+            {
+                mapHeight = parsedMh;
+                continue;
+            }
+
+            if (TryReadOption(arg, "--empire-stress", out _))
+            {
+                isEmpireStress = true;
                 continue;
             }
 
@@ -42,10 +82,11 @@ public sealed record LaunchOptions(Uri NodeWebSocketEndpoint, Uri NodeHttpEndpoi
                         ? httpUri
                         : httpEndpoint;
                 sessionId = ReadUriQuery(launchUri, "session") ?? sessionId;
+                connectMode = true;
             }
         }
 
-        return new LaunchOptions(endpoint, httpEndpoint, sessionId);
+        return new LaunchOptions(endpoint, httpEndpoint, sessionId, connectMode, mapWidth, mapHeight, isEmpireStress);
     }
 
     private static bool TryReadOption(string arg, string prefix, out string value)

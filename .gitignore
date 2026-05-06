@@ -33,3 +33,9 @@ docs/databaseproject/simple-interface/obj
 *.mmd
 *.drawio
 backend/plagiarism_checker.py.worktrees/
+backend/genetic-neurosim/client-monogame-tests/bin/
+backend/genetic-neurosim/client-monogame-tests/obj/
+backend/genetic-neurosim/client-monogame-tests/logs/
+backend/genetic-neurosim/client-monogame-tests/reports/
+backend/genetic-neurosim/client-monogame/bin/
+backend/genetic-neurosim/client-monogame/obj/
