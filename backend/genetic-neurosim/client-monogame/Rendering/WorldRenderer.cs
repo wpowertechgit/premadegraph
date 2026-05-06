@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TribalNeuroSim.Client.Assets;
 
 namespace TribalNeuroSim.Client.Rendering;
 
@@ -9,6 +10,7 @@ public readonly record struct RenderableTile(
     float Size,
     Color BaseColor,
     string? TextureKey = null,
+    string? ModelKey = null,
     float FoodAmount = 0f,
     float MaxFoodAmount = 100f,
     bool IsDisputed = false,
@@ -29,62 +31,60 @@ public sealed class WorldRenderer : IDisposable
 {
     private Texture2D? _pixel;
     private GraphicsDevice? _graphicsDevice;
-    private BasicEffect? _terrainEffect;
-
-    private const float MaterialWorldScale = 124f;
+    private BasicEffect? _modelEffect;
+    private BasicEffect? _fallbackEffect;
 
     public void DrawWorld(
         SpriteBatch spriteBatch,
         IReadOnlyList<RenderableTile> tiles,
         IReadOnlyList<RenderableTribe> tribes,
-        CameraController camera,
+        IsometricCamera camera,
         int selectedTribeId,
-        IReadOnlyDictionary<string, Texture2D>? texturesByKey = null)
+        IReadOnlyDictionary<string, Texture2D>? texturesByKey = null,
+        IReadOnlyDictionary<string, RuntimeModel>? modelsByKey = null)
     {
-        EnsurePixel(spriteBatch.GraphicsDevice);
-        DrawTerrainHexes(spriteBatch.GraphicsDevice, tiles, camera, texturesByKey);
-
-        spriteBatch.Begin(
-            sortMode: SpriteSortMode.Deferred,
-            blendState: BlendState.AlphaBlend,
-            samplerState: SamplerState.LinearClamp,
-            transformMatrix: camera.CreateTransformMatrix());
-
-        foreach (var tile in tiles)
-        {
-            DrawTileOverlays(spriteBatch, tile);
-        }
-
-        foreach (var tribe in tribes)
-        {
-            DrawTribe(spriteBatch, tribe, tribe.Id == selectedTribeId);
-        }
-
-        spriteBatch.End();
+        EnsureEffects(spriteBatch.GraphicsDevice);
+        DrawTerrainModels(spriteBatch.GraphicsDevice, tiles, camera, texturesByKey, modelsByKey);
+        DrawOverlays(spriteBatch, tiles, tribes, camera, selectedTribeId);
     }
 
     public void Dispose()
     {
-        _terrainEffect?.Dispose();
-        _terrainEffect = null;
+        _modelEffect?.Dispose();
+        _modelEffect = null;
+        _fallbackEffect?.Dispose();
+        _fallbackEffect = null;
         _pixel?.Dispose();
         _pixel = null;
         _graphicsDevice = null;
     }
 
-    private void EnsurePixel(GraphicsDevice graphicsDevice)
+    private void EnsureEffects(GraphicsDevice graphicsDevice)
     {
         if (_pixel is not null && ReferenceEquals(_graphicsDevice, graphicsDevice))
-        {
             return;
-        }
 
         _pixel?.Dispose();
         _graphicsDevice = graphicsDevice;
         _pixel = new Texture2D(graphicsDevice, 1, 1);
         _pixel.SetData(new[] { Color.White });
-        _terrainEffect?.Dispose();
-        _terrainEffect = new BasicEffect(graphicsDevice)
+
+        _modelEffect?.Dispose();
+        _modelEffect = new BasicEffect(graphicsDevice)
+        {
+            TextureEnabled = true,
+            VertexColorEnabled = false,
+            LightingEnabled = true,
+            PreferPerPixelLighting = true,
+            AmbientLightColor = new Vector3(0.35f, 0.35f, 0.35f),
+            DiffuseColor = new Vector3(0.7f, 0.7f, 0.65f),
+        };
+        _modelEffect.DirectionalLight0.Enabled = true;
+        _modelEffect.DirectionalLight0.Direction = Vector3.Normalize(new Vector3(0.6f, -1f, -0.4f));
+        _modelEffect.DirectionalLight0.DiffuseColor = new Vector3(0.9f, 0.85f, 0.7f);
+
+        _fallbackEffect?.Dispose();
+        _fallbackEffect = new BasicEffect(graphicsDevice)
         {
             TextureEnabled = true,
             VertexColorEnabled = true,
@@ -92,112 +92,203 @@ public sealed class WorldRenderer : IDisposable
         };
     }
 
-    private void DrawTerrainHexes(
+    // ─────────────────────────────────────────────────────────────
+    //  3D terrain model rendering
+    // ─────────────────────────────────────────────────────────────
+
+    private void DrawTerrainModels(
         GraphicsDevice graphicsDevice,
         IReadOnlyList<RenderableTile> tiles,
-        CameraController camera,
-        IReadOnlyDictionary<string, Texture2D>? texturesByKey)
+        IsometricCamera camera,
+        IReadOnlyDictionary<string, Texture2D>? texturesByKey,
+        IReadOnlyDictionary<string, RuntimeModel>? modelsByKey)
     {
-        if (_terrainEffect is null || _pixel is null || tiles.Count == 0)
-        {
+        if (_modelEffect is null || _fallbackEffect is null || tiles.Count == 0)
             return;
-        }
 
-        _terrainEffect.World = camera.CreateTransformMatrix();
-        _terrainEffect.View = Matrix.Identity;
-        _terrainEffect.Projection = Matrix.CreateOrthographicOffCenter(
-            0f,
-            graphicsDevice.Viewport.Width,
-            graphicsDevice.Viewport.Height,
-            0f,
-            0f,
-            1f);
+        var view = camera.GetView();
+        var projection = camera.GetProjection();
 
         graphicsDevice.BlendState = BlendState.AlphaBlend;
-        graphicsDevice.DepthStencilState = DepthStencilState.None;
+        graphicsDevice.DepthStencilState = DepthStencilState.Default;
         graphicsDevice.RasterizerState = RasterizerState.CullNone;
         graphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
 
         foreach (var tile in tiles)
         {
-            var texture = ResolveTexture(tile.TextureKey, texturesByKey) ?? _pixel;
-            _terrainEffect.Texture = texture;
+            var model = ResolveModel(tile, modelsByKey);
+            var texture = ResolveTexture(tile.TextureKey, texturesByKey) ?? _pixel!;
+            var scale = tile.Size;
 
-            foreach (var pass in _terrainEffect.CurrentTechnique.Passes)
+            if (model is not null)
             {
-                pass.Apply();
-                var vertices = BuildHexFan(tile, MaterialTint(tile.BaseColor));
-                graphicsDevice.DrawUserPrimitives(
-                    PrimitiveType.TriangleList,
-                    vertices,
-                    0,
-                    6);
+                RenderModel(
+                    graphicsDevice, model, texture!, tile.Center, scale, view, projection, _modelEffect);
+            }
+            else
+            {
+                RenderFallbackHex(
+                    graphicsDevice, tile, texture!, scale, view, projection, _fallbackEffect);
             }
         }
     }
 
-    private void DrawTileOverlays(SpriteBatch spriteBatch, RenderableTile tile)
+    private static void RenderModel(
+        GraphicsDevice graphicsDevice,
+        RuntimeModel model,
+        Texture2D texture,
+        Vector2 tileCenter,
+        float scale,
+        Matrix view,
+        Matrix projection,
+        BasicEffect effect)
     {
-        var size = Math.Max(1f, tile.Size);
-        if (tile.OwnerTribeId >= 0)
-        {
-            DrawTerritoryTint(spriteBatch, tile.Center, size * 0.94f, TribeColor(tile.OwnerTribeId));
-        }
+        var world = Matrix.CreateScale(scale) *
+                    Matrix.CreateTranslation(new Vector3(tileCenter.X, 0f, tileCenter.Y));
 
-        if (tile.IsDisputed)
-        {
-            DrawHexOutline(spriteBatch, tile.Center, size * 0.96f, new Color(240, 98, 72, 220), 2.2f);
-        }
+        effect.World = world;
+        effect.View = view;
+        effect.Projection = projection;
+        effect.Texture = texture;
 
-        if (tile.HasCamp)
+        foreach (var pass in effect.CurrentTechnique.Passes)
         {
-            DrawCampMarker(spriteBatch, tile.Center + new Vector2(size * 0.10f, -size * 0.08f), size * 0.34f, new Color(232, 205, 126, 210));
+            pass.Apply();
+            model.Draw(graphicsDevice);
         }
     }
 
-    private void DrawTribe(SpriteBatch spriteBatch, RenderableTribe tribe, bool isSelected)
+    private void RenderFallbackHex(
+        GraphicsDevice graphicsDevice,
+        RenderableTile tile,
+        Texture2D texture,
+        float scale,
+        Matrix view,
+        Matrix projection,
+        BasicEffect effect)
     {
-        var radius = Math.Max(3f, tribe.Radius);
+        effect.World = Matrix.Identity;
+        effect.View = view;
+        effect.Projection = projection;
+        effect.Texture = texture;
+
+        foreach (var pass in effect.CurrentTechnique.Passes)
+        {
+            pass.Apply();
+            var vertices = BuildHexFan3D(tile, scale);
+            graphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, vertices, 0, 6);
+        }
+    }
+
+    private static RuntimeModel? ResolveModel(
+        RenderableTile tile,
+        IReadOnlyDictionary<string, RuntimeModel>? modelsByKey)
+    {
+        if (modelsByKey is null || tile.ModelKey is null)
+            return null;
+
+        return modelsByKey.TryGetValue(tile.ModelKey, out var model) ? model : null;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  2D SpriteBatch overlays
+    // ─────────────────────────────────────────────────────────────
+
+    private void DrawOverlays(
+        SpriteBatch spriteBatch,
+        IReadOnlyList<RenderableTile> tiles,
+        IReadOnlyList<RenderableTribe> tribes,
+        IsometricCamera camera,
+        int selectedTribeId)
+    {
+        if (_graphicsDevice is null) return;
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend,
+            samplerState: SamplerState.LinearClamp);
+
+        foreach (var tile in tiles)
+            DrawTileOverlays(spriteBatch, tile, camera, _graphicsDevice.Viewport);
+
+        foreach (var tribe in tribes)
+            DrawTribe(spriteBatch, tribe, tribe.Id == selectedTribeId, camera, _graphicsDevice.Viewport);
+
+        spriteBatch.End();
+    }
+
+    private void DrawTileOverlays(SpriteBatch spriteBatch, RenderableTile tile, IsometricCamera camera, Viewport viewport)
+    {
+        var screenCenter = camera.HexToScreen(tile.Center, viewport);
+
+        var worldRadius = Math.Max(1f, tile.Size);
+        var edgeScreen = camera.HexToScreen(tile.Center + new Vector2(worldRadius, 0f), viewport);
+        var screenRadius = Vector2.Distance(screenCenter, edgeScreen);
+
+        if (screenRadius < 2f) return;
+
+        if (tile.OwnerTribeId >= 0)
+            DrawTerritoryTint(spriteBatch, screenCenter, screenRadius * 0.94f, TribeColor(tile.OwnerTribeId));
+
+        if (tile.IsDisputed)
+            DrawHexOutline(spriteBatch, screenCenter, screenRadius * 0.96f, new Color(240, 98, 72, 220), 2.2f);
+
+        if (tile.HasCamp)
+            DrawCampMarker(spriteBatch, screenCenter + new Vector2(screenRadius * 0.10f, -screenRadius * 0.08f), screenRadius * 0.34f, new Color(232, 205, 126, 210));
+    }
+
+    private void DrawTribe(SpriteBatch spriteBatch, RenderableTribe tribe, bool isSelected, IsometricCamera camera, Viewport viewport)
+    {
+        var screenPos = camera.HexToScreen(tribe.Position, viewport);
+        var edgeScreen = camera.HexToScreen(tribe.Position + new Vector2(tribe.Radius, 0f), viewport);
+        var screenRadius = Math.Max(3f, Vector2.Distance(screenPos, edgeScreen));
+
+        if (screenRadius < 1f) return;
 
         if (tribe.TerritoryRadius > 0f)
         {
-            DrawCircleOutline(spriteBatch, tribe.Position, tribe.TerritoryRadius, new Color(tribe.Color, 45), 36, 1.5f);
+            var terEdge = camera.HexToScreen(tribe.Position + new Vector2(tribe.TerritoryRadius, 0f), viewport);
+            var terScreen = Vector2.Distance(screenPos, terEdge);
+            DrawCircleOutline(spriteBatch, screenPos, terScreen, new Color(tribe.Color, 45), 36, 1.5f);
         }
 
         if (tribe.HasCamp)
         {
             var camp = tribe.CampPosition == default ? tribe.Position : tribe.CampPosition;
-            DrawCampMarker(spriteBatch, camp, radius * 1.45f, new Color(tribe.Color, 112));
-            DrawCampMarker(spriteBatch, camp, radius * 1.10f, new Color(28, 30, 24, 150));
+            var campScreen = camera.HexToScreen(camp, viewport);
+            DrawCampMarker(spriteBatch, campScreen, screenRadius * 1.45f, new Color(tribe.Color, 112));
+            DrawCampMarker(spriteBatch, campScreen, screenRadius * 1.10f, new Color(28, 30, 24, 150));
         }
 
-        DrawCircle(spriteBatch, tribe.Position, radius, tribe.Color, 24);
-        DrawCircleOutline(spriteBatch, tribe.Position, radius + 1.5f, new Color(20, 20, 20, 200), 24, 2f);
+        DrawCircle(spriteBatch, screenPos, screenRadius, tribe.Color, 24);
+        DrawCircleOutline(spriteBatch, screenPos, screenRadius + 1.5f, new Color(20, 20, 20, 200), 24, 2f);
 
         if (isSelected)
-        {
-            DrawCircleOutline(spriteBatch, tribe.Position, radius + 6f, new Color(255, 238, 128, 240), 32, 3f);
-        }
+            DrawCircleOutline(spriteBatch, screenPos, screenRadius + 6f, new Color(255, 238, 128, 240), 32, 3f);
 
         if (tribe.Population > 0)
         {
-            var markerWidth = MathHelper.Clamp(tribe.Population * 0.25f, radius * 0.8f, radius * 2.2f);
-            FillRect(spriteBatch, CenteredRect(tribe.Position + new Vector2(0f, radius + 5f), markerWidth, 3f), new Color(230, 235, 225, 150));
+            var markerWidth = MathHelper.Clamp(tribe.Population * 0.25f, screenRadius * 0.8f, screenRadius * 2.2f);
+            FillRect(spriteBatch, CenteredRect(screenPos + new Vector2(0f, screenRadius + 5f), markerWidth, 3f), new Color(230, 235, 225, 150));
         }
     }
 
-    private static VertexPositionColorTexture[] BuildHexFan(RenderableTile tile, Color tint)
+    // ─────────────────────────────────────────────────────────────
+    //  3D hex fallback geometry
+    // ─────────────────────────────────────────────────────────────
+
+    private static VertexPositionColorTexture[] BuildHexFan3D(RenderableTile tile, float scale)
     {
-        var corners = HexCorners(tile.Center, Math.Max(1f, tile.Size));
+        var corners = HexCorners(tile.Center, Math.Max(1f, scale));
         var vertices = new VertexPositionColorTexture[18];
         var cursor = 0;
 
         for (var i = 0; i < corners.Length; i++)
         {
             var next = corners[(i + 1) % corners.Length];
-            vertices[cursor++] = TerrainVertex(tile.Center, tint);
-            vertices[cursor++] = TerrainVertex(corners[i], tint);
-            vertices[cursor++] = TerrainVertex(next, tint);
+            vertices[cursor++] = TerrainVertex(tile.Center, tile.BaseColor);
+            vertices[cursor++] = TerrainVertex(corners[i], tile.BaseColor);
+            vertices[cursor++] = TerrainVertex(next, tile.BaseColor);
         }
 
         return vertices;
@@ -206,14 +297,9 @@ public sealed class WorldRenderer : IDisposable
     private static VertexPositionColorTexture TerrainVertex(Vector2 position, Color tint)
     {
         return new VertexPositionColorTexture(
-            new Vector3(position, 0f),
-            tint,
-            new Vector2(position.X / MaterialWorldScale, position.Y / MaterialWorldScale));
-    }
-
-    private static Color MaterialTint(Color baseColor)
-    {
-        return Color.Lerp(baseColor, Color.White, 0.24f);
+            new Vector3(position.X, 0f, position.Y),
+            Color.Lerp(tint, Color.White, 0.24f),
+            Vector2.Zero);
     }
 
     private void DrawTerritoryTint(SpriteBatch spriteBatch, Vector2 center, float size, Color color)
@@ -222,9 +308,7 @@ public sealed class WorldRenderer : IDisposable
         DrawHexOutline(spriteBatch, center, size, new Color(color, 92), 1.15f);
     }
 
-    private static Texture2D? ResolveTexture(
-        string? textureKey,
-        IReadOnlyDictionary<string, Texture2D>? texturesByKey)
+    private static Texture2D? ResolveTexture(string? textureKey, IReadOnlyDictionary<string, Texture2D>? texturesByKey)
     {
         return textureKey is not null &&
             texturesByKey is not null &&
@@ -272,6 +356,10 @@ public sealed class WorldRenderer : IDisposable
         return new Color(r, g, b);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    //  SpriteBatch 2D drawing primitives
+    // ─────────────────────────────────────────────────────────────
+
     private void DrawCircle(SpriteBatch spriteBatch, Vector2 center, float radius, Color color, int segments)
     {
         var step = MathHelper.TwoPi / segments;
@@ -299,21 +387,11 @@ public sealed class WorldRenderer : IDisposable
         }
     }
 
-    private void DrawRectOutline(SpriteBatch spriteBatch, FloatRect rect, Color color, float thickness)
-    {
-        DrawLine(spriteBatch, new Vector2(rect.Left, rect.Top), new Vector2(rect.Right, rect.Top), color, thickness);
-        DrawLine(spriteBatch, new Vector2(rect.Right, rect.Top), new Vector2(rect.Right, rect.Bottom), color, thickness);
-        DrawLine(spriteBatch, new Vector2(rect.Right, rect.Bottom), new Vector2(rect.Left, rect.Bottom), color, thickness);
-        DrawLine(spriteBatch, new Vector2(rect.Left, rect.Bottom), new Vector2(rect.Left, rect.Top), color, thickness);
-    }
-
     private void DrawHexOutline(SpriteBatch spriteBatch, Vector2 center, float radius, Color color, float thickness)
     {
         var corners = HexCorners(center, radius);
         for (var i = 0; i < corners.Length; i++)
-        {
             DrawLine(spriteBatch, corners[i], corners[(i + 1) % corners.Length], color, thickness);
-        }
     }
 
     private void DrawHexFill(SpriteBatch spriteBatch, Vector2 center, float radius, Color color)
@@ -352,22 +430,10 @@ public sealed class WorldRenderer : IDisposable
     {
         var delta = end - start;
         var length = delta.Length();
-        if (length <= 0.001f)
-        {
-            return;
-        }
+        if (length <= 0.001f) return;
 
         var angle = MathF.Atan2(delta.Y, delta.X);
-        spriteBatch.Draw(
-            _pixel,
-            start,
-            null,
-            color,
-            angle,
-            new Vector2(0f, 0.5f),
-            new Vector2(length, Math.Max(1f, thickness)),
-            SpriteEffects.None,
-            0f);
+        spriteBatch.Draw(_pixel, start, null, color, angle, new Vector2(0f, 0.5f), new Vector2(length, Math.Max(1f, thickness)), SpriteEffects.None, 0f);
     }
 
     private static FloatRect CenteredRect(Vector2 center, float width, float height)
@@ -375,28 +441,16 @@ public sealed class WorldRenderer : IDisposable
         return new FloatRect(center.X - width * 0.5f, center.Y - height * 0.5f, width, height);
     }
 
-    private static float Clamp01(float value)
-    {
-        return MathHelper.Clamp(value, 0f, 1f);
-    }
-
     private readonly record struct FloatRect(float X, float Y, float Width, float Height)
     {
         public float Left => X;
-
         public float Top => Y;
-
         public float Right => X + Width;
-
         public float Bottom => Y + Height;
 
         public Rectangle ToRectangle()
         {
-            return new Rectangle(
-                (int)MathF.Round(X),
-                (int)MathF.Round(Y),
-                (int)MathF.Round(Width),
-                (int)MathF.Round(Height));
+            return new Rectangle((int)MathF.Round(X), (int)MathF.Round(Y), (int)MathF.Round(Width), (int)MathF.Round(Height));
         }
     }
 }

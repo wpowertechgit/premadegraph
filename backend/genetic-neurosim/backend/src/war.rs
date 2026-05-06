@@ -9,6 +9,8 @@ pub enum WarStatus {
     Peace,
     AttackerWon,
     DefenderWon,
+    /// R2: War terminated because one participant died before resolution.
+    WarCancelled,
 }
 
 // ─── WarState ─────────────────────────────────────────────────────────────────

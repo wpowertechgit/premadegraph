@@ -1,10 +1,13 @@
 mod simulation;
 mod db;
 mod desktop_protocol;
+mod frame_v1;
 pub mod world;
 pub mod tribes;
 pub mod events;
 pub mod war;
+pub mod lineage_registry;
+pub mod tombstone;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
@@ -26,10 +29,12 @@ use simulation::{
     SaveRecordingRequest, SharedSimulation, TribeSimulation, StatusResponse,
     TribeSnapshotResponse, WorldSnapshotResponse, TileOwnershipResponse,
     RecentEventsResponse, TribeEventsResponse, RunSummary,
+    LineageResolveResponse, LineageSeedResponse, LineageStatsResponse,
+    TombstonesResponse,
 };
 use war::ActiveWarsResponse;
 use db::Database;
-use desktop_protocol::wrap_tribal_legacy_frame;
+use desktop_protocol::{wrap_tribal_legacy_frame, wrap_frame_v1};
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -38,6 +43,7 @@ struct AppState {
     simulation: SharedSimulation,
     database: Arc<Database>,
     frame_tx: broadcast::Sender<Arc<Vec<u8>>>,
+    frame_v1_tx: broadcast::Sender<Arc<Vec<u8>>>,
 }
 
 #[derive(Serialize)]
@@ -65,10 +71,12 @@ async fn main() {
 
     let simulation = TribeSimulation::shared(ControlConfig::default());
     let (frame_tx, _) = broadcast::channel::<Arc<Vec<u8>>>(32);
+    let (frame_v1_tx, _) = broadcast::channel::<Arc<Vec<u8>>>(32);
     let state = Arc::new(AppState {
         simulation,
         database: Arc::new(db),
         frame_tx,
+        frame_v1_tx,
     });
 
     tokio::spawn(simulation_loop(state.clone()));
@@ -79,6 +87,7 @@ async fn main() {
         .route("/ws/simulation", get(ws_simulation))           // kept for compat
         .route("/ws/tribal-simulation", get(ws_simulation))    // new canonical name
         .route("/ws/desktop/v1/frames", get(ws_desktop_v1_frames))
+        .route("/ws/desktop/v2/frames", get(ws_desktop_v2_frames))
         .route("/api/status", get(get_status))
         .route("/api/desktop/v1/status", get(get_status))
         .route("/api/config", get(get_config).post(update_config))
@@ -103,6 +112,10 @@ async fn main() {
         .route("/api/events/recent", get(get_recent_events))
         .route("/api/tribes/{id}/events", get(get_tribe_events))
         .route("/api/simulation/summary", get(get_run_summary))
+        .route("/api/lineage/resolve/{entity_id}", get(get_lineage_resolve))
+        .route("/api/lineage/seed/{entity_id}", get(get_lineage_seed))
+        .route("/api/lineage/stats", get(get_lineage_stats))
+        .route("/api/tombstones", get(get_tombstones))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -146,24 +159,31 @@ async fn simulation_loop(state: Arc<AppState>) {
     let mut final_frame_sent = false;
 
     loop {
-        let (packet, tick_rate, idle) = {
+        let (packet, packet_v1, tick_rate, idle) = {
             let mut simulation = state.simulation.write();
-            if simulation.is_halted() || simulation.is_paused() {
-                let packet = if final_frame_sent {
-                    simulation.current_packet()
+            let (frame, frame_v1) = if simulation.is_halted() || simulation.is_paused() {
+                if final_frame_sent {
+                    (simulation.current_packet(), simulation.current_packet_v1())
                 } else {
                     final_frame_sent = true;
-                    simulation.pack_current_frame()
-                };
-                (packet, simulation.config().tick_rate, true)
+                    simulation.pack_current_frame();
+                    (simulation.current_packet(), simulation.current_packet_v1())
+                }
             } else {
                 final_frame_sent = false;
-                let packet = simulation.step();
-                (packet, simulation.config().tick_rate, false)
-            }
+                simulation.step();
+                (simulation.current_packet(), simulation.current_packet_v1())
+            };
+            let alive_count = simulation.alive_tribe_count();
+            let tick = simulation.simulation_tick();
+            let gen = simulation.simulation_generation();
+            let tick_rate = simulation.config().tick_rate;
+            let wrapped_v1 = crate::desktop_protocol::wrap_frame_v1(&frame_v1, tick, gen, alive_count);
+            (frame, wrapped_v1, tick_rate, simulation.is_halted() || simulation.is_paused())
         };
 
         let _ = state.frame_tx.send(Arc::new(packet));
+        let _ = state.frame_v1_tx.send(Arc::new(packet_v1));
 
         let sleep_for = if idle {
             Duration::from_millis(250)
@@ -337,6 +357,32 @@ async fn get_run_summary(State(state): State<Arc<AppState>>) -> Json<RunSummary>
     Json(state.simulation.read().run_summary())
 }
 
+async fn get_lineage_resolve(
+    Path(entity_id): Path<u32>,
+    State(state): State<Arc<AppState>>,
+) -> Json<LineageResolveResponse> {
+    Json(state.simulation.read().resolve_lineage(entity_id))
+}
+
+async fn get_lineage_seed(
+    Path(entity_id): Path<u32>,
+    State(state): State<Arc<AppState>>,
+) -> Json<LineageSeedResponse> {
+    Json(state.simulation.read().lineage_seed(entity_id))
+}
+
+async fn get_lineage_stats(
+    State(state): State<Arc<AppState>>,
+) -> Json<LineageStatsResponse> {
+    Json(state.simulation.read().lineage_stats())
+}
+
+async fn get_tombstones(
+    State(state): State<Arc<AppState>>,
+) -> Json<TombstonesResponse> {
+    Json(state.simulation.read().tombstones())
+}
+
 async fn ws_simulation(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -349,6 +395,13 @@ async fn ws_desktop_v1_frames(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| ws_desktop_v1_client(socket, state))
+}
+
+async fn ws_desktop_v2_frames(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| ws_desktop_v2_client(socket, state))
 }
 
 async fn ws_client(socket: WebSocket, state: Arc<AppState>) {
@@ -421,6 +474,49 @@ async fn ws_desktop_v1_client(socket: WebSocket, state: Arc<AppState>) {
                         if sender.send(Message::Pong(payload)).await.is_err() {
                             break;
                         }
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) => break,
+                }
+            }
+        }
+    }
+}
+
+async fn ws_desktop_v2_client(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = state.frame_v1_tx.subscribe();
+
+    // Send initial V1 frame
+    let v1_payload = state.simulation.read().current_packet_v1();
+    let wrapped_initial = if !v1_payload.is_empty() {
+        let (tick, gen, alive) = {
+            let sim = state.simulation.read();
+            (sim.simulation_tick(), sim.simulation_generation(), sim.alive_tribe_count())
+        };
+        Some(wrap_frame_v1(&v1_payload, tick, gen, alive))
+    } else {
+        None
+    };
+    if let Some(wrapped) = wrapped_initial {
+        if sender.send(Message::Binary(wrapped.into())).await.is_err() {
+            return;
+        }
+    }
+
+    loop {
+        tokio::select! {
+            frame = rx.recv() => {
+                let Ok(frame) = frame else { break };
+                if sender.send(Message::Binary(frame.as_ref().clone().into())).await.is_err() {
+                    break;
+                }
+            }
+            inbound = receiver.next() => {
+                match inbound {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Ping(payload))) => {
+                        if sender.send(Message::Pong(payload)).await.is_err() { break; }
                     }
                     Some(Ok(_)) => {}
                     Some(Err(_)) => break,

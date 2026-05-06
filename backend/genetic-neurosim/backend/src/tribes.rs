@@ -19,6 +19,54 @@ pub enum BehaviorState {
     Starving = 7,
     Desperate = 8,
     Imploding = 9,
+    // V3: Polity behaviors (10–12)
+    Consolidating = 10,
+    Rebellious = 11,
+    Administering = 12,
+}
+
+// ─── V3 Polity Tier ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+pub enum PolityTier {
+    Tribe = 0,
+    City = 1,
+    County = 2,
+    Duchy = 3,
+    Kingdom = 4,
+    Empire = 5,
+}
+
+impl Default for PolityTier {
+    fn default() -> Self { PolityTier::Tribe }
+}
+
+// ─── V3 Specialization Role ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+pub enum SpecializationRole {
+    Generalist = 0,
+    Military = 1,
+    Economy = 2,
+    Governance = 3,
+    Logistics = 4,
+    InternalAffairs = 5,
+}
+
+impl Default for SpecializationRole {
+    fn default() -> Self { SpecializationRole::Generalist }
+}
+
+// ─── V3 Citizen Record ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CitizenRecord {
+    pub entity_id: u32,
+    pub parent_a: u32,
+    pub parent_b: u32,
+    pub generation: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -117,6 +165,17 @@ pub struct TribeState {
     pub last_inputs: [f32; crate::simulation::INPUT_COUNT],
     pub last_outputs: [f32; crate::simulation::OUTPUT_COUNT],
     pub alive: bool,
+    // V3: Polity tier & hierarchy
+    pub polity_tier: PolityTier,
+    pub parent_polity_id: Option<u32>,
+    pub constituent_tribe_ids: Vec<u32>,
+    // V3: Specialization
+    pub specialization_role: SpecializationRole,
+    pub veterancy_xp: u32,
+    // V3: Main camp tile (distinct from general territory)
+    pub main_camp_tile: u16,
+    // V3: Entity-level population tracking
+    pub citizens: Vec<CitizenRecord>,
 }
 
 impl TribeState {
@@ -162,6 +221,13 @@ impl TribeState {
             last_inputs: [0.0; crate::simulation::INPUT_COUNT],
             last_outputs: [0.0; crate::simulation::OUTPUT_COUNT],
             alive: true,
+            polity_tier: PolityTier::Tribe,
+            parent_polity_id: None,
+            constituent_tribe_ids: vec![],
+            specialization_role: SpecializationRole::Generalist,
+            veterancy_xp: 0,
+            main_camp_tile: home_tile,
+            citizens: vec![],
         }
     }
 

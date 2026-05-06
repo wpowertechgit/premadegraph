@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 pub const WORLD_W: u32 = 2000;
@@ -141,6 +142,19 @@ pub struct BiomeTile {
     pub disease_rate: f32,
 }
 
+// ─── TileControl ────────────────────────────────────────────────────────────────
+
+/// R4: Fractional tile control. Multiple occupants per tile, each with a share.
+/// Max 4 factions per tile. Single-occupant behaves identical to old model.
+pub const MAX_OCCUPANTS: usize = 4;
+pub const DISPUTE_PENALTY: f32 = 0.40;
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct TileControl {
+    pub tribe_id: u32,
+    pub control_percentage: f32, // 0.0–1.0, sum across occupants = 1.0
+}
+
 // ─── WorldGrid ────────────────────────────────────────────────────────────────
 
 pub struct WorldGrid {
@@ -149,8 +163,10 @@ pub struct WorldGrid {
     pub total_tiles: usize,
     pub tiles: Vec<BiomeTile>,
     last_sent_food: Vec<f32>,
-    /// World-level ownership array. Sentinel u32::MAX = neutral/unowned.
-    pub tile_owner: Vec<u32>,
+    /// R4: Fractional tile occupants — vec of up-to-4 controls per tile.
+    pub tile_occupants: Vec<ArrayVec<TileControl, MAX_OCCUPANTS>>,
+    /// R4: Auto-calculated disputed flag when 2+ occupants on a tile.
+    pub tile_is_disputed: Vec<bool>,
 }
 
 impl WorldGrid {
@@ -258,7 +274,8 @@ impl WorldGrid {
             total_tiles,
             tiles,
             last_sent_food,
-            tile_owner: vec![u32::MAX; total_tiles],
+            tile_occupants: vec![ArrayVec::new(); total_tiles],
+            tile_is_disputed: vec![false; total_tiles],
         }
     }
 
@@ -382,37 +399,179 @@ impl WorldGrid {
         neighbors
     }
 
-    // ─── K2: Tile Ownership ───────────────────────────────────────────────────
+    // ─── K2 / R4: Tile Ownership (Fractional Multi-Occupant) ────────────────
 
-    /// Set owner of a tile. `u32::MAX` marks neutral.
+    /// Set exclusive owner of a tile (100% control). Replaces all occupants.
+    /// Backward-compatible: single-occupant tiles behave identically to before.
     pub fn set_tile_owner(&mut self, tile_idx: usize, owner: u32) {
         if tile_idx < self.total_tiles {
-            self.tile_owner[tile_idx] = owner;
+            let mut controls = ArrayVec::new();
+            controls.push(TileControl {
+                tribe_id: owner,
+                control_percentage: 1.0,
+            });
+            self.tile_occupants[tile_idx] = controls;
+            self.tile_is_disputed[tile_idx] = false;
         }
     }
 
-    /// Return `Some(tribe_id)` if owned, `None` if neutral.
+    /// Add a tribe as co-occupant, splitting control. Returns false if tile full.
+    /// If tribe already occupies tile, updates their control instead.
+    pub fn add_tile_occupant(&mut self, tile_idx: usize, tribe_id: u32, share: f32) -> bool {
+        if tile_idx >= self.total_tiles {
+            return false;
+        }
+
+        // Check if tribe already occupies this tile
+        let occupants = &mut self.tile_occupants[tile_idx];
+        if let Some(existing) = occupants.iter_mut().find(|c| c.tribe_id == tribe_id) {
+            existing.control_percentage = (existing.control_percentage + share).min(1.0);
+            self.rebalance_controls(tile_idx);
+            self.update_disputed_flag(tile_idx);
+            return true;
+        }
+
+        if occupants.is_full() {
+            return false;
+        }
+
+        // New occupant — add with share, rebalance
+        let existing_total: f32 = occupants.iter().map(|c| c.control_percentage).sum();
+        let remaining = 1.0 - existing_total;
+        let final_share = if remaining <= 0.0 {
+            // Overcommitted — split evenly
+            let new_count = (occupants.len() + 1) as f32;
+            // Scale existing down
+            for c in occupants.iter_mut() {
+                c.control_percentage = (1.0 / new_count).min(c.control_percentage);
+            }
+            1.0 / new_count
+        } else {
+            share.min(remaining)
+        };
+
+        occupants.push(TileControl {
+            tribe_id,
+            control_percentage: final_share,
+        });
+        self.rebalance_controls(tile_idx);
+        self.update_disputed_flag(tile_idx);
+        true
+    }
+
+    /// Remove a tribe's occupancy from a tile (e.g., after conquest).
+    pub fn remove_tile_occupant(&mut self, tile_idx: usize, tribe_id: u32) {
+        if tile_idx >= self.total_tiles {
+            return;
+        }
+        let occupants = &mut self.tile_occupants[tile_idx];
+        occupants.retain(|c| c.tribe_id != tribe_id);
+        self.rebalance_controls(tile_idx);
+        self.update_disputed_flag(tile_idx);
+    }
+
+    /// Rebalance control percentages so they sum to 1.0.
+    fn rebalance_controls(&mut self, tile_idx: usize) {
+        let occupants = &mut self.tile_occupants[tile_idx];
+        if occupants.is_empty() {
+            return;
+        }
+        let total: f32 = occupants.iter().map(|c| c.control_percentage).sum();
+        if total > 0.0 && (total - 1.0).abs() > 0.001 {
+            for c in occupants.iter_mut() {
+                c.control_percentage /= total;
+            }
+        }
+    }
+
+    /// Update disputed flag for a tile based on occupant count.
+    fn update_disputed_flag(&mut self, tile_idx: usize) {
+        self.tile_is_disputed[tile_idx] = self.tile_occupants[tile_idx].len() >= 2;
+    }
+
+    /// Return `Some(tribe_id)` if single occupant, `None` if empty or disputed.
+    /// Backward-compatible with old single-owner API.
     pub fn get_tile_owner_opt(&self, tile_idx: usize) -> Option<u32> {
-        if tile_idx < self.total_tiles && self.tile_owner[tile_idx] != u32::MAX {
-            Some(self.tile_owner[tile_idx])
+        if tile_idx >= self.total_tiles {
+            return None;
+        }
+        let occupants = &self.tile_occupants[tile_idx];
+        if occupants.len() == 1 {
+            Some(occupants[0].tribe_id)
         } else {
             None
         }
     }
 
-    /// Return hex-adjacent tiles that are currently neutral (no owner).
-    /// Deduplicates across all tiles in the provided territory slice.
+    /// Check if a tile is neutral (no occupants).
+    pub fn is_tile_neutral(&self, tile_idx: usize) -> bool {
+        tile_idx < self.total_tiles && self.tile_occupants[tile_idx].is_empty()
+    }
+
+    /// Return all occupants of a tile.
+    pub fn get_tile_occupants(&self, tile_idx: usize) -> &[TileControl] {
+        if tile_idx >= self.total_tiles {
+            return &[];
+        }
+        &self.tile_occupants[tile_idx]
+    }
+
+    /// Return hex-adjacent tiles that are currently neutral (no occupants).
     pub fn neutral_adjacent_tiles(&self, territory: &[u16]) -> Vec<usize> {
         let mut seen = std::collections::HashSet::new();
         let mut neutral = Vec::new();
         for &tile_idx in territory {
             for neighbor in self.hex_adjacent_tiles(tile_idx as usize) {
-                if seen.insert(neighbor) && self.tile_owner[neighbor] == u32::MAX {
+                if seen.insert(neighbor) && self.is_tile_neutral(neighbor) {
                     neutral.push(neighbor);
                 }
             }
         }
         neutral
+    }
+
+    /// R4: Return hex-adjacent tiles occupied by other tribes (not neutral, not self).
+    pub fn non_neutral_adjacent_tiles(&self, territory: &[u16], tribe_id: u32) -> Vec<usize> {
+        let mut seen = std::collections::HashSet::new();
+        let mut occupied = Vec::new();
+        for &tile_idx in territory {
+            for neighbor in self.hex_adjacent_tiles(tile_idx as usize) {
+                if !seen.insert(neighbor) {
+                    continue;
+                }
+                let occupants = &self.tile_occupants[neighbor];
+                if occupants.is_empty() {
+                    continue;
+                }
+                if occupants.iter().any(|c| c.tribe_id == tribe_id) {
+                    continue; // already claimed by self
+                }
+                occupied.push(neighbor);
+            }
+        }
+        occupied
+    }
+
+    /// Yield multiplier for a tribe on a disputed tile: control% * (1 - DISPUTE_PENALTY).
+    /// Returns 1.0 if tile is not disputed or tribe not present.
+    pub fn effective_yield_multiplier(&self, tile_idx: usize, tribe_id: u32) -> f32 {
+        if tile_idx >= self.total_tiles {
+            return 0.0;
+        }
+        if !self.tile_is_disputed[tile_idx] {
+            return 1.0;
+        }
+        let occupants = &self.tile_occupants[tile_idx];
+        occupants
+            .iter()
+            .find(|c| c.tribe_id == tribe_id)
+            .map(|c| c.control_percentage * (1.0 - DISPUTE_PENALTY))
+            .unwrap_or(0.0)
+    }
+
+    /// Check if a tile is currently disputed.
+    pub fn is_disputed(&self, tile_idx: usize) -> bool {
+        tile_idx < self.total_tiles && self.tile_is_disputed[tile_idx]
     }
 
     /// Return up to 6 hex-adjacent tile indices using odd-r offset (pointy-top).

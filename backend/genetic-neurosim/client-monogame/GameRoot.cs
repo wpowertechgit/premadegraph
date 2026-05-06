@@ -23,16 +23,18 @@ public sealed class GameRoot : Game
     private readonly ClientDiagnostics _diagnostics;
     private readonly PlayableSimulation _playableSimulation;
     private readonly PlayableRenderAdapter _renderAdapter;
-    private readonly CameraController _camera;
+    private readonly IsometricCamera _camera;
     private readonly KeyboardCommandController _commandController;
     private CancellationTokenSource? _receiverCancellation;
     private SimulationFrameReceiver? _frameReceiver;
     private Task? _receiverTask;
     private SpriteBatch? _spriteBatch;
     private WorldRenderer? _worldRenderer;
+    private VegetationRenderer? _vegetationRenderer;
     private DebugHud? _debugHud;
     private RuntimeAssetLoader? _runtimeAssets;
     private readonly Dictionary<string, Texture2D> _terrainTextures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RuntimeModel> _terrainModels = new(StringComparer.OrdinalIgnoreCase);
     private KeyboardState _previousKeyboard;
     private MouseState _previousMouse;
     private double _simulationAccumulator;
@@ -60,12 +62,11 @@ public sealed class GameRoot : Game
         _playableSimulation = PlayableSimulation.CreateDemo();
         _renderAdapter = new PlayableRenderAdapter();
         _commandController = new KeyboardCommandController();
-        _camera = new CameraController
+        _camera = new IsometricCamera
         {
-            Position = new Vector2(220f, 110f),
-            Zoom = 1.2f,
-            MinZoom = 0.35f,
-            MaxZoom = 3.5f,
+            FocalPoint = new Vector3(220f, 0f, 160f),
+            Distance = 400f,
+            Pitch = MathHelper.ToRadians(35f),
         };
     }
 
@@ -83,7 +84,10 @@ public sealed class GameRoot : Game
         _worldRenderer = new WorldRenderer();
         _debugHud = new DebugHud();
         _runtimeAssets = new RuntimeAssetLoader(GraphicsDevice);
+        _vegetationRenderer = new VegetationRenderer(GraphicsDevice);
         LoadRuntimeTextures();
+        LoadRuntimeModels();
+        LoadVegetationModels();
         base.LoadContent();
     }
 
@@ -99,7 +103,7 @@ public sealed class GameRoot : Game
             return;
         }
 
-        _camera.Update(gameTime, keyboard, mouse, _previousMouse);
+        _camera.Update(gameTime, keyboard, mouse, _previousMouse, GraphicsDevice.Viewport);
         HandlePlayableInput(commands);
         UpdatePlayableSimulation(gameTime);
         DrainReceivedFrames();
@@ -118,13 +122,18 @@ public sealed class GameRoot : Game
         {
             var tiles = _renderAdapter.BuildTiles(_playableSimulation).ToArray();
             var tribes = _renderAdapter.BuildTribes(_playableSimulation).ToArray();
+
+            _vegetationRenderer?.CollectInstances(_playableSimulation, _assetRegistry);
+            _vegetationRenderer?.Render(_camera, GraphicsDevice);
+
             _worldRenderer.DrawWorld(
                 _spriteBatch,
                 tiles,
                 tribes,
                 _camera,
                 _playableSimulation.SelectedTribeId,
-                _terrainTextures);
+                _terrainTextures,
+                _terrainModels);
             _debugHud?.Draw(_spriteBatch, BuildHudState());
         }
 
@@ -151,6 +160,7 @@ public sealed class GameRoot : Game
             _receiverCancellation?.Dispose();
             _connection.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _worldRenderer?.Dispose();
+            _vegetationRenderer?.Dispose();
             _debugHud?.Dispose();
             _runtimeAssets?.Dispose();
             _spriteBatch?.Dispose();
@@ -281,7 +291,7 @@ public sealed class GameRoot : Game
 
     private void SelectTribeAtScreenPosition(Vector2 screenPosition)
     {
-        var worldPosition = _camera.ScreenToWorld(screenPosition);
+        var worldPosition = _camera.ScreenToWorld2D(screenPosition, GraphicsDevice.Viewport);
         var nearest = _renderAdapter.BuildTribes(_playableSimulation)
             .Select(tribe => new
             {
@@ -320,17 +330,43 @@ public sealed class GameRoot : Game
 
     private void LoadRuntimeTextures()
     {
-        if (_runtimeAssets is null)
-        {
-            return;
-        }
+        if (_runtimeAssets is null) return;
 
         foreach (var asset in RuntimeAssetCatalog.Terrain)
         {
             if (_runtimeAssets.LoadTexture(asset.Key) is { } texture)
-            {
                 _terrainTextures[asset.Key] = texture;
-            }
+        }
+    }
+
+    private void LoadVegetationModels()
+    {
+        if (_vegetationRenderer is null) return;
+
+        // Collect unique prop keys from all biome profiles
+        var modelKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var profile in AssetManifest.BiomeProfiles)
+        {
+            foreach (var propKey in profile.PropAssetKeys)
+                modelKeys.Add(propKey);
+        }
+
+        // Also load structure models used by PlaceTent
+        modelKeys.Add("Models/Structures/KenneySurvivalKit/tent");
+        modelKeys.Add("Models/Structures/KenneySurvivalKit/campfire-pit");
+
+        foreach (var key in modelKeys)
+            _vegetationRenderer.LoadModel(key, key);
+    }
+
+    private void LoadRuntimeModels()
+    {
+        if (_runtimeAssets is null) return;
+
+        foreach (var asset in RuntimeAssetCatalog.TerrainModels)
+        {
+            if (_runtimeAssets.LoadModel(asset.Key) is { } model)
+                _terrainModels[asset.Key] = model;
         }
     }
 

@@ -7,6 +7,9 @@ use std::{
 use parking_lot::RwLock;
 use rand::{prelude::IndexedRandom, rngs::SmallRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
+use crate::lineage_registry::LineageRegistry;
+use crate::tombstone::TombstoneLedger;
+use crate::tribes::BehaviorState;
 
 pub type SharedSimulation = Arc<RwLock<TribeSimulation>>;
 
@@ -174,6 +177,8 @@ pub struct StatusResponse {
     pub world_seed: u64,
     /// O1: active scenario id, or None for live dataset default.
     pub scenario_id: Option<String>,
+    // V3: polity tier counts among alive tribes
+    pub polity_tier_counts: std::collections::HashMap<String, usize>,
 }
 
 #[derive(serde::Serialize)]
@@ -263,6 +268,14 @@ pub struct TribeSnapshotResponse {
     pub alive: bool,
     /// K3: biome tile counts for this tribe's territory, e.g. {"plains":3,"forest":1}.
     pub biome_composition: std::collections::HashMap<String, usize>,
+    // V3 fields
+    pub polity_tier: crate::tribes::PolityTier,
+    pub parent_polity_id: Option<u32>,
+    pub constituent_count: usize,
+    pub specialization_role: crate::tribes::SpecializationRole,
+    pub veterancy_xp: u32,
+    pub main_camp_tile: u16,
+    pub citizen_count: usize,
 }
 
 // ─── TileOwnershipResponse ────────────────────────────────────────────────────
@@ -334,6 +347,40 @@ pub struct RunSummary {
     pub war_count: usize,
     /// Tribes sorted: alive by territory desc, then extinct by ticks_alive desc.
     pub tribes: Vec<TribeSummaryRecord>,
+}
+
+// ─── Lineage Response types (R1) ────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct LineageResolveResponse {
+    pub entity_id: u32,
+    pub chain: Vec<(u32, u32)>,
+}
+
+#[derive(serde::Serialize)]
+pub struct LineageSeedResponse {
+    pub entity_id: u32,
+    pub cluster_id: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct SeedClusterEntry {
+    pub cluster_id: String,
+    pub entity_ids: Vec<u32>,
+}
+
+#[derive(serde::Serialize)]
+pub struct LineageStatsResponse {
+    pub total_entities: usize,
+    pub seed_clusters: Vec<SeedClusterEntry>,
+}
+
+// ─── Tombstone Response types (R2) ──────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct TombstonesResponse {
+    pub count: usize,
+    pub records: Vec<crate::tombstone::TombstoneRecord>,
 }
 
 // ─── Vec2 ─────────────────────────────────────────────────────────────────────
@@ -682,8 +729,20 @@ impl Genome {
 
     /// Mutate genome weights/topology. Always ends with `rebuild_compiled` so the
     /// cached activation plan stays valid regardless of what this method does.
-    pub fn mutate(&mut self, _rng: &mut rand::rngs::SmallRng, _rate: f32) {
-        // TODO: real weight/topology mutation
+    pub fn mutate(&mut self, rng: &mut rand::rngs::SmallRng, rate: f32) {
+        // Perturb enabled connection weights
+        for gene in &mut self.connections {
+            if !gene.enabled { continue; }
+            // 80% chance of weight perturbation
+            if rng.random::<f32>() < 0.8 {
+                gene.weight += rng.random_range(-rate..rate);
+                gene.weight = gene.weight.clamp(-3.0, 3.0);
+            }
+            // 5% chance of toggle enabled
+            if rng.random::<f32>() < 0.05 {
+                gene.enabled = !gene.enabled;
+            }
+        }
         // rebuild_compiled is called below so inference never uses a stale plan
         self.rebuild_compiled();
     }
@@ -852,6 +911,7 @@ pub struct TribeSimulation {
     recordings: Vec<Recording>,
     active_replay: Option<Vec<u8>>,
     last_frame: Vec<u8>,
+    last_frame_v1: Vec<u8>,
     /// Monotonic event id counter.
     next_event_id: u64,
     /// Global bounded ring buffer of recent events.
@@ -859,6 +919,10 @@ pub struct TribeSimulation {
     /// Per-tribe bounded event journals (indexed by tribe id). Persists after
     /// tribe extinction so logs remain queryable.
     tribe_events: HashMap<usize, VecDeque<crate::events::SimulationEvent>>,
+    /// R1: DAG-based entity lineage registry.
+    pub lineage_registry: LineageRegistry,
+    /// R2: Tombstone ledger for extinct tribes.
+    pub tombstone: TombstoneLedger,
     /// L1: First-class war records tracked independently from behavior states.
     pub active_wars: Vec<crate::war::WarState>,
     /// L1: Monotonic war id counter.
@@ -883,11 +947,14 @@ impl TribeSimulation {
             recordings: vec![],
             active_replay: None,
             last_frame: vec![],
+            last_frame_v1: vec![],
             next_event_id: 0,
             global_events: VecDeque::new(),
             tribe_events: HashMap::new(),
             active_wars: Vec::new(),
             next_war_id: 0,
+            lineage_registry: LineageRegistry::new(),
+            tombstone: TombstoneLedger::new(),
         };
         sim.initialize_tribes();
         Arc::new(RwLock::new(sim))
@@ -906,6 +973,22 @@ impl TribeSimulation {
             let home = self.tribes[i].home_tile as usize;
             let id = self.tribes[i].id as u32;
             self.world.set_tile_owner(home, id);
+        }
+
+        // R1: Register seed entities in lineage registry, populate citizens
+        for (i, profile) in self.config.clusters.iter().enumerate() {
+            let seed_count = if profile.size_ratio > 0.8 { 3 }
+                else if profile.size_ratio > 0.5 { 2 }
+                else { 2 }; // 1 seed + 1 same-gene twin
+            for _ in 0..seed_count {
+                let entity_id = self.lineage_registry.register_seed(&profile.id);
+                self.tribes[i].citizens.push(crate::tribes::CitizenRecord {
+                    entity_id,
+                    parent_a: crate::lineage_registry::SEED_SENTINEL,
+                    parent_b: crate::lineage_registry::SEED_SENTINEL,
+                    generation: 0,
+                });
+            }
         }
 
         // Build the initial cached frame (no food changes on tick 0)
@@ -993,6 +1076,8 @@ impl TribeSimulation {
         // L1: clear war records on reset
         self.active_wars.clear();
         self.next_war_id = 0;
+        self.lineage_registry = LineageRegistry::new();
+        self.tombstone = TombstoneLedger::new();
 
         // Emit reset event before spawn events
         let reset_ev = crate::events::SimulationEvent::new(
@@ -1047,6 +1132,19 @@ impl TribeSimulation {
             self.world.set_tile_owner(home, id);
         }
 
+        // R1: Register seed entities in lineage registry for scenario tribes
+        for (i, profile) in profiles.iter().enumerate() {
+            for _ in 0..2 {
+                let entity_id = self.lineage_registry.register_seed(&profile.id);
+                self.tribes[i].citizens.push(crate::tribes::CitizenRecord {
+                    entity_id,
+                    parent_a: crate::lineage_registry::SEED_SENTINEL,
+                    parent_b: crate::lineage_registry::SEED_SENTINEL,
+                    generation: 0,
+                });
+            }
+        }
+
         self.last_frame = self.build_frame(&[]);
 
         let tick = self.tick;
@@ -1074,6 +1172,7 @@ impl TribeSimulation {
             total_tiles: self.world.total_tiles,
             world_seed: self.config.world_seed,
             scenario_id: self.config.scenario_id.clone(),
+            polity_tier_counts: self.polity_tier_count_map(),
         }
     }
 
@@ -1181,31 +1280,39 @@ impl TribeSimulation {
             ticks_alive: t.ticks_alive,
             alive: t.alive,
             biome_composition: self.biome_composition_for_tribe(id),
+            polity_tier: t.polity_tier,
+            parent_polity_id: t.parent_polity_id,
+            constituent_count: t.constituent_tribe_ids.len(),
+            specialization_role: t.specialization_role,
+            veterancy_xp: t.veterancy_xp,
+            main_camp_tile: t.main_camp_tile,
+            citizen_count: t.citizens.len(),
         })
     }
 
     pub fn tile_ownership_snapshot(&self) -> TileOwnershipResponse {
         let total = self.world.total_tiles;
-        let mut owners: Vec<Option<u32>> = vec![None; total];
-
-        for tribe in &self.tribes {
-            if !tribe.alive { continue; }
-            for &tile_idx in &tribe.territory {
-                let idx = tile_idx as usize;
-                if idx < total {
-                    owners[idx] = Some(tribe.id as u32);
-                }
+        let owners: Vec<TileOwnerRecord> = (0..total).map(|i| {
+            let occupants = self.world.get_tile_occupants(i);
+            let owner_tribe_id = if occupants.len() == 1 {
+                Some(occupants[0].tribe_id)
+            } else if occupants.len() > 1 {
+                // Return first occupant as nominal owner, mark contested
+                Some(occupants[0].tribe_id)
+            } else {
+                None
+            };
+            TileOwnerRecord {
+                tile_id: i as u32,
+                owner_tribe_id,
+                contested: self.world.is_disputed(i),
             }
-        }
+        }).collect();
 
         TileOwnershipResponse {
             width: self.world.grid_w,
             height: self.world.grid_h,
-            owners: owners.into_iter().enumerate().map(|(i, owner)| TileOwnerRecord {
-                tile_id: i as u32,
-                owner_tribe_id: owner,
-                contested: false,
-            }).collect(),
+            owners,
         }
     }
 
@@ -1269,6 +1376,19 @@ impl TribeSimulation {
         // 5. Alliance system (Task 9)
         self.apply_alliances();
 
+        // R5: Diplomacy merger — allied tribes checked for merge eligibility
+        self.apply_merger();
+
+        // R5: Rebellion check — administering tribes with low A_team may secede
+        if self.tick % 30 == 0 {
+            self.apply_rebellion_check();
+        }
+
+        // R6: Reproduction — every 50 ticks for eligible tribes
+        for i in 0..self.tribes.len() {
+            self.try_reproduction(i);
+        }
+
         // 6. Population dynamics: food → pop growth/decline
         for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
             let food_per_pop = if tribe.population > 0 {
@@ -1303,13 +1423,17 @@ impl TribeSimulation {
             self.halted = true;
         }
 
-        // Emit TribeExtinct for any tribe that died this tick
+        // R2: cleanup_tribe + emit TribeExtinct for any tribe that died this tick
         let tick = self.tick;
         let gen = self.generation;
-        let extinct_ids: Vec<u32> = was_alive.iter().zip(self.tribes.iter())
-            .filter_map(|(&was, t)| if was && !t.alive { Some(t.id as u32) } else { None })
+        let extinct_indices: Vec<usize> = was_alive.iter().zip(self.tribes.iter())
+            .enumerate()
+            .filter_map(|(i, (&was, t))| if was && !t.alive { Some(i) } else { None })
             .collect();
-        for tribe_id in extinct_ids {
+        for tribe_idx in &extinct_indices {
+            let cause = if self.tribes[*tribe_idx].population == 0 { "extinction" } else { "unknown" };
+            self.cleanup_tribe(*tribe_idx, cause);
+            let tribe_id = self.tribes[*tribe_idx].id as u32;
             let ev = crate::events::SimulationEvent::new(
                 0, tick, gen,
                 crate::events::EventType::TribeExtinct,
@@ -1426,6 +1550,28 @@ impl TribeSimulation {
                     current
                 }
                 BehaviorState::Migrating => current, // handled separately if needed
+                // V3: Consolidating — polity merger in progress
+                BehaviorState::Consolidating => {
+                    if self.tribes[i].ticks_in_state > 100 {
+                        BehaviorState::Administering
+                    } else { current }
+                }
+                // V3: Rebellious — constituent seeking independence
+                BehaviorState::Rebellious => {
+                    if self.tribes[i].ticks_in_state > 50 && aggression > 0.7 {
+                        BehaviorState::AtWar
+                    } else if self.tribes[i].ticks_in_state > 200 {
+                        BehaviorState::Administering
+                    } else { current }
+                }
+                // V3: Administering — part of larger merged polity
+                BehaviorState::Administering => {
+                    if self.tribes[i].stats.a_team < 0.25
+                        && self.tribes[i].ticks_in_state > 100
+                    {
+                        BehaviorState::Rebellious
+                    } else { current }
+                }
             };
 
             // Consider migration: goal_drive > 0.6, not at war
@@ -1445,6 +1591,9 @@ impl TribeSimulation {
             } else {
                 self.tribes[i].ticks_in_state += 1;
             }
+
+            // V3: Veterancy XP — per-tick role fulfillment
+            self.apply_veterancy_xp(i);
         }
 
         // Emit BehaviorChanged events (outside the loop to avoid borrow conflict)
@@ -1787,6 +1936,294 @@ impl TribeSimulation {
         }
     }
 
+    // ─── V3: Polity tier count map ───────────────────────────────────────────
+
+    fn polity_tier_count_map(&self) -> std::collections::HashMap<String, usize> {
+        let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for t in &self.tribes {
+            if t.alive {
+                let key = format!("{:?}", t.polity_tier);
+                *map.entry(key).or_insert(0) += 1;
+            }
+        }
+        map
+    }
+
+    // ─── V3: Veterancy XP ────────────────────────────────────────────────────
+
+    fn apply_veterancy_xp(&mut self, tribe_idx: usize) {
+        use crate::tribes::BehaviorState;
+        let tribe = &self.tribes[tribe_idx];
+        if !tribe.alive { return; }
+        let role_xp = match tribe.specialization_role {
+            crate::tribes::SpecializationRole::Generalist => 0.5,
+            crate::tribes::SpecializationRole::Military => {
+                if matches!(tribe.behavior, BehaviorState::AtWar) { 2.0 } else { 0.5 }
+            }
+            crate::tribes::SpecializationRole::Economy => {
+                let food_ratio = if tribe.population > 0 {
+                    tribe.food_stores / tribe.population as f32
+                } else { 0.0 };
+                if food_ratio > 0.8 { 2.0 } else { 0.5 }
+            }
+            crate::tribes::SpecializationRole::Governance => {
+                if tribe.territory.len() > 20 { 2.0 } else { 0.5 }
+            }
+            crate::tribes::SpecializationRole::Logistics => {
+                if tribe.river_crossings > 0 || matches!(tribe.behavior, BehaviorState::Migrating) {
+                    2.0
+                } else { 0.5 }
+            }
+            crate::tribes::SpecializationRole::InternalAffairs => {
+                if tribe.ally_tribe.is_some() { 2.0 } else { 0.5 }
+            }
+        };
+        self.tribes[tribe_idx].veterancy_xp = self.tribes[tribe_idx].veterancy_xp.saturating_add(role_xp as u32);
+    }
+
+    /// Assign specialization role based on dominant artifact.
+    pub fn assign_specialization_role(stats: &crate::tribes::TribeStats) -> crate::tribes::SpecializationRole {
+        use crate::tribes::SpecializationRole;
+        let scores = [
+            (SpecializationRole::Military, stats.a_combat),
+            (SpecializationRole::Economy, stats.a_resource),
+            (SpecializationRole::Governance, stats.a_map_objective),
+            (SpecializationRole::Logistics, stats.a_risk),
+            (SpecializationRole::InternalAffairs, stats.a_team),
+        ];
+        let max_entry = scores.iter().max_by(|a, b| {
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        match max_entry {
+            Some(&(role, score)) if score > 0.0 => role,
+            _ => SpecializationRole::Generalist,
+        }
+    }
+
+    // ─── R5: Binary Diplomacy — Alliance/Merger Pipeline ───────────────────────
+
+    /// Ticks as Allied before merge eligible.
+    pub const MERGE_TICK_THRESHOLD: u32 = 300;
+    /// Every N ticks, check for merge eligibility.
+    pub const MERGE_CHECK_INTERVAL: u64 = 100;
+    /// A_team below this triggers rebellion.
+    pub const REBELLION_A_TEAM_THRESHOLD: f32 = 0.25;
+
+    /// Map total unique constituent count to polity tier.
+    fn polity_tier_for_count(total: usize) -> crate::tribes::PolityTier {
+        use crate::tribes::PolityTier;
+        if total >= 100 { PolityTier::Empire }
+        else if total >= 50 { PolityTier::Kingdom }
+        else if total >= 25 { PolityTier::Duchy }
+        else if total >= 10 { PolityTier::County }
+        else if total >= 3 { PolityTier::City }
+        else { PolityTier::Tribe }
+    }
+
+    /// Check allied pairs for merge eligibility. One pair per check interval.
+    fn apply_merger(&mut self) {
+        use crate::tribes::BehaviorState;
+        if self.tick % Self::MERGE_CHECK_INTERVAL != 0 { return; }
+
+        let allied_pairs: Vec<(usize, usize)> = (0..self.tribes.len())
+            .filter_map(|i| {
+                let t = &self.tribes[i];
+                if !t.alive || t.behavior != BehaviorState::Allied { return None; }
+                t.ally_tribe.map(|j| if i < j { (i, j) } else { (j, i) })
+            })
+            .collect();
+
+        for (a, b) in allied_pairs {
+            if !self.tribes[a].alive || !self.tribes[b].alive { continue; }
+            if self.tribes[a].ally_tribe != Some(b) { continue; }
+            if self.tribes[a].ticks_in_state < Self::MERGE_TICK_THRESHOLD { continue; }
+            if self.tribes[b].ticks_in_state < Self::MERGE_TICK_THRESHOLD { continue; }
+
+            let (absorber, absorbed) = if self.tribes[a].population >= self.tribes[b].population {
+                (a, b)
+            } else { (b, a) };
+
+            if self.try_merge_allies(absorber, absorbed) { break; }
+        }
+    }
+
+    /// Merge two allied tribes. Absorber gains territory, population, constituents.
+    fn try_merge_allies(&mut self, absorber: usize, absorbed: usize) -> bool {
+
+        if !self.tribes[absorber].alive || !self.tribes[absorbed].alive { return false; }
+
+        let tick = self.tick;
+        let gen = self.generation;
+        let absorber_id = self.tribes[absorber].id as u32;
+        let absorbed_id = self.tribes[absorbed].id as u32;
+
+        let mut ev = crate::events::SimulationEvent::new(
+            0, tick, gen,
+            crate::events::EventType::MergeInitiated,
+            crate::events::EventSeverity::Important,
+            absorber_id,
+        );
+        ev.other_tribe_id = absorbed_id;
+        self.push_event(ev);
+
+        let absorber_cc = self.tribes[absorber].constituent_tribe_ids.len();
+        let absorbed_cc = self.tribes[absorbed].constituent_tribe_ids.len();
+        let total_in_polity = 1 + absorber_cc + 1 + absorbed_cc;
+
+        for &cid in self.tribes[absorbed].constituent_tribe_ids.clone().iter() {
+            if !self.tribes[absorber].constituent_tribe_ids.contains(&cid) {
+                self.tribes[absorber].constituent_tribe_ids.push(cid);
+            }
+        }
+        if !self.tribes[absorber].constituent_tribe_ids.contains(&absorbed_id) {
+            self.tribes[absorber].constituent_tribe_ids.push(absorbed_id);
+        }
+
+        let absorbed_territory: Vec<u16> = self.tribes[absorbed].territory.clone();
+        self.tribes[absorber].territory.extend(&absorbed_territory);
+        self.tribes[absorber].territory.sort();
+        self.tribes[absorber].territory.dedup();
+
+        let absorbed_pop = self.tribes[absorbed].population;
+        let absorbed_food = self.tribes[absorbed].food_stores;
+        let absorbed_citizens = self.tribes[absorbed].citizens.clone();
+        let absorbed_founders = self.tribes[absorbed].founders.clone();
+        let absorbed_cluster_id = self.tribes[absorbed].cluster_id.clone();
+
+        self.tribes[absorber].population = self.tribes[absorber].population.saturating_add(absorbed_pop);
+        self.tribes[absorber].food_stores += absorbed_food;
+        self.tribes[absorber].citizens.extend(absorbed_citizens);
+        self.tribes[absorber].founders.extend(absorbed_founders);
+
+        for &t in &absorbed_territory {
+            self.world.set_tile_owner(t as usize, absorber_id);
+        }
+
+        self.tribes[absorber].lineage.push(format!("merged-{}", absorbed_cluster_id));
+
+        let new_tier = Self::polity_tier_for_count(total_in_polity);
+        let tier_upgraded = new_tier as u8 > self.tribes[absorber].polity_tier as u8;
+        if tier_upgraded { self.tribes[absorber].polity_tier = new_tier; }
+
+        self.tribes[absorbed].behavior = BehaviorState::Administering;
+        self.tribes[absorbed].parent_polity_id = Some(absorber_id);
+        self.tribes[absorbed].target_tribe = None;
+        self.tribes[absorbed].ally_tribe = None;
+        self.tribes[absorbed].ticks_in_state = 0;
+
+        self.tribes[absorber].ally_tribe = None;
+        self.tribes[absorber].target_tribe = None;
+        self.tribes[absorber].ticks_in_state = 0;
+
+        self.assign_roles(absorber);
+
+        let mut ev2 = crate::events::SimulationEvent::new(
+            0, tick, gen,
+            crate::events::EventType::MergeCompleted,
+            crate::events::EventSeverity::Important,
+            absorber_id,
+        );
+        ev2.other_tribe_id = absorbed_id;
+        ev2.value_a = total_in_polity as f32;
+        ev2.value_b = new_tier as u8 as f32;
+        self.push_event(ev2);
+
+        if tier_upgraded {
+            let mut ev3 = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::PolityUpgraded,
+                crate::events::EventSeverity::Important,
+                absorber_id,
+            );
+            ev3.value_a = new_tier as u8 as f32;
+            ev3.value_b = total_in_polity as f32;
+            self.push_event(ev3);
+        }
+        true
+    }
+
+    /// Assign specialization roles based on dominant artifact.
+    fn assign_roles(&mut self, polity_id: usize) {
+        let role = Self::assign_specialization_role(&self.tribes[polity_id].stats);
+        self.tribes[polity_id].specialization_role = role;
+
+        let polity_id_u32 = polity_id as u32;
+        for i in 0..self.tribes.len() {
+            if i == polity_id { continue; }
+            if self.tribes[i].parent_polity_id == Some(polity_id_u32) {
+                let role = Self::assign_specialization_role(&self.tribes[i].stats);
+                self.tribes[i].specialization_role = role;
+            }
+        }
+
+        let tick = self.tick;
+        let gen = self.generation;
+        let mut ev = crate::events::SimulationEvent::new(
+            0, tick, gen,
+            crate::events::EventType::RoleAssigned,
+            crate::events::EventSeverity::Info,
+            polity_id as u32,
+        );
+        ev.value_a = self.tribes[polity_id].specialization_role as u8 as f32;
+        self.push_event(ev);
+    }
+
+    /// Check if an Administering tribe rebels (low A_team).
+    fn check_rebellion(&mut self, tribe_idx: usize) -> bool {
+        use crate::tribes::{BehaviorState, PolityTier, SpecializationRole};
+
+        if !self.tribes[tribe_idx].alive { return false; }
+        if self.tribes[tribe_idx].behavior != BehaviorState::Administering { return false; }
+        if self.tribes[tribe_idx].stats.a_team >= Self::REBELLION_A_TEAM_THRESHOLD { return false; }
+
+        let parent_id = match self.tribes[tribe_idx].parent_polity_id {
+            Some(pid) => pid as usize,
+            None => return false,
+        };
+        if parent_id >= self.tribes.len() || !self.tribes[parent_id].alive { return false; }
+
+        let tick = self.tick;
+        let gen = self.generation;
+        let tribe_id = self.tribes[tribe_idx].id as u32;
+
+        self.tribes[parent_id].constituent_tribe_ids.retain(|&cid| cid != tribe_id);
+        self.tribes[tribe_idx].parent_polity_id = None;
+        self.tribes[tribe_idx].polity_tier = PolityTier::Tribe;
+        self.tribes[tribe_idx].behavior = BehaviorState::Settling;
+        self.tribes[tribe_idx].ticks_in_state = 0;
+        self.tribes[tribe_idx].specialization_role = SpecializationRole::Generalist;
+
+        let total_remaining = 1 + self.tribes[parent_id].constituent_tribe_ids.len();
+        let parent_new_tier = Self::polity_tier_for_count(total_remaining);
+        if (parent_new_tier as u8) < (self.tribes[parent_id].polity_tier as u8) {
+            self.tribes[parent_id].polity_tier = parent_new_tier;
+        }
+
+        let mut ev = crate::events::SimulationEvent::new(
+            0, tick, gen,
+            crate::events::EventType::RebellionStarted,
+            crate::events::EventSeverity::Critical,
+            tribe_id,
+        );
+        ev.other_tribe_id = parent_id as u32;
+        self.push_event(ev);
+        true
+    }
+
+    /// Scan all Administering tribes for low A_team rebellion.
+    fn apply_rebellion_check(&mut self) {
+        let candidates: Vec<usize> = (0..self.tribes.len())
+            .filter(|&i| {
+                self.tribes[i].alive
+                    && self.tribes[i].behavior == crate::tribes::BehaviorState::Administering
+                    && self.tribes[i].stats.a_team < Self::REBELLION_A_TEAM_THRESHOLD
+                    && self.tribes[i].ticks_in_state > 100
+            })
+            .collect();
+
+        for idx in candidates { self.check_rebellion(idx); }
+    }
+
     // ─── Task 10: Generation Boundary ────────────────────────────────────────
 
     fn apply_generation_boundary(&mut self) {
@@ -1893,9 +2330,21 @@ impl TribeSimulation {
         }
     }
 
-    /// Return the last packed frame. Can be called from a read-lock context.
+    /// Return the last packed V0 frame. Can be called from a read-lock context.
     pub fn current_packet(&self) -> Vec<u8> {
         self.last_frame.clone()
+    }
+
+    /// Return the last packed V1 frame. Can be called from a read-lock context.
+    pub fn current_packet_v1(&self) -> Vec<u8> {
+        self.last_frame_v1.clone()
+    }
+
+    /// Accessors for FrameV1 wrapping (fields are crate-private).
+    pub fn simulation_tick(&self) -> u64 { self.tick }
+    pub fn simulation_generation(&self) -> u32 { self.generation }
+    pub fn alive_tribe_count(&self) -> u32 {
+        self.tribes.iter().filter(|t| t.alive).count() as u32
     }
 
     /// Build, cache, and return a binary WS frame for the current simulation state.
@@ -1903,6 +2352,10 @@ impl TribeSimulation {
         let changed_food = self.world.changed_food_tiles();
         let frame = self.build_frame(&changed_food);
         self.last_frame = frame.clone();
+
+        // Also build V1 frame for clients that support it
+        self.last_frame_v1 = self.build_frame_v1();
+
         frame
     }
 
@@ -1941,6 +2394,102 @@ impl TribeSimulation {
         for &(tile_idx, food) in changed_food {
             push_u16(&mut buf, tile_idx);
             push_f32(&mut buf, food);
+        }
+
+        buf
+    }
+
+    /// FrameV1 payload: richer binary frame with all V3 fields.
+    fn build_frame_v1(&self) -> Vec<u8> {
+        use crate::frame_v1::*;
+        use crate::tribes::TribeState;
+        use crate::war::WarState;
+
+        let alive_tribes: Vec<&TribeState> =
+            self.tribes.iter().filter(|t| t.alive).collect();
+
+        // Collect tiles with occupants or dispute
+        let interesting_tiles: Vec<usize> = (0..self.world.total_tiles)
+            .filter(|&i| !self.world.tile_occupants[i].is_empty() || self.world.tile_is_disputed[i])
+            .collect();
+
+        let active_wars: &[WarState] = &self.active_wars;
+        let events = self.recent_events(20);
+
+        let approx_cap = alive_tribes.len() * FRAME_V1_TRIBE_RECORD_BYTES
+            + interesting_tiles.len() * FRAME_V1_TILE_RECORD_BYTES
+            + active_wars.len() * FRAME_V1_WAR_RECORD_BYTES
+            + events.len() * FRAME_V1_EVENT_RECORD_BYTES
+            + 32;
+        let mut buf = Vec::with_capacity(approx_cap);
+
+        // ── Per-tribe records (46 bytes each) ──
+        for tribe in &alive_tribes {
+            push_u32(&mut buf, tribe.id as u32);                          // 4
+            buf.push(tribe.polity_tier as u8);                            // 1
+            buf.push(tribe.specialization_role as u8);                    // 1
+            push_u16(&mut buf, tribe.main_camp_tile);                     // 2
+            push_u32(&mut buf, tribe.population);                         // 4
+            push_u32(&mut buf, tribe.constituent_tribe_ids.len() as u32); // 4
+            push_f32(&mut buf, tribe.food_stores);                        // 4
+            push_f32(&mut buf, tribe.stats.a_combat);                     // 4
+            push_f32(&mut buf, tribe.stats.a_risk);                       // 4
+            push_f32(&mut buf, tribe.stats.a_resource);                   // 4
+            push_f32(&mut buf, tribe.stats.a_map_objective);              // 4
+            push_f32(&mut buf, tribe.stats.a_team);                       // 4
+            push_u16(&mut buf, tribe.territory.len() as u16);             // 2
+            push_u32(&mut buf, tribe.citizens.len() as u32);              // 4
+            push_u16(&mut buf, tribe.veterancy_xp as u16);                // 2
+            buf.push(tribe.behavior as u8);                               // 1
+            buf.push(tribe.alive as u8);                                  // 1
+            // total: 4+1+1+2+4+4+4+4+4+4+4+4+2+4+2+1+1 = 50
+        }
+
+        // ── Flags byte ──
+        let mut flags: u8 = 0;
+        if !interesting_tiles.is_empty() { flags |= FLAG_TILE_DATA; }
+        if !active_wars.is_empty() { flags |= FLAG_WAR_DATA; }
+        if !events.is_empty() { flags |= FLAG_EVENT_DATA; }
+        buf.push(flags);
+
+        // ── Tile records (9 bytes each) ──
+        if flags & FLAG_TILE_DATA != 0 {
+            push_u16(&mut buf, interesting_tiles.len() as u16);
+            for &ti in &interesting_tiles {
+                let tile = &self.world.tiles[ti];
+                let occupant_count = self.world.tile_occupants[ti].len() as u8;
+                let disputed = self.world.tile_is_disputed[ti];
+                let controls_byte = disputed as u8; // bit 0 = disputed
+                push_u16(&mut buf, ti as u16);            // 2 tile_id
+                buf.push(tile.biome as u8);               // 1 biome
+                buf.push(occupant_count);                  // 1 occupants
+                push_f32(&mut buf, tile.food);             // 4 food
+                buf.push(controls_byte);                   // 1 flags
+                // total: 2+1+1+4+1 = 9
+            }
+        }
+
+        // ── War records (21 bytes each) ──
+        if flags & FLAG_WAR_DATA != 0 {
+            push_u16(&mut buf, active_wars.len() as u16);
+            for war in active_wars {
+                push_u32(&mut buf, war.war_id);            // 4
+                push_u32(&mut buf, war.attacker_id);       // 4
+                push_u32(&mut buf, war.defender_id);       // 4
+                push_u64(&mut buf, war.start_tick);        // 8
+                buf.push(war.status as u8);                // 1
+                // total: 4+4+4+8+1 = 21
+            }
+        }
+
+        // ── Event delta (5 bytes per event) ──
+        if flags & FLAG_EVENT_DATA != 0 {
+            push_u16(&mut buf, events.len() as u16);
+            for ev in &events {
+                buf.push(ev.event_type as u8);             // 1
+                push_u32(&mut buf, ev.tribe_id);           // 4
+                // total: 1+4 = 5
+            }
         }
 
         buf
@@ -2177,6 +2726,159 @@ impl TribeSimulation {
             tick_count: rec.frames.len() as u64,
             created_at: rec.created_at.clone(),
         })
+    }
+
+    // ─── R1: Lineage Registry Public Accessors ─────────────────────────────────
+
+    /// Resolve entity lineage DAG back to seeds.
+    pub fn resolve_lineage(&self, entity_id: u32) -> LineageResolveResponse {
+        let chain = self.lineage_registry.resolve_lineage(entity_id);
+        LineageResolveResponse { entity_id, chain }
+    }
+
+    /// Trace entity to its original seed cluster.
+    pub fn lineage_seed(&self, entity_id: u32) -> LineageSeedResponse {
+        let cluster_id = self.lineage_registry.seed_from_entity(entity_id);
+        LineageSeedResponse { entity_id, cluster_id }
+    }
+
+    /// Get lineage registry stats.
+    pub fn lineage_stats(&self) -> LineageStatsResponse {
+        let seed_clusters: Vec<SeedClusterEntry> = self.lineage_registry
+            .seed_clusters()
+            .map(|(id, ids)| SeedClusterEntry {
+                cluster_id: id.clone(),
+                entity_ids: ids.clone(),
+            })
+            .collect();
+        LineageStatsResponse {
+            total_entities: self.lineage_registry.total_entity_count(),
+            seed_clusters,
+        }
+    }
+
+    // ─── R2: Tombstone Public Accessors ──────────────────────────────────────
+
+    /// All tombstone records.
+    pub fn tombstones(&self) -> TombstonesResponse {
+        TombstonesResponse {
+            count: self.tombstone.count(),
+            records: self.tombstone.all_records().to_vec(),
+        }
+    }
+
+    /// Tombstone record for a specific tribe.
+    pub fn tombstone_record(&self, tribe_id: u32) -> Option<crate::tombstone::TombstoneRecord> {
+        self.tombstone.all_records().iter().find(|r| r.tribe_id == tribe_id).cloned()
+    }
+
+    // ─── R2: cleanup_tribe — Atomic extinction handler ────────────────────────
+
+    /// Atomically record death, cancel wars, remove territory.
+    fn cleanup_tribe(&mut self, tribe_idx: usize, cause: &str) {
+        let tribe_id = self.tribes[tribe_idx].id as u32;
+        if self.tombstone.is_dead(tribe_id) {
+            return; // Idempotent
+        }
+
+        // Record tombstone with snapshot taken before territory removal
+        self.tombstone.record_death(&self.tribes[tribe_idx], self.tick, cause);
+
+        // Cancel all active wars involving this tribe
+        for war in self.active_wars.iter_mut() {
+            if war.status == crate::war::WarStatus::Active
+                && (war.attacker_id == tribe_id || war.defender_id == tribe_id)
+            {
+                war.status = crate::war::WarStatus::WarCancelled;
+            }
+        }
+
+        // Remove tribe territory from tile ownership map
+        for &tile_idx in &self.tribes[tribe_idx].territory {
+            let idx = tile_idx as usize;
+            if idx < self.world.total_tiles {
+                self.world.remove_tile_occupant(idx, tribe_id);
+            }
+        }
+    }
+
+    // ─── R6: Reproduction ────────────────────────────────────────────────────
+
+    /// Blend two parent artifact sets with mutation.
+    fn blend_artifacts(
+        parent: &crate::tribes::TribeStats,
+        mutation_rate: f32,
+        rng: &mut SmallRng,
+    ) -> [f32; 5] {
+        let base = [
+            parent.a_combat,
+            parent.a_risk,
+            parent.a_resource,
+            parent.a_map_objective,
+            parent.a_team,
+        ];
+        base.map(|v| {
+            let mutation = rng.random_range(-mutation_rate..mutation_rate);
+            (v + mutation).clamp(0.0, 1.0)
+        })
+    }
+
+    /// Try reproduction for a tribe. Fires every 50 ticks.
+    fn try_reproduction(&mut self, tribe_idx: usize) {
+        if self.tick % 50 != 0 { return; }
+        let (eligible, pop) = {
+            let tribe = &self.tribes[tribe_idx];
+            if !tribe.alive || tribe.citizens.len() < 2 {
+                (false, 0)
+            } else {
+                (true, tribe.citizens.len())
+            }
+        };
+        if !eligible { return; }
+
+        // Pick two distinct random citizens
+        let pick_a = self.rng.random_range(0..pop);
+        let mut pick_b = self.rng.random_range(0..pop - 1);
+        if pick_b >= pick_a { pick_b += 1; }
+
+        let gen = self.tribes[tribe_idx].generation;
+        let parent_a = self.tribes[tribe_idx].citizens[pick_a].entity_id;
+        let parent_b = self.tribes[tribe_idx].citizens[pick_b].entity_id;
+
+        // Register child in lineage registry
+        let child_id = self.lineage_registry.register(parent_a, parent_b);
+
+        // Clone parent stats for blend before mutation
+        let stats = self.tribes[tribe_idx].stats.clone();
+        let blended = Self::blend_artifacts(&stats, self.config.mutation_rate, &mut self.rng);
+
+        // Push new citizen
+        let new_gen = gen + 1;
+        self.tribes[tribe_idx].citizens.push(crate::tribes::CitizenRecord {
+            entity_id: child_id,
+            parent_a,
+            parent_b,
+            generation: new_gen,
+        });
+
+        // Nudge tribe stats toward blended values
+        let t = &mut self.tribes[tribe_idx].stats;
+        t.a_combat = t.a_combat * 0.95 + blended[0] * 0.05;
+        t.a_risk = t.a_risk * 0.95 + blended[1] * 0.05;
+        t.a_resource = t.a_resource * 0.95 + blended[2] * 0.05;
+        t.a_map_objective = t.a_map_objective * 0.95 + blended[3] * 0.05;
+        t.a_team = t.a_team * 0.95 + blended[4] * 0.05;
+
+        // Emit OffspringBorn event
+        let mut ev = crate::events::SimulationEvent::new(
+            0, self.tick, self.generation,
+            crate::events::EventType::OffspringBorn,
+            crate::events::EventSeverity::Debug,
+            self.tribes[tribe_idx].id as u32,
+        );
+        ev.value_a = child_id as f32;
+        ev.value_b = self.tribes[tribe_idx].citizens.len() as f32;
+        self.push_event(ev);
     }
 }
 

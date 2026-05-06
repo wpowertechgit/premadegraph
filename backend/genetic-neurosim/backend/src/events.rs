@@ -44,6 +44,8 @@ pub enum EventType {
     TribeAbsorbed = 22,
     TileFortified = 23,
     TribeMigrated = 24,
+    TileDisputed = 25,
+    DisputeResolved = 26,
 
     // War (30–39)
     WarDeclared = 30,
@@ -54,11 +56,24 @@ pub enum EventType {
     // Diplomacy (40–49)
     AllianceFormed = 40,
     AllianceBroken = 41,
+    AllianceProposed = 42,
+
+    // V3: Polity & Role (43–49)
+    PolityUpgraded = 43,
+    RoleAssigned = 44,
+    ConsolidationStarted = 45,
+    RebellionStarted = 46,
+    MergeInitiated = 47,
+    MergeCompleted = 48,
+    RebellionCompleted = 49,
 
     // Neural/Genetic (50–59)
     BehaviorChanged = 50,
     GenomeMutated = 51,
     NeuralDecision = 52,
+
+    // R6: Reproduction event
+    OffspringBorn = 55,
 
     // Tech (60–69)
     BridgesUnlocked = 60,

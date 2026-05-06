@@ -6,6 +6,7 @@ public sealed class RuntimeAssetLoader : IDisposable
 {
     private readonly GraphicsDevice _graphicsDevice;
     private readonly Dictionary<string, Texture2D> _textureCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RuntimeModel> _modelCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<RuntimeAssetMissingDiagnostic> _missingAssets = [];
 
     public RuntimeAssetLoader(GraphicsDevice graphicsDevice, string? contentRoot = null)
@@ -87,14 +88,56 @@ public sealed class RuntimeAssetLoader : IDisposable
         }
     }
 
+    public RuntimeModel? LoadModel(string key)
+    {
+        if (_modelCache.TryGetValue(key, out var cachedModel))
+            return cachedModel;
+
+        if (!RuntimeAssetCatalog.AssetsByKey.TryGetValue(key, out var asset))
+        {
+            RecordMissing(key, null);
+            return null;
+        }
+
+        if (ContentRoot is null)
+        {
+            RecordMissing(key, asset.RelativePath);
+            return null;
+        }
+
+        var fullPath = Path.Combine(
+            ContentRoot,
+            asset.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!File.Exists(fullPath))
+        {
+            RecordMissing(key, asset.RelativePath);
+            return null;
+        }
+
+        try
+        {
+            var objData = ObjParser.Parse(fullPath);
+            var model = RuntimeModel.FromObjData(_graphicsDevice, objData);
+            _modelCache[key] = model;
+            return model;
+        }
+        catch
+        {
+            RecordMissing(key, asset.RelativePath);
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         foreach (var texture in _textureCache.Values)
-        {
             texture.Dispose();
-        }
-
         _textureCache.Clear();
+
+        foreach (var model in _modelCache.Values)
+            model.Dispose();
+        _modelCache.Clear();
     }
 
     private void RecordMissing(string key, string? relativePath)

@@ -3,6 +3,10 @@ pub const DESKTOP_FRAME_VERSION: u16 = 1;
 pub const DESKTOP_FRAME_HEADER_BYTES: usize = 32;
 pub const PAYLOAD_KIND_TRIBAL_LEGACY_V0: u16 = 1;
 
+// V1 frame constants
+pub const PAYLOAD_KIND_FRAME_V1: u16 = 2;
+pub const DESKTOP_FRAME_V1_HEADER_BYTES: usize = 40;
+
 pub fn wrap_tribal_legacy_frame(payload: &[u8]) -> Vec<u8> {
     let tick = legacy_tick(payload);
     let generation = read_u32_or_zero(payload, 16);
@@ -14,6 +18,22 @@ pub fn wrap_tribal_legacy_frame(payload: &[u8]) -> Vec<u8> {
     wrapped.extend_from_slice(&(DESKTOP_FRAME_HEADER_BYTES as u16).to_le_bytes());
     wrapped.extend_from_slice(&PAYLOAD_KIND_TRIBAL_LEGACY_V0.to_le_bytes());
     wrapped.extend_from_slice(&0_u16.to_le_bytes());
+    wrapped.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    wrapped.extend_from_slice(&tick.to_le_bytes());
+    wrapped.extend_from_slice(&generation.to_le_bytes());
+    wrapped.extend_from_slice(&record_count.to_le_bytes());
+    wrapped.extend_from_slice(payload);
+    wrapped
+}
+
+/// Wrap a FrameV1 payload in the TNS3 desktop envelope (40-byte header).
+pub fn wrap_frame_v1(payload: &[u8], tick: u64, generation: u32, record_count: u32) -> Vec<u8> {
+    let mut wrapped = Vec::with_capacity(DESKTOP_FRAME_V1_HEADER_BYTES + payload.len());
+    wrapped.extend_from_slice(DESKTOP_FRAME_MAGIC);
+    wrapped.extend_from_slice(&DESKTOP_FRAME_VERSION.to_le_bytes());
+    wrapped.extend_from_slice(&(DESKTOP_FRAME_V1_HEADER_BYTES as u16).to_le_bytes());
+    wrapped.extend_from_slice(&PAYLOAD_KIND_FRAME_V1.to_le_bytes());
+    wrapped.extend_from_slice(&0_u16.to_le_bytes()); // flags
     wrapped.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     wrapped.extend_from_slice(&tick.to_le_bytes());
     wrapped.extend_from_slice(&generation.to_le_bytes());

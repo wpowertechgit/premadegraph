@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
+arrayvec = "0.7"
 axum = { version = "0.8.2", features = ["ws", "macros", "json"] }
 futures = "0.3.31"
 parking_lot = "0.12.3"

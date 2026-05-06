@@ -142,35 +142,18 @@ public static class AssetManifest
 
     public static IReadOnlyList<SettlementVisualProfile> SettlementProfiles { get; } =
     [
-        new(
-            PolityTier.Tribe,
-            null,
-            "Models/Structures/KenneySurvivalKit/tent",
-            "UI/Insignia/tribe",
-            "LOD/settlements/tribe"),
-        new(
-            PolityTier.City,
-            null,
-            "Models/Settlements/Reference/MedievalVillagePack/House_1",
-            "UI/Insignia/city",
-            "LOD/settlements/city"),
-        new(
-            PolityTier.Duchy,
-            null,
-            "Models/Structures/KenneyRetroFantasyKit/tower",
-            "UI/Insignia/duchy",
-            "LOD/settlements/duchy"),
-        new(
-            PolityTier.Kingdom,
-            null,
-            "Models/Structures/KayKitMedievalHexagon/Neutral/building_grain",
-            "UI/Insignia/kingdom",
-            "LOD/settlements/kingdom"),
-        new(
-            PolityTier.Empire,
-            null,
-            "Models/Structures/KayKitMedievalHexagon/Neutral/wall_straight_gate",
-            "UI/Insignia/empire",
-            "LOD/settlements/empire"),
+        // Tribal — 3 biome variants
+        new(PolityTier.Tribe, null,              RuntimeAssetCatalog.SettlementTribalGreen,   "UI/Insignia/tribe",   "LOD/settlements/tribe"),
+        new(PolityTier.Tribe, BiomeId.Plains,     RuntimeAssetCatalog.SettlementTribalGreen,   "UI/Insignia/tribe",   "LOD/settlements/tribe"),
+        new(PolityTier.Tribe, BiomeId.DrySteppe,  RuntimeAssetCatalog.SettlementTribalDesert,  "UI/Insignia/tribe",   "LOD/settlements/tribe"),
+        new(PolityTier.Tribe, BiomeId.Cold,       RuntimeAssetCatalog.SettlementTribalWinter,  "UI/Insignia/tribe",   "LOD/settlements/tribe"),
+        // City
+        new(PolityTier.City,  null,               RuntimeAssetCatalog.SettlementCityGreen,     "UI/Insignia/city",    "LOD/settlements/city"),
+        // Duchy
+        new(PolityTier.Duchy, null,               RuntimeAssetCatalog.SettlementDuchyGreen,    "UI/Insignia/duchy",   "LOD/settlements/duchy"),
+        // Kingdom
+        new(PolityTier.Kingdom,null,              RuntimeAssetCatalog.SettlementKingdomGreen,   "UI/Insignia/kingdom", "LOD/settlements/kingdom"),
+        // Empire
+        new(PolityTier.Empire,null,               RuntimeAssetCatalog.SettlementEmpireGreen,   "UI/Insignia/empire",  "LOD/settlements/empire"),
     ];
 }

@@ -30,6 +30,7 @@ public sealed class PlayableRenderAdapter
                 Size: _tileSize,
                 BaseColor: BiomeColor(tile.Biome),
                 TextureKey: TextureKey(tile.Biome),
+                ModelKey: TerrainModelKey(tile.Biome, tile.Id),
                 FoodAmount: 0f,
                 MaxFoodAmount: tile.MaxFood,
                 IsDisputed: tile.IsDisputed,
@@ -97,6 +98,34 @@ public sealed class PlayableRenderAdapter
             BiomeId.DenseForest or BiomeId.SparseWoodland => RuntimeAssetCatalog.ForestGround,
             BiomeId.FertileValley or BiomeId.Plains => RuntimeAssetCatalog.GrassMedium,
             _ => RuntimeAssetCatalog.GrassMedium,
+        };
+    }
+
+    private static string TerrainModelKey(BiomeId biome, int tileId)
+    {
+        return biome switch
+        {
+            BiomeId.Mountains => (tileId % 4) switch
+            {
+                0 => RuntimeAssetCatalog.TerrainMountain1,
+                1 => RuntimeAssetCatalog.TerrainMountain2,
+                2 => RuntimeAssetCatalog.TerrainMountain3,
+                _ => RuntimeAssetCatalog.TerrainMountain4,
+            },
+            BiomeId.Hills => (tileId % 4) switch
+            {
+                0 => RuntimeAssetCatalog.TerrainEscarpmentTop,
+                1 => RuntimeAssetCatalog.TerrainEscarpmentBase,
+                _ => RuntimeAssetCatalog.TerrainHillyGrass,
+            },
+            BiomeId.Riverland => (tileId % 2) switch
+            {
+                0 => RuntimeAssetCatalog.TerrainBeachSand,
+                _ => RuntimeAssetCatalog.TerrainHillyWaterSlope,
+            },
+            BiomeId.Marsh => RuntimeAssetCatalog.TerrainHillyWaterFlat,
+            BiomeId.Cold => RuntimeAssetCatalog.TerrainMountain1,
+            _ => RuntimeAssetCatalog.TerrainHillyGrass,
         };
     }
 

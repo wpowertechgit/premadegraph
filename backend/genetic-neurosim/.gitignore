@@ -13,3 +13,9 @@ client-monogame/bin/
 client-monogame/obj/
 
 .DS_Store
+docs/
+instruction.md
+client-monogame-tests/bin/
+client-monogame-tests/obj/
+client-monogame-tests/logs/
+client-monogame-tests/reports/

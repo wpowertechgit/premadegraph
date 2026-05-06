@@ -8,7 +8,7 @@ import {
   drawHexPath,
   computeHexSize,
   hexCanvasDims,
-} from "../neurosimHex";
+} from "../../neurosimHex";
 
 // ─── E1: Protocol version constants ─────────────────────────────────────────
 // Current frame is V0 (legacy binary, no envelope header).
