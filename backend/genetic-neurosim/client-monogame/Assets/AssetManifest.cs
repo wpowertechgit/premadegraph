@@ -247,12 +247,12 @@ public static class AssetManifest
     public static IReadOnlyList<BiomePropRule> BiomePropRules { get; } =
     [
         // Plains — grass, low shrubs, occasional rocks
-        new(BiomeId.Plains, PropFamily.GrassPatch, 1.0f, 5, 11, 1f, 11f, 5f, 0f,
+        new(BiomeId.Plains, PropFamily.GrassPatch, 1.0f, 6, 12, 1f, 11f, 5f, 0f,
             ["prop/grass-common-short", "prop/grass-common-tall", "prop/grass-wispy-short", "prop/grass-wispy-tall"]),
-        new(BiomeId.Plains, PropFamily.Bush, 0.5f, 1, 3, 2f, 10f, 4f, 0f,
+        new(BiomeId.Plains, PropFamily.Bush, 0.5f, 1, 4, 2f, 10f, 4f, 0f,
             ["prop/bush-common", "prop/bush-flowers"]),
-        new(BiomeId.Plains, PropFamily.Rock, 0.2f, 0, 2, 3f, 11f, 5f, 0f,
-            ["prop/rock-medium-1", "prop/rock-medium-2"]),
+        new(BiomeId.Plains, PropFamily.Rock, 0.2f, 0, 3, 3f, 11f, 5f, 0f,
+            ["prop/rock-medium-1", "prop/rock-medium-2", "prop/rock-medium-3"]),
 
         // FertileValley — dense grass, bushes, flowers
         new(BiomeId.FertileValley, PropFamily.GrassPatch, 1.1f, 6, 12, 1f, 11f, 5f, 0f,
@@ -279,15 +279,15 @@ public static class AssetManifest
             ["prop/dead-tree-1"]),
 
         // Hills — small rock clusters, sparse shrubs, dry grass
-        new(BiomeId.Hills, PropFamily.Rock, 0.7f, 1, 4, 2f, 11f, 4f, 0.05f,
+        new(BiomeId.Hills, PropFamily.Rock, 1.0f, 4, 9, 2f, 11f, 4f, 0.05f,
             ["prop/rock-medium-1", "prop/rock-medium-2", "prop/rock-medium-3"]),
         new(BiomeId.Hills, PropFamily.GrassPatch, 0.3f, 0, 2, 2f, 10f, 4f, 0f,
             ["prop/grass-wispy-short"]),
-        new(BiomeId.Hills, PropFamily.Bush, 0.2f, 0, 2, 3f, 10f, 4f, 0f,
+        new(BiomeId.Hills, PropFamily.Bush, 0.2f, 0, 1, 3f, 10f, 4f, 0f,
             ["prop/bush-common"]),
 
         // Mountains — sparse rocks only, no vegetation
-        new(BiomeId.Mountains, PropFamily.Rock, 0.5f, 1, 3, 2f, 11f, 4f, 0.08f,
+        new(BiomeId.Mountains, PropFamily.Rock, 1.25f, 6, 12, 2f, 11f, 4f, 0.08f,
             ["prop/rock-medium-3", "prop/rock-medium-1", "prop/rock-medium-2"]),
 
         // Marsh — reeds, dead trees, no dry rocks
@@ -301,10 +301,12 @@ public static class AssetManifest
             ["prop/plant-7", "prop/plant-1"]),
 
         // DrySteppe — sparse rocks, dry grass
-        new(BiomeId.DrySteppe, PropFamily.Rock, 0.4f, 1, 3, 2f, 11f, 4f, 0f,
-            ["prop/rock-medium-1", "prop/rock-medium-2"]),
-        new(BiomeId.DrySteppe, PropFamily.GrassPatch, 0.3f, 0, 2, 2f, 10f, 4f, 0f,
+        new(BiomeId.DrySteppe, PropFamily.Rock, 0.72f, 3, 7, 2f, 11f, 4f, 0f,
+            ["prop/rock-medium-1", "prop/rock-medium-2", "prop/rock-medium-3"]),
+        new(BiomeId.DrySteppe, PropFamily.GrassPatch, 0.3f, 1, 3, 2f, 10f, 4f, 0f,
             ["prop/grass-wispy-short"]),
+        new(BiomeId.DrySteppe, PropFamily.Bush, 0.2f, 0, 1, 3f, 10f, 4f, 0f,
+            ["prop/bush-common"]),
 
         // Cold — conifers, snow rocks, low grass
         new(BiomeId.Cold, PropFamily.Tree, 0.5f, 1, 5, 2f, 11f, 5f, 0f,

@@ -41,37 +41,37 @@ public sealed class FactionInsigniaProfile
 
     private static readonly Color[] CombatPalette =
     [
-        new(180, 40, 40),   // Crimson
-        new(180, 90, 30),   // Bronze
-        new(210, 70, 30),   // Deep Orange
+        new(214, 52, 44),   // Crimson
+        new(220, 112, 36),  // Bronze
+        new(236, 84, 30),   // Deep Orange
     ];
 
     private static readonly Color[] RiskPalette =
     [
-        new(40, 100, 60),   // Forest Green
-        new(90, 105, 100),  // Slate Grey
-        new(60, 85, 75),    // Olive-grey
+        new(48, 128, 74),   // Forest Green
+        new(96, 118, 116),  // Slate Grey
+        new(74, 108, 88),   // Olive-grey
     ];
 
     private static readonly Color[] ResourcePalette =
     [
-        new(190, 140, 40),  // Amber/Gold
-        new(170, 105, 45),  // Copper
-        new(130, 100, 65),  // Earth Brown
+        new(212, 164, 42),  // Amber/Gold
+        new(192, 118, 52),  // Copper
+        new(152, 114, 72),  // Earth Brown
     ];
 
     private static readonly Color[] MapObjectivePalette =
     [
-        new(130, 60, 170),  // Purple
-        new(170, 175, 185), // Silver
-        new(40, 130, 140),  // Teal
+        new(144, 72, 196),  // Purple
+        new(184, 192, 204), // Silver
+        new(52, 148, 162),  // Teal
     ];
 
     private static readonly Color[] TeamPalette =
     [
-        new(40, 100, 200),  // Azure
-        new(210, 170, 40),  // Gold
-        new(50, 70, 170),   // Royal Blue
+        new(44, 118, 224),  // Azure
+        new(224, 186, 52),  // Gold
+        new(62, 88, 196),   // Royal Blue
     ];
 
     /// <summary>

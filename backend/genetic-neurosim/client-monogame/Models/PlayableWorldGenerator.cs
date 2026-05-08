@@ -5,6 +5,8 @@ namespace TribalNeuroSim.Client.Models;
 public static class PlayableWorldGenerator
 {
     private const float SpawnEdgePadding = 2f;
+    public const float MinimumVisualElevation = -1.15f;
+    public const float MaximumVisualElevation = 4.50f;
 
     public static (int Width, int Height) CalculateDemoSize(int tribeCount)
     {
@@ -29,6 +31,20 @@ public static class PlayableWorldGenerator
         var height = (int)MathF.Ceiling(targetTiles / (float)width);
 
         return (Math.Max(24, width), Math.Max(18, height));
+    }
+
+    /// <summary>
+    /// M18C: Compact dispute stress map size. It keeps tribes close enough that the
+    /// local demo can reliably create contested border tiles for visual validation.
+    /// </summary>
+    public static (int Width, int Height) CalculateDisputeStressSize(int tribeCount)
+    {
+        var tribes = Math.Max(4, tribeCount);
+        var targetTiles = Math.Clamp(tribes * 42, 220, 1800);
+        var width = (int)MathF.Ceiling(MathF.Sqrt(targetTiles * 1.35f));
+        var height = (int)MathF.Ceiling(targetTiles / (float)width);
+
+        return (Math.Max(16, width), Math.Max(12, height));
     }
 
     public static List<PlayableTile> GenerateTiles(int seed, int width, int height)
@@ -195,7 +211,7 @@ public static class PlayableWorldGenerator
             _ => 0f,
         };
 
-        return Math.Clamp((elevation - 0.5f) * 0.70f + biomeLift, -0.28f, 1.15f);
+        return Math.Clamp((elevation - 0.5f) * 2.35f + biomeLift * 2.55f, MinimumVisualElevation, MaximumVisualElevation);
     }
 
     private static bool IsSpawnBiome(BiomeId biome)

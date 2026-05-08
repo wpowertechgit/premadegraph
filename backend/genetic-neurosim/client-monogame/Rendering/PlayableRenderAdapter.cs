@@ -60,16 +60,19 @@ public sealed class PlayableRenderAdapter
 
             yield return new RenderableTribe(
                 Id: tribe.Id,
+                Name: tribe.Name,
                 Position: TileCenter(home.X, home.Y),
                 Radius: radius,
-                Color: TribeColor(tribe.Id),
+                Color: TribeVisuals.ColorForTribe(tribe.Id),
                 Population: tribe.Population,
                 HasCamp: true,
                 CampPosition: TileCenter(home.X, home.Y),
                 TerritoryRadius: 0f,
                 Tier: tribe.Tier,
                 MainCampTileId: tribe.MainCampTileId,
-                Biome: home.Biome);
+                Biome: home.Biome,
+                Artifacts: tribe.Artifacts,
+                ConstituentCount: tribe.ConstituentCount);
         }
     }
 
@@ -119,16 +122,19 @@ public sealed class PlayableRenderAdapter
 
             yield return new RenderableTribe(
                 Id: (int)tribe.Id,
+                Name: $"Tribe {tribe.Id}",
                 Position: TileCenter(homeX, homeY),
                 Radius: radius,
-                Color: TribeColor((int)tribe.Id),
+                Color: TribeVisuals.ColorForTribe((int)tribe.Id),
                 Population: (int)tribe.Population,
                 HasCamp: true,
                 CampPosition: TileCenter(homeX, homeY),
                 TerritoryRadius: 0f,
                 Tier: (PolityTier)tribe.PolityTier,
                 MainCampTileId: tribe.MainCampTile,
-                Biome: biome);
+                Biome: biome,
+                Artifacts: tribe.Artifacts,
+                ConstituentCount: (int)tribe.ConstituentCount);
         }
     }
 
@@ -175,30 +181,4 @@ public sealed class PlayableRenderAdapter
         };
     }
 
-    private static Color TribeColor(int id)
-    {
-        var hue = (id * 0.61803398875f) % 1f;
-        return FromHsv(hue, 0.58f, 0.94f);
-    }
-
-    private static Color FromHsv(float h, float s, float v)
-    {
-        var i = (int)MathF.Floor(h * 6f);
-        var f = h * 6f - i;
-        var p = v * (1f - s);
-        var q = v * (1f - f * s);
-        var t = v * (1f - (1f - f) * s);
-
-        var (r, g, b) = (i % 6) switch
-        {
-            0 => (v, t, p),
-            1 => (q, v, p),
-            2 => (p, v, t),
-            3 => (p, q, v),
-            4 => (t, p, v),
-            _ => (v, p, q),
-        };
-
-        return new Color(r, g, b);
-    }
 }

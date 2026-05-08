@@ -34,6 +34,7 @@ public sealed class TombstonePanel
     private Texture2D? _pixel;
     private FontRenderer? _font;
     private GraphicsDevice? _graphicsDevice;
+    public Rectangle LastBounds { get; private set; } = Rectangle.Empty;
 
     public TombstoneSortMode SortMode
     {
@@ -48,7 +49,11 @@ public sealed class TombstonePanel
         Point origin,
         bool isVisible)
     {
-        if (!isVisible) return;
+        if (!isVisible)
+        {
+            LastBounds = Rectangle.Empty;
+            return;
+        }
 
         ArgumentNullException.ThrowIfNull(spriteBatch);
 
@@ -126,6 +131,7 @@ public sealed class TombstonePanel
         var panel = new Rectangle(
             origin.X, origin.Y, PanelWidth,
             PanelMargin * 2 + lineHeight + smallHeight + 12 + _font.LineHeight(FontSize.Header));
+        LastBounds = panel;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
@@ -174,6 +180,7 @@ public sealed class TombstonePanel
             panelHeight += smallHeight + 4;
 
         var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
+        LastBounds = panel;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,

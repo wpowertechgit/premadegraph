@@ -55,17 +55,17 @@ public sealed class FontRenderer : IDisposable
             var headerFamily = LoadFontFamily("Cinzel/static/Cinzel-Bold.ttf");
             var bodyFamily = LoadFontFamily("Noto_Serif/static/NotoSerif-Regular.ttf");
 
-            _headerFont = CreateFont(headerFamily, FallbackFamily, 16f, System.Drawing.FontStyle.Bold);
-            _bodyFont = CreateFont(bodyFamily, FallbackFamily, 14f, System.Drawing.FontStyle.Regular);
-            _smallFont = CreateFont(bodyFamily, FallbackFamily, 11f, System.Drawing.FontStyle.Regular);
+            _headerFont = CreateFont(headerFamily, FallbackFamily, 18f, System.Drawing.FontStyle.Bold);
+            _bodyFont = CreateFont(bodyFamily, FallbackFamily, 16f, System.Drawing.FontStyle.Regular);
+            _smallFont = CreateFont(bodyFamily, FallbackFamily, 13f, System.Drawing.FontStyle.Regular);
         }
         else // FontRole.Debug
         {
             var debugFamily = LoadFontFamily("Trykker/Trykker-Regular.ttf");
 
-            _headerFont = CreateFont(debugFamily, FallbackFamily, 13f, System.Drawing.FontStyle.Bold);
-            _bodyFont = CreateFont(debugFamily, FallbackFamily, 13f, System.Drawing.FontStyle.Regular);
-            _smallFont = CreateFont(debugFamily, FallbackFamily, 10f, System.Drawing.FontStyle.Regular);
+            _headerFont = CreateFont(debugFamily, FallbackFamily, 15f, System.Drawing.FontStyle.Bold);
+            _bodyFont = CreateFont(debugFamily, FallbackFamily, 15f, System.Drawing.FontStyle.Regular);
+            _smallFont = CreateFont(debugFamily, FallbackFamily, 12f, System.Drawing.FontStyle.Regular);
         }
 
         _textBrush = new SolidBrush(System.Drawing.Color.White);

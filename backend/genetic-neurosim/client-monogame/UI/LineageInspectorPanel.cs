@@ -22,6 +22,7 @@ public sealed class LineageInspectorPanel
     private Texture2D? _pixel;
     private FontRenderer? _font;
     private GraphicsDevice? _graphicsDevice;
+    public Rectangle LastBounds { get; private set; } = Rectangle.Empty;
 
     public void Draw(
         SpriteBatch spriteBatch,
@@ -30,7 +31,11 @@ public sealed class LineageInspectorPanel
         Point origin,
         bool isVisible)
     {
-        if (!isVisible) return;
+        if (!isVisible)
+        {
+            LastBounds = Rectangle.Empty;
+            return;
+        }
 
         ArgumentNullException.ThrowIfNull(spriteBatch);
 
@@ -61,6 +66,7 @@ public sealed class LineageInspectorPanel
         var panel = new Rectangle(
             origin.X, origin.Y, PanelWidth,
             PanelMargin * 2 + lineHeight + smallHeight + 10);
+        LastBounds = panel;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
@@ -93,6 +99,7 @@ public sealed class LineageInspectorPanel
 
         var panelHeight = PanelMargin * 2 + headerHeight + 6 + lineHeight * 6 + smallHeight + 12;
         var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
+        LastBounds = panel;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,

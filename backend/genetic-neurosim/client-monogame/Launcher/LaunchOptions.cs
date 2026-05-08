@@ -7,7 +7,8 @@ public sealed record LaunchOptions(
     bool ConnectMode = false,
     int MapWidth = 0,
     int MapHeight = 0,
-    bool IsEmpireStress = false)
+    bool IsEmpireStress = false,
+    bool IsDisputeStress = false)
 {
     public static LaunchOptions FromArgs(IReadOnlyList<string> args)
     {
@@ -18,6 +19,7 @@ public sealed record LaunchOptions(
         var mapWidth = 0;
         var mapHeight = 0;
         var isEmpireStress = false;
+        var isDisputeStress = false;
 
         foreach (var arg in args)
         {
@@ -70,6 +72,12 @@ public sealed record LaunchOptions(
                 continue;
             }
 
+            if (TryReadOption(arg, "--dispute-stress", out _))
+            {
+                isDisputeStress = true;
+                continue;
+            }
+
             if (arg.StartsWith("neurosim:", StringComparison.OrdinalIgnoreCase))
             {
                 var launchUri = new Uri(arg);
@@ -86,7 +94,7 @@ public sealed record LaunchOptions(
             }
         }
 
-        return new LaunchOptions(endpoint, httpEndpoint, sessionId, connectMode, mapWidth, mapHeight, isEmpireStress);
+        return new LaunchOptions(endpoint, httpEndpoint, sessionId, connectMode, mapWidth, mapHeight, isEmpireStress, isDisputeStress);
     }
 
     private static bool TryReadOption(string arg, string prefix, out string value)

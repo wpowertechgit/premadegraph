@@ -5,7 +5,10 @@ using TribalNeuroSim.Client.Models;
 using TribalNeuroSim.Client.Net;
 using TribalNeuroSim.Client.Protocol;
 using TribalNeuroSim.Client.Rendering;
+using TribalNeuroSim.Client.UI;
+using TribalNeuroSim.Client;
 using Assimp;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 var tests = new (string Name, Action Body)[]
@@ -26,11 +29,28 @@ var tests = new (string Name, Action Body)[]
     ("playable render adapter does not spawn terrain chunk models", PlayableRenderAdapterDoesNotSpawnTerrainChunkModels),
     ("playable render adapter hides abstract territory radii", PlayableRenderAdapterHidesAbstractTerritoryRadii),
     ("playable render adapter exposes subtle visual elevation", PlayableRenderAdapterExposesSubtleVisualElevation),
+    ("playable visual elevation is visible at close zoom", PlayableVisualElevationIsVisibleAtCloseZoom),
     ("playable render adapter uses pointy hex geometry", PlayableRenderAdapterUsesPointyHexGeometry),
+    ("territory border neighbors match simulation hex neighbors", TerritoryBorderNeighborsMatchSimulationHexNeighbors),
+    ("territory border renderer rejects projected runaway segments", TerritoryBorderRendererRejectsProjectedRunawaySegments),
+    ("tribe overview colors stay visually distinct", TribeOverviewColorsStayVisuallyDistinct),
+    ("vegetation gltf loads even with missing material textures", VegetationGltfLoadsEvenWithMissingMaterialTextures),
+    ("vegetation planner makes close props readable and dense", VegetationPlannerMakesClosePropsReadableAndDense),
+    ("far zoom drops low-value props but keeps rocky dressing", FarZoomDropsLowValuePropsButKeepsRockyDressing),
+    ("settlement LOD keeps every capital visible at far zoom", SettlementLodKeepsEveryCapitalVisibleAtFarZoom),
+    ("offline connection error is not counted as asset failure", OfflineConnectionErrorIsNotCountedAsAssetFailure),
+    ("terrain sits above parchment surface", TerrainSitsAboveParchmentSurface),
+    ("startup window defaults to display-sized maximized bounds", StartupWindowDefaultsToDisplaySizedMaximizedBounds),
+    ("selection panel layout fits viewport and content", SelectionPanelLayoutFitsViewportAndContent),
+    ("panel drag controller moves panel by mouse delta", PanelDragControllerMovesPanelByMouseDelta),
+    ("panel drag controller clamps panel inside viewport", PanelDragControllerClampsPanelInsideViewport),
     ("playable render adapter hides debug food dots", PlayableRenderAdapterHidesDebugFoodDots),
     ("keyboard command controller uses press once semantics", KeyboardCommandControllerUsesPressOnceSemantics),
+    ("keyboard command controller maps F11 fullscreen toggle", KeyboardCommandControllerMapsF11FullscreenToggle),
     ("tile control view state caps and normalizes claims", TileControlViewStateCapsAndNormalizesClaims),
     ("playable simulation records bounded events", PlayableSimulationRecordsBoundedEvents),
+    ("playable render adapter carries tribe artifacts for banner styling", PlayableRenderAdapterCarriesTribeArtifactsForBannerStyling),
+    ("empire stress can reach duchy or higher within the demo budget", EmpireStressCanReachDuchyOrHigherWithinTheDemoBudget),
 
     // ── M12: FBX Runtime Asset Pipeline Hardening ──
     ("M12 isolated viewer toggle is wired to F5", M12_IsolatedViewerToggleIsWiredToF5),
@@ -442,6 +462,22 @@ static void PlayableRenderAdapterMapsSimulationToRenderables()
     Assert(tribes.Any(tribe => tribe.HasCamp), "expected camp markers");
 }
 
+static void PlayableRenderAdapterCarriesTribeArtifactsForBannerStyling()
+{
+    var simulation = PlayableSimulation.CreateDemo(seed: 77, width: 10, height: 8, tribeCount: 4);
+    var adapter = new PlayableRenderAdapter(tileSize: 30f);
+    var renderables = adapter.BuildTribes(simulation).OrderBy(t => t.Id).ToArray();
+
+    Assert(renderables.Length == simulation.Tribes.Count, "expected renderable tribe count to match simulation");
+
+    foreach (var renderable in renderables)
+    {
+        var source = simulation.Tribes.Single(t => t.Id == renderable.Id);
+        Assert(Math.Abs(renderable.Artifacts.Combat - source.Artifacts.Combat) < 0.0001f, $"combat artifact mismatch for tribe {renderable.Id}");
+        Assert(Math.Abs(renderable.Artifacts.Team - source.Artifacts.Team) < 0.0001f, $"team artifact mismatch for tribe {renderable.Id}");
+    }
+}
+
 static void PlayableRenderAdapterUsesProperTerrainMaterialTextures()
 {
     var simulation = PlayableSimulation.CreateDemo(seed: 23, width: 14, height: 10, tribeCount: 4);
@@ -484,7 +520,19 @@ static void PlayableRenderAdapterExposesSubtleVisualElevation()
 
     Assert(elevations.Max() - elevations.Min() > 0.40f,
         $"expected visible terrain relief, got range {elevations.Min():0.00}..{elevations.Max():0.00}");
-    Assert(elevations.All(value => value is >= -0.35f and <= 1.35f),
+    Assert(elevations.All(value => value is >= -1.25f and <= 4.75f),
+        "visual elevation should stay subtle and map-like, not become terrain chunk cliffs");
+}
+
+static void PlayableVisualElevationIsVisibleAtCloseZoom()
+{
+    var simulation = PlayableSimulation.CreateDemo(seed: 57, width: 24, height: 18, tribeCount: 6);
+    var adapter = new PlayableRenderAdapter(tileSize: 30f);
+    var elevations = adapter.BuildTiles(simulation).Select(tile => tile.VisualElevation).ToArray();
+
+    Assert(elevations.Max() - elevations.Min() >= 3.0f,
+        $"close zoom needs visible relief, got range {elevations.Min():0.00}..{elevations.Max():0.00}");
+    Assert(elevations.All(value => value is >= -1.25f and <= 4.75f),
         "visual elevation should stay subtle and map-like, not become terrain chunk cliffs");
 }
 
@@ -506,6 +554,226 @@ static void PlayableRenderAdapterUsesPointyHexGeometry()
         $"expected hex vertical spacing {expectedVertical}, got {south.Y - origin.Y}");
     Assert(Math.Abs((south.X - origin.X) - expectedOddRowOffset) < 0.001f,
         $"expected odd row offset {expectedOddRowOffset}, got {south.X - origin.X}");
+}
+
+static void TerritoryBorderNeighborsMatchSimulationHexNeighbors()
+{
+    var method = typeof(TerritoryRenderer).GetMethod(
+        "GetNeighborEdges",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    Assert(method is not null, "territory renderer should expose a private neighbor edge helper");
+
+    var evenTile = new RenderableTile(TileId: 0, Center: Microsoft.Xna.Framework.Vector2.Zero, Size: 30f, BaseColor: Microsoft.Xna.Framework.Color.White, X: 3, Y: 2);
+    var oddTile = evenTile with { Y = 3 };
+
+    AssertNeighborSet(method!, evenTile,
+        [new(2, 2), new(4, 2), new(2, 1), new(3, 1), new(2, 3), new(3, 3)]);
+    AssertNeighborSet(method!, oddTile,
+        [new(2, 3), new(4, 3), new(3, 2), new(4, 2), new(3, 4), new(4, 4)]);
+}
+
+static void TerritoryBorderRendererRejectsProjectedRunawaySegments()
+{
+    var viewport = new Microsoft.Xna.Framework.Graphics.Viewport(0, 0, 1600, 900);
+
+    Assert(TerritoryRenderer.IsProjectedBorderSegmentUsable(
+            new Microsoft.Xna.Framework.Vector2(100, 100),
+            new Microsoft.Xna.Framework.Vector2(180, 145),
+            viewport),
+        "normal hex-edge sized border segment should render");
+
+    Assert(!TerritoryRenderer.IsProjectedBorderSegmentUsable(
+            new Microsoft.Xna.Framework.Vector2(-300, 260),
+            new Microsoft.Xna.Framework.Vector2(1900, 20),
+            viewport),
+        "runaway projected border segment should be rejected before it crosses the screen");
+}
+
+static void TribeOverviewColorsStayVisuallyDistinct()
+{
+    var colors = Enumerable.Range(1, 12)
+        .Select(TribeVisuals.ColorForTribe)
+        .ToArray();
+
+    var minDistance = float.MaxValue;
+    for (var i = 0; i < colors.Length; i++)
+    {
+        for (var j = i + 1; j < colors.Length; j++)
+        {
+            var dr = colors[i].R - colors[j].R;
+            var dg = colors[i].G - colors[j].G;
+            var db = colors[i].B - colors[j].B;
+            var distance = MathF.Sqrt(dr * dr + dg * dg + db * db);
+            minDistance = MathF.Min(minDistance, distance);
+        }
+    }
+
+    Assert(minDistance >= 70f, $"expected clearly separated overview colors, got minimum RGB distance {minDistance:0.0}");
+}
+
+static void AssertNeighborSet(System.Reflection.MethodInfo method, RenderableTile tile, (int X, int Y)[] expected)
+{
+    var edges = (Array)method.Invoke(null, [tile])!;
+    var actual = edges
+        .Cast<object>()
+        .Select(edge =>
+        {
+            var type = edge.GetType();
+            return (
+                X: (int)type.GetProperty("NeighborX")!.GetValue(edge)!,
+                Y: (int)type.GetProperty("NeighborY")!.GetValue(edge)!);
+        })
+        .OrderBy(item => item.X)
+        .ThenBy(item => item.Y)
+        .ToArray();
+
+    var sortedExpected = expected.OrderBy(item => item.X).ThenBy(item => item.Y).ToArray();
+    Assert(actual.SequenceEqual(sortedExpected),
+        $"expected neighbors {string.Join(", ", sortedExpected)}, got {string.Join(", ", actual)}");
+}
+
+static void VegetationGltfLoadsEvenWithMissingMaterialTextures()
+{
+    var contentRoot = FindContentRoot();
+    var modelPath = Path.Combine(contentRoot, "Models", "Vegetation", "StylizedNatureMegaKit", "Grass_Common_Short.gltf");
+
+    Assert(File.Exists(modelPath), $"missing vegetation gltf {modelPath}");
+
+    var model = ModelMeshData.FromGltfFile(modelPath, diagnostics: null);
+
+    Assert(model.VertexCount > 0, "vegetation gltf should load usable vertices even if texture PNGs are absent");
+    Assert(model.PrimitiveCount > 0, "vegetation gltf should load usable primitives even if texture PNGs are absent");
+}
+
+static void VegetationPlannerMakesClosePropsReadableAndDense()
+{
+    var simulation = PlayableSimulation.CreateDemo(seed: 1337, width: 18, height: 14, tribeCount: 4);
+    var planned = PropPlacementPlanner.Plan(
+        simulation,
+        AssetManifest.BiomePropRules,
+        AssetManifest.PropProfiles,
+        cameraDistance: 150f);
+
+    var treeInstances = planned.Where(prop => prop.Family == PropFamily.Tree).ToArray();
+    Assert(treeInstances.Length >= 80,
+        $"expected enough close-zoom tree density to read as environment, got {treeInstances.Length}");
+
+    var largestTreeScale = treeInstances
+        .Select(prop => MathF.Max(MathF.Abs(prop.World.M11), MathF.Max(MathF.Abs(prop.World.M22), MathF.Abs(prop.World.M33))))
+        .DefaultIfEmpty(0f)
+        .Max();
+    Assert(largestTreeScale >= 0.95f,
+        $"expected readable close-zoom tree scale, got {largestTreeScale:0.00}");
+}
+
+static void FarZoomDropsLowValuePropsButKeepsRockyDressing()
+{
+    var simulation = PlayableSimulation.CreateDemo(seed: 144, width: 22, height: 18, tribeCount: 6);
+    var close = PropPlacementPlanner.Plan(
+        simulation,
+        AssetManifest.BiomePropRules,
+        AssetManifest.PropProfiles,
+        cameraDistance: 150f);
+    var far = PropPlacementPlanner.Plan(
+        simulation,
+        AssetManifest.BiomePropRules,
+        AssetManifest.PropProfiles,
+        cameraDistance: 700f);
+
+    var closeBatch = new PropInstanceBatch();
+    closeBatch.Build(close, 150f);
+    var farBatch = new PropInstanceBatch();
+    farBatch.Build(far, 700f);
+
+    Assert(farBatch.TotalInstanceCount < closeBatch.TotalInstanceCount * 0.45f,
+        $"far zoom should strongly reduce prop load, got {farBatch.TotalInstanceCount}/{closeBatch.TotalInstanceCount}");
+    Assert(farBatch.Batches.Values.SelectMany(x => x).Any(i => i.Family == PropFamily.Rock),
+        "far zoom should still keep rock dressing visible");
+    Assert(!farBatch.Batches.Values.SelectMany(x => x).Any(i => i.Family == PropFamily.GrassPatch),
+        "far zoom should not keep tiny grass props alive");
+}
+
+static void SettlementLodKeepsEveryCapitalVisibleAtFarZoom()
+{
+    var simulation = PlayableSimulation.CreateEmpireStress();
+    var visibleAtFar = SettlementLodCatalog.CountVisibleSettlements(simulation.Tribes.Count(t => t.IsAlive), cameraDistance: 900f);
+
+    Assert(visibleAtFar == simulation.Tribes.Count(t => t.IsAlive),
+        $"every living capital should stay visible at far zoom, got {visibleAtFar}/{simulation.Tribes.Count(t => t.IsAlive)}");
+}
+
+static void OfflineConnectionErrorIsNotCountedAsAssetFailure()
+{
+    var diagnostics = new ClientDiagnostics();
+    diagnostics.RecordConnectionError(new Uri("ws://127.0.0.1:3001/api/neurosim/desktop/v1/frames"), new InvalidOperationException("connection refused"));
+
+    Assert(RenderMetrics.CalculateAssetLoadFailures(diagnostics) == 0,
+        "offline Node connection errors should not appear as asset load failures");
+}
+
+static void TerrainSitsAboveParchmentSurface()
+{
+    Assert(TabletopRenderer.ParchmentSurfaceY < PlayableWorldGenerator.MinimumVisualElevation,
+        $"parchment surface {TabletopRenderer.ParchmentSurfaceY:0.00} should sit below terrain minimum {PlayableWorldGenerator.MinimumVisualElevation:0.00}");
+}
+
+static void StartupWindowDefaultsToDisplaySizedMaximizedBounds()
+{
+    var bounds = WindowDefaults.ResolveStartupBackBuffer(2560, 1440);
+
+    Assert(bounds.X == 2560 && bounds.Y == 1440,
+        $"expected startup buffer to match display, got {bounds.X}x{bounds.Y}");
+}
+
+static void SelectionPanelLayoutFitsViewportAndContent()
+{
+    var viewport = new Microsoft.Xna.Framework.Graphics.Viewport(0, 0, 1366, 768);
+    var lineHeight = 19;
+    var smallHeight = 15;
+    var headerHeight = 22;
+
+    var panel = SelectionPanel.ResolvePanelBounds(viewport, lineHeight, smallHeight, headerHeight, hasSelection: true);
+    var contentHeight = SelectionPanel.MeasurePanelHeight(lineHeight, smallHeight, headerHeight, hasSelection: true);
+
+    Assert(panel.Right <= viewport.Width - 12, $"selection panel should fit right edge, right={panel.Right}, viewport={viewport.Width}");
+    Assert(panel.Bottom <= viewport.Height - 12, $"selection panel should fit bottom edge, bottom={panel.Bottom}, viewport={viewport.Height}");
+    Assert(panel.Height >= contentHeight, $"panel background should cover content, panel={panel.Height}, content={contentHeight}");
+    Assert(DebugHud.ResolvePerformancePanelBounds(viewport, selectionPanel: panel).Top >= panel.Bottom + 12,
+        "performance panel should sit below selection panel instead of covering its lower rows");
+}
+
+static void PanelDragControllerMovesPanelByMouseDelta()
+{
+    var controller = new PanelDragController();
+    var viewport = new Microsoft.Xna.Framework.Graphics.Viewport(0, 0, 800, 600);
+    var bounds = new Dictionary<DraggablePanelId, Rectangle>
+    {
+        [DraggablePanelId.Selection] = new(100, 80, 200, 160),
+    };
+
+    controller.Update(
+        new MouseState(120, 100, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released),
+        new MouseState(120, 100, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released),
+        viewport,
+        bounds);
+
+    controller.Update(
+        new MouseState(170, 140, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released),
+        new MouseState(120, 100, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released),
+        viewport,
+        bounds);
+
+    var origin = controller.ResolveOrigin(DraggablePanelId.Selection, new Point(100, 80));
+    Assert(origin == new Point(150, 120), $"expected panel to move by drag delta, got {origin}");
+    Assert(controller.ConsumesPointer, "dragged panel should consume mouse input");
+}
+
+static void PanelDragControllerClampsPanelInsideViewport()
+{
+    var viewport = new Microsoft.Xna.Framework.Graphics.Viewport(0, 0, 320, 200);
+    var clamped = PanelDragController.ClampOrigin(new Point(500, 300), new Point(120, 90), viewport);
+
+    Assert(clamped == new Point(196, 106), $"expected clamped origin (196,106), got {clamped}");
 }
 
 static void PlayableRenderAdapterHidesDebugFoodDots()
@@ -532,6 +800,19 @@ static void KeyboardCommandControllerUsesPressOnceSemantics()
     Assert(!commands.ToggleIsolatedViewer, "F5 was not pressed");
     Assert(commands.SelectAtScreenPosition, "left click should select");
     Assert(commands.SelectionScreenPosition == new Microsoft.Xna.Framework.Vector2(12, 34), "selection position should be captured");
+}
+
+static void KeyboardCommandControllerMapsF11FullscreenToggle()
+{
+    var controller = new KeyboardCommandController();
+    var current = new KeyboardState(Keys.F11);
+    var previous = new KeyboardState();
+    var mouse = new MouseState(0, 0, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+    var previousMouse = new MouseState(0, 0, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+
+    var commands = controller.ReadCommands(current, previous, mouse, previousMouse);
+
+    Assert(commands.ToggleFullscreen, "F11 should toggle fullscreen");
 }
 
 static void TileControlViewStateCapsAndNormalizesClaims()
@@ -582,4 +863,19 @@ static void PlayableSimulationRecordsBoundedEvents()
     Assert(simulation.RecentEvents.Count <= 80, $"events should be bounded, got {simulation.RecentEvents.Count}");
     Assert(simulation.RecentEvents.Any(), "expected event trail after a run");
     Assert(simulation.Tombstones.Count >= 0, "tombstones should be tracked");
+}
+
+static void EmpireStressCanReachDuchyOrHigherWithinTheDemoBudget()
+{
+    var simulation = PlayableSimulation.CreateEmpireStress(seed: 7331, tribeCount: 28);
+
+    for (var i = 0; i < 1400; i++)
+    {
+        simulation.Step();
+    }
+
+    Assert(simulation.HighestTierReached >= PolityTier.Duchy,
+        $"expected empire stress to reach at least Duchy, got {simulation.HighestTierReached}");
+    Assert(simulation.ActiveMergeCount > 0, "expected merge tracking to become non-zero in empire stress");
+    Assert(simulation.Tombstones.Count > 0, "expected merger/extinction tombstones in empire stress");
 }

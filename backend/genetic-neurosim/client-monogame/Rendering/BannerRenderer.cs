@@ -14,6 +14,7 @@ public sealed class BannerRenderer : IDisposable
 {
     private GraphicsDevice? _graphicsDevice;
     private RuntimeAssetLoader? _assetLoader;
+    private FontRenderer? _fontRenderer;
 
     // Cleaned polity frames (green → transparent)
     private readonly Dictionary<string, Texture2D> _cleanedFrames = new(StringComparer.OrdinalIgnoreCase);
@@ -29,23 +30,24 @@ public sealed class BannerRenderer : IDisposable
 
     // Screen-space banner targets. Keep these intentionally small: banners are
     // strategic map markers, not full-size UI panels.
-    private const float BannerWidth = 96f;
-    private const float BannerHeight = 96f;
-    private const float RibbonWidth = 100f;
-    private const float RibbonHeight = 20f;
+    private const float BannerWidth = 132f;
+    private const float BannerHeight = 132f;
+    private const float RibbonWidth = 132f;
+    private const float RibbonHeight = 28f;
     private const float MinDistanceForBanners = 0f;
-    private const float MinBannerScale = 0.32f;
-    private const float MaxBannerScale = 0.62f;
-    private const float BannerDistanceScale = 230f;
+    private const float MinBannerScale = 0.48f;
+    private const float MaxBannerScale = 1.06f;
+    private const float BannerDistanceScale = 360f;
     private const float TextureLoadScale = 0.5f; // 512px polity frames become 256px runtime textures
-    private const float ScreenLiftPixels = 34f;
-    private const float MinRibbonWidth = 64f;
-    private const float MinRibbonHeight = 14f;
+    private const float ScreenLiftPixels = 54f;
+    private const float MinRibbonWidth = 92f;
+    private const float MinRibbonHeight = 22f;
 
-    public void Initialize(GraphicsDevice graphicsDevice, RuntimeAssetLoader assetLoader)
+    public void Initialize(GraphicsDevice graphicsDevice, RuntimeAssetLoader assetLoader, FontRenderer? fontRenderer = null)
     {
         _graphicsDevice = graphicsDevice;
         _assetLoader = assetLoader;
+        _fontRenderer = fontRenderer;
         LoadAllFrames();
         LoadRibbon();
         _isLoaded = true;
@@ -77,8 +79,7 @@ public sealed class BannerRenderer : IDisposable
                 screenPos.Y < -cullMargin || screenPos.Y > viewport.Height + cullMargin)
                 continue;
 
-            var insignia = assetRegistry.ResolveInsignia(tribe.Id, tribe.Tier, new Protocol.ArtifactVector(
-                Combat: 0.5f, Risk: 0.5f, Resource: 0.5f, MapObjective: 0.5f, Team: 0.5f));
+            var insignia = assetRegistry.ResolveInsignia(tribe.Id, tribe.Tier, tribe.Artifacts);
 
             var bannerScale = MathHelper.Clamp(BannerDistanceScale / camera.Distance, MinBannerScale, MaxBannerScale);
             DrawSingleBanner(spriteBatch, screenPos, insignia, tribe, bannerScale);
@@ -133,10 +134,26 @@ public sealed class BannerRenderer : IDisposable
             var ribbonH = MathF.Max(RibbonHeight * scale, MinRibbonHeight);
             var ribbonTopLeft = new Vector2(
                 frameTopLeft.X + (frameWidth - ribbonW) * 0.5f,
-                frameTopLeft.Y + frameHeight + 2f);
-            spriteBatch.Draw(_ribbon, ribbonTopLeft, null, Color.White, 0f, Vector2.Zero,
+                frameTopLeft.Y + frameHeight - 2f);
+            spriteBatch.Draw(_ribbon, ribbonTopLeft, null, insignia.PrimaryColor, 0f, Vector2.Zero,
                 new Vector2(ribbonW / Math.Max(_ribbon.Width, 1), ribbonH / Math.Max(_ribbon.Height, 1)),
                 SpriteEffects.None, 0f);
+
+            if (_fontRenderer is not null)
+            {
+                var text = tribe.Name.ToUpperInvariant();
+                var maxChars = scale >= 0.72f ? 18 : scale >= 0.58f ? 14 : 10;
+                if (text.Length > maxChars)
+                    text = text[..maxChars];
+
+                var textSize = scale >= 0.74f ? FontSize.Body : FontSize.Small;
+                var textCenter = new Vector2(
+                    ribbonTopLeft.X + ribbonW * 0.5f,
+                    ribbonTopLeft.Y + MathF.Max(1f, (ribbonH - _fontRenderer.LineHeight(textSize)) * 0.45f));
+                var textShadow = textCenter + new Vector2(1f, 1f);
+                _fontRenderer.DrawStringAligned(spriteBatch, text, textShadow, textSize, TextAlign.Center, new Color(18, 18, 18, 220));
+                _fontRenderer.DrawStringAligned(spriteBatch, text, textCenter, textSize, TextAlign.Center, new Color(245, 236, 215, 245));
+            }
         }
     }
 
@@ -300,6 +317,7 @@ public sealed class BannerRenderer : IDisposable
         _ribbon = null;
         _graphicsDevice = null;
         _assetLoader = null;
+        _fontRenderer = null;
     }
 
     private readonly record struct GreenScreenData(Vector2 Center, float Radius);

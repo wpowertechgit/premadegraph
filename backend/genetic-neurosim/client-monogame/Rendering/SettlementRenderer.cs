@@ -63,7 +63,7 @@ public sealed class SettlementRenderer : IDisposable
             _diagnostics.Info($"LOAD settlement begin key={modelKey} path={fullPath} importer={(isFbx ? "AssimpNet" : "SharpGLTF")}");
             var meshData = isFbx
                 ? ModelMeshData.FromFbx(_graphicsDevice, fullPath, _diagnostics)
-                : ModelMeshData.FromGltf(_graphicsDevice, SharpGLTF.Schema2.ModelRoot.Load(fullPath));
+                : ModelMeshData.FromGltfFile(_graphicsDevice, fullPath, _diagnostics);
             _loadedModels[modelKey] = meshData;
             TryLoadTextures(fullPath, modelKey);
 
@@ -81,6 +81,9 @@ public sealed class SettlementRenderer : IDisposable
     public bool IsModelLoaded(string modelKey) => _loadedModels.ContainsKey(modelKey);
 
     public IReadOnlyList<string> LoadedModelKeys => _loadedModels.Keys.ToArray();
+
+    /// <summary>Draw list populated by CollectInstances, consumed by BlobShadowRenderer.</summary>
+    public IReadOnlyList<SettlementDraw> DrawList => _drawList;
 
     // ─────────────────────────────────────────────────────────────
     //  Instance collection from simulation
@@ -104,13 +107,15 @@ public sealed class SettlementRenderer : IDisposable
 
             if (modelKey is not null && _loadedModels.TryGetValue(modelKey, out var meshData))
             {
-                var scale = FitModelToTile(meshData, TileWidth);
+                var scale = FitModelToTile(meshData, TileWidth) * TierScaleMultiplier(tribe.Tier);
+                var yLift = GroundLift(meshData, scale, tribe.Tier);
                 _drawList.Add(new SettlementDraw(
                     TribeId: tribe.Id,
-                    Position: center + new Vector3(0f, 0.05f, 0f),
+                    Position: center + new Vector3(0f, yLift, 0f),
                     Scale: scale,
                     ModelKey: modelKey,
-                    Tier: tribe.Tier));
+                    Tier: tribe.Tier,
+                    HorizontalExtent: meshData.HorizontalExtent));
             }
             else
             {
@@ -146,7 +151,6 @@ public sealed class SettlementRenderer : IDisposable
             .ToArray();
 
         var drawn = allWithLod
-            .Where(x => x.Lod != SettlementLodLevel.Far)
             .OrderByDescending(x => x.Draw.TribeId == selectedTribeId)
             .ThenBy(x => x.Lod)
             .ThenByDescending(x => (int)x.Draw.Tier)
@@ -243,7 +247,7 @@ public sealed class SettlementRenderer : IDisposable
         if (cameraDistance <= profile.MidDistance)
             return SettlementLodLevel.Mid;
 
-        return SettlementLodLevel.Far;
+        return SettlementLodLevel.Mid;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -328,7 +332,8 @@ public sealed class SettlementRenderer : IDisposable
             Position: position,
             Scale: scaleVar,
             ModelKey: modelKey,
-            Tier: PolityTier.Tribe));
+            Tier: PolityTier.Tribe,
+            HorizontalExtent: 0f));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -339,6 +344,32 @@ public sealed class SettlementRenderer : IDisposable
     {
         var scale = targetWidth / MathF.Max(0.001f, model.HorizontalExtent);
         return MathHelper.Clamp(scale, 0.001f, 20f);
+    }
+
+    private static float TierScaleMultiplier(PolityTier tier)
+    {
+        return tier switch
+        {
+            PolityTier.City => 1.12f,
+            PolityTier.Duchy => 1.24f,
+            PolityTier.Kingdom => 1.38f,
+            PolityTier.Empire => 1.54f,
+            _ => 1f,
+        };
+    }
+
+    private static float GroundLift(ModelMeshData meshData, float scale, PolityTier tier)
+    {
+        var tierBoost = tier switch
+        {
+            PolityTier.City => 0.12f,
+            PolityTier.Duchy => 0.18f,
+            PolityTier.Kingdom => 0.24f,
+            PolityTier.Empire => 0.30f,
+            _ => 0.08f,
+        };
+
+        return MathF.Max(0.05f, -meshData.Bounds.Min.Y * scale + tierBoost);
     }
 
     private static Vector3 TileToWorld(PlayableSimulation simulation, PlayableTile tile)
@@ -416,10 +447,9 @@ public sealed class SettlementRenderer : IDisposable
             TextureEnabled = false,
             VertexColorEnabled = false,
             LightingEnabled = true,
-            AmbientLightColor = new Vector3(0.30f, 0.30f, 0.28f),
-            DiffuseColor = new Vector3(0.55f, 0.50f, 0.40f),
+            PreferPerPixelLighting = true,
         };
-        _effect.EnableDefaultLighting();
+        SceneLighting.ApplyTo(_effect);
     }
 
     private static Vector3 DiffuseColorFor(string modelKey)
@@ -439,12 +469,13 @@ public sealed class SettlementRenderer : IDisposable
         return new Vector3(0.58f, 0.55f, 0.48f);
     }
 
-    private readonly record struct SettlementDraw(
+    public readonly record struct SettlementDraw(
         int TribeId,
         Vector3 Position,
         float Scale,
         string ModelKey,
-        PolityTier Tier);
+        PolityTier Tier,
+        float HorizontalExtent);
 }
 
 public readonly record struct SettlementRenderStats(

@@ -101,9 +101,9 @@ public sealed class TerritoryRenderer : IDisposable
     {
         return cameraDistance switch
         {
-            < 200f => (2.8f, 4.2f, 1.0f),
-            < 500f => (1.8f, 2.6f, 1.0f),
-            _      => (1.0f, 1.5f, 0.70f),
+            < 200f => (3.6f, 5.2f, 1.0f),
+            < 500f => (2.6f, 3.8f, 1.0f),
+            _      => (1.7f, 2.5f, 0.82f),
         };
     }
 
@@ -138,7 +138,7 @@ public sealed class TerritoryRenderer : IDisposable
         var screenEnd = camera.HexToScreen(end, viewport);
 
         var screenLength = Vector2.Distance(screenStart, screenEnd);
-        if (screenLength < 3f)
+        if (!IsProjectedBorderSegmentUsable(screenStart, screenEnd, viewport) || screenLength < 3f)
             return;
 
         var (coreWidth, glowWidth, alphaScale) = ZoomBorderParams(cameraDistance);
@@ -147,6 +147,26 @@ public sealed class TerritoryRenderer : IDisposable
 
         DrawLine(spriteBatch, screenStart, screenEnd, new Color(color, coreAlpha), coreWidth);
         DrawLine(spriteBatch, screenStart, screenEnd, new Color(color, glowAlpha), glowWidth);
+    }
+
+    public static bool IsProjectedBorderSegmentUsable(Vector2 screenStart, Vector2 screenEnd, Viewport viewport)
+    {
+        if (!IsFinite(screenStart) || !IsFinite(screenEnd))
+            return false;
+
+        var length = Vector2.Distance(screenStart, screenEnd);
+        if (!float.IsFinite(length))
+            return false;
+
+        var maxExpectedHexEdge = MathF.Max(180f, MathF.Min(viewport.Width, viewport.Height) * 0.28f);
+        if (length > maxExpectedHexEdge)
+            return false;
+
+        var margin = maxExpectedHexEdge;
+        return screenStart.X >= -margin && screenStart.X <= viewport.Width + margin
+            && screenEnd.X >= -margin && screenEnd.X <= viewport.Width + margin
+            && screenStart.Y >= -margin && screenStart.Y <= viewport.Height + margin
+            && screenEnd.Y >= -margin && screenEnd.Y <= viewport.Height + margin;
     }
 
     // ── Crosshatch rendering ──
@@ -307,9 +327,12 @@ public sealed class TerritoryRenderer : IDisposable
 
     private void DrawLine(SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color, float thickness)
     {
+        if (!IsFinite(start) || !IsFinite(end))
+            return;
+
         var delta = end - start;
         var length = delta.Length();
-        if (length <= 0.001f)
+        if (!float.IsFinite(length) || length <= 0.001f)
             return;
 
         var angle = MathF.Atan2(delta.Y, delta.X);
@@ -323,6 +346,11 @@ public sealed class TerritoryRenderer : IDisposable
             new Vector2(length, Math.Max(1f, thickness)),
             SpriteEffects.None,
             0f);
+    }
+
+    private static bool IsFinite(Vector2 value)
+    {
+        return float.IsFinite(value.X) && float.IsFinite(value.Y);
     }
 
     private void FillDiamond(SpriteBatch spriteBatch, Vector2 center, float radius, Color color)
@@ -431,29 +459,7 @@ public sealed class TerritoryRenderer : IDisposable
 
     private static Color TribeColor(int id)
     {
-        var hue = (id * 0.61803398875f) % 1f;
-        return FromHsv(hue, 0.52f, 0.92f);
-    }
-
-    private static Color FromHsv(float h, float s, float v)
-    {
-        var i = (int)MathF.Floor(h * 6f);
-        var f = h * 6f - i;
-        var p = v * (1f - s);
-        var q = v * (1f - f * s);
-        var t = v * (1f - (1f - f) * s);
-
-        var (r, g, b) = (i % 6) switch
-        {
-            0 => (v, t, p),
-            1 => (q, v, p),
-            2 => (p, v, t),
-            3 => (p, q, v),
-            4 => (t, p, v),
-            _ => (v, p, q),
-        };
-
-        return new Color(r, g, b);
+        return TribeVisuals.ColorForTribe(id);
     }
 
     private readonly record struct BorderNeighborEdge(int NeighborX, int NeighborY, int StartCornerIndex, int EndCornerIndex);

@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TribalNeuroSim.Client.Assets;
 using TribalNeuroSim.Client.Domain;
+using TribalNeuroSim.Client.Protocol;
 
 // ReSharper disable NotAccessedPositionalProperty.Global — BiomeId used by WorldRenderer
 
@@ -28,6 +29,7 @@ public readonly record struct RenderableTile(
 
 public readonly record struct RenderableTribe(
     int Id,
+    string Name,
     Vector2 Position,
     float Radius,
     Color Color,
@@ -37,7 +39,9 @@ public readonly record struct RenderableTribe(
     float TerritoryRadius = 0f,
     PolityTier Tier = PolityTier.Tribe,
     int MainCampTileId = -1,
-    BiomeId? Biome = null);
+    BiomeId? Biome = null,
+    ArtifactVector Artifacts = default,
+    int ConstituentCount = 1);
 
 public sealed class WorldRenderer : IDisposable
 {
@@ -125,15 +129,8 @@ public sealed class WorldRenderer : IDisposable
             VertexColorEnabled = false,
             LightingEnabled = true,
             PreferPerPixelLighting = true,
-            AmbientLightColor = new Vector3(0.45f, 0.45f, 0.42f),
-            DiffuseColor = new Vector3(1.0f, 1.0f, 0.98f),
         };
-        _hexEffect.DirectionalLight0.Enabled = true;
-        _hexEffect.DirectionalLight0.Direction = Vector3.Normalize(new Vector3(0.5f, -1f, -0.3f));
-        _hexEffect.DirectionalLight0.DiffuseColor = new Vector3(0.85f, 0.82f, 0.70f);
-        _hexEffect.DirectionalLight1.Enabled = true;
-        _hexEffect.DirectionalLight1.Direction = Vector3.Normalize(new Vector3(-0.3f, -0.6f, 0.5f));
-        _hexEffect.DirectionalLight1.DiffuseColor = new Vector3(0.25f, 0.28f, 0.35f);
+        SceneLighting.ApplyTo(_hexEffect);
 
         // --- Hex mesh (shared geometry for all tiles) ---
         _hexMesh?.Dispose();
@@ -376,33 +373,6 @@ public sealed class WorldRenderer : IDisposable
         }
 
         return corners;
-    }
-
-    private static Color TribeColor(int id)
-    {
-        var hue = (id * 0.61803398875f) % 1f;
-        return FromHsv(hue, 0.42f, 0.85f);
-    }
-
-    private static Color FromHsv(float h, float s, float v)
-    {
-        var i = (int)MathF.Floor(h * 6f);
-        var f = h * 6f - i;
-        var p = v * (1f - s);
-        var q = v * (1f - f * s);
-        var t = v * (1f - (1f - f) * s);
-
-        var (r, g, b) = (i % 6) switch
-        {
-            0 => (v, t, p),
-            1 => (q, v, p),
-            2 => (p, v, t),
-            3 => (p, q, v),
-            4 => (t, p, v),
-            _ => (v, p, q),
-        };
-
-        return new Color(r, g, b);
     }
 
     private readonly record struct FloatRect(float X, float Y, float Width, float Height)

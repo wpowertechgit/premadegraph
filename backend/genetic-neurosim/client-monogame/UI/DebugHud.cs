@@ -27,6 +27,7 @@ public sealed record DebugHudState(
     double FrameDecodeLatencyMs = -1,
     float CameraDistance = 0f,
     string ZoomLevelLabel = "mid",
+    bool VSyncEnabled = true,
     // R8: Expansion metrics
     int SelectedTerritoryCount = 0,
     long ExpansionCooldownRemaining = 0,
@@ -67,6 +68,7 @@ public sealed class DebugHud : IDisposable
     private const int PanelMargin = 10;
     private const int PerfPanelWidth = 240;
     private const int PerfPanelTop = 250;
+    private const int ViewportMargin = 12;
 
     private static readonly Color PanelColor = new(10, 12, 14, 184);
     private static readonly Color PanelBorderColor = new(255, 255, 255, 34);
@@ -82,6 +84,10 @@ public sealed class DebugHud : IDisposable
     private GraphicsDevice? _graphicsDevice;
 
     public FontRenderer? Font => _font;
+    public Rectangle? ReservedTopRightPanel { get; set; }
+    public Point? PerformancePanelOriginOverride { get; set; }
+    public Rectangle LastBounds { get; private set; } = Rectangle.Empty;
+    public Rectangle LastPerformanceBounds { get; private set; } = Rectangle.Empty;
 
     /// <summary>Toggle V3 stats section visibility (default: true). Use 'V' key.</summary>
     public bool ShowV3Stats { get; set; } = true;
@@ -115,6 +121,7 @@ public sealed class DebugHud : IDisposable
         var rowCount = 6 + (hasSelection ? 2 : 0) + (hasError ? 2 : 0) + extraLineCount + tierRowCount + v3RowCount;
         var panelHeight = PanelMargin * 2 + rowCount * lineHeight + 4;
         var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
+        LastBounds = panel;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
@@ -266,15 +273,21 @@ public sealed class DebugHud : IDisposable
         {
             DrawPerformancePanel(spriteBatch, state);
         }
+        else
+        {
+            LastPerformanceBounds = Rectangle.Empty;
+        }
     }
 
     private void DrawPerformancePanel(SpriteBatch spriteBatch, DebugHudState state)
     {
         var lineHeight = _font!.LineHeight(FontSize.Small);
-        var perfPanelHeight = PanelMargin * 2 + 11 * lineHeight + 6;
-        var perfX = spriteBatch.GraphicsDevice.Viewport.Width - PerfPanelWidth - 12;
-        var perfY = PerfPanelTop;
-        var perfPanel = new Rectangle(perfX, perfY, PerfPanelWidth, perfPanelHeight);
+        var perfPanel = ResolvePerformancePanelBounds(spriteBatch.GraphicsDevice.Viewport, ReservedTopRightPanel);
+        if (PerformancePanelOriginOverride is { } origin)
+        {
+            perfPanel = new Rectangle(origin.X, origin.Y, perfPanel.Width, perfPanel.Height);
+        }
+        LastPerformanceBounds = perfPanel;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
@@ -295,7 +308,7 @@ public sealed class DebugHud : IDisposable
         y += lineHeight + 4;
 
         DrawPerfRow(spriteBatch, x, ref y, lineHeight, "FPS", $"{state.Fps:0.0}", fpsColor);
-        DrawPerfRow(spriteBatch, x, ref y, lineHeight, "VSync", state.Fps > 0 ? "ON" : "OFF", MutedColor);
+        DrawPerfRow(spriteBatch, x, ref y, lineHeight, "VSync", state.VSyncEnabled ? "ON" : "OFF", state.VSyncEnabled ? MutedColor : WarningColor);
         DrawPerfRow(spriteBatch, x, ref y, lineHeight, "Camera", $"{state.CameraDistance:0} ({state.ZoomLevelLabel})", MutedColor);
         DrawPerfRow(spriteBatch, x, ref y, lineHeight, "Terrain", $"{state.TerrainTiles} tiles", TextColor);
         DrawPerfRow(spriteBatch, x, ref y, lineHeight, "Settlements", $"C:{state.SettlementClose} M:{state.SettlementMid} F:{state.SettlementFarCulled}", TextColor);
@@ -324,6 +337,22 @@ public sealed class DebugHud : IDisposable
         _font.DrawString(spriteBatch, $"{budgetRatio * 100:0}%", new Vector2(barX + barW + 4, y), FontSize.Small, barColor);
 
         spriteBatch.End();
+    }
+
+    public static Rectangle ResolvePerformancePanelBounds(Viewport viewport, Rectangle? selectionPanel = null)
+    {
+        var lineHeight = 14;
+        var perfPanelHeight = PanelMargin * 2 + 11 * lineHeight + 6;
+        var perfX = Math.Max(ViewportMargin, viewport.Width - PerfPanelWidth - ViewportMargin);
+        var perfY = PerfPanelTop;
+
+        if (selectionPanel is { } selected)
+            perfY = Math.Max(perfY, selected.Bottom + ViewportMargin);
+
+        if (perfY + perfPanelHeight > viewport.Height - ViewportMargin)
+            perfY = Math.Max(ViewportMargin, viewport.Height - perfPanelHeight - ViewportMargin);
+
+        return new Rectangle(perfX, perfY, PerfPanelWidth, perfPanelHeight);
     }
 
     private void DrawPerfRow(SpriteBatch spriteBatch, int x, ref int y, int lineHeight, string key, string value, Color valueColor)

@@ -19,12 +19,13 @@ public sealed class TabletopRenderer : IDisposable
     private Texture2D? _parchmentTexture;
     private bool _parchmentAttempted;
 
-    private const float TableY = -1.2f;
-    private const float ParchmentY = -0.55f;
+    private const float TableY = -4.20f;
+    private const float ParchmentY = -3.30f;
     private const float TableHalfSize = 5000f;
-    private const float ParchmentMargin = 90f;
+    private const float ParchmentMargin = 180f;
 
     public Texture2D? ParchmentTexture => _parchmentTexture;
+    public static float ParchmentSurfaceY => ParchmentY;
 
     public void Initialize(GraphicsDevice graphicsDevice)
     {
@@ -114,7 +115,7 @@ public sealed class TabletopRenderer : IDisposable
 
         // 1. Table — large dark quad centered under the map
         _effect.TextureEnabled = false;
-        _effect.DiffuseColor = new Vector3(0.14f, 0.12f, 0.09f);
+        _effect.DiffuseColor = new Vector3(0.34f, 0.26f, 0.17f);
         _effect.World =
             Matrix.CreateScale(TableHalfSize * 2f, 1f, TableHalfSize * 2f) *
             Matrix.CreateTranslation(mapCenterX, TableY, mapCenterZ);
@@ -127,7 +128,7 @@ public sealed class TabletopRenderer : IDisposable
 
         _effect.TextureEnabled = _parchmentTexture is not null;
         _effect.Texture = _parchmentTexture;
-        _effect.DiffuseColor = new Vector3(0.90f, 0.85f, 0.72f);
+        _effect.DiffuseColor = new Vector3(0.96f, 0.89f, 0.70f);
         _effect.World =
             Matrix.CreateScale(parchmentW, 1f, parchmentH) *
             Matrix.CreateTranslation(mapCenterX, ParchmentY, mapCenterZ);

@@ -38,7 +38,7 @@ public static class PropPlacementPlanner
     private const float LodFarDistance = 800f;
 
     // Cap total props per tile for performance
-    private const int MaxPropsPerTile = 18;
+    private const int MaxPropsPerTile = 42;
 
     /// <summary>
     /// Generate planned prop instances for all tiles in the simulation.
@@ -94,8 +94,9 @@ public static class PropPlacementPlanner
                 continue;
 
             // Apply LOD multiplier to count range
-            var minCount = (int)MathF.Max(1, rule.MinPerTile * lodMultiplier);
-            var maxCount = (int)MathF.Max(minCount, rule.MaxPerTile * lodMultiplier);
+            var densityMultiplier = DensityMultiplier(rule.Family);
+            var minCount = (int)MathF.Max(1, MathF.Ceiling(rule.MinPerTile * lodMultiplier * densityMultiplier));
+            var maxCount = (int)MathF.Max(minCount, MathF.Ceiling(rule.MaxPerTile * lodMultiplier * densityMultiplier));
             var count = minCount + rng.Next(maxCount - minCount + 1);
 
             // Cap remaining slots
@@ -173,19 +174,63 @@ public static class PropPlacementPlanner
         return true;
     }
 
+    public static float FamilyDistanceMultiplier(PropFamily family, float cameraDistance)
+    {
+        if (cameraDistance <= LodCloseDistance)
+            return 1f;
+
+        if (cameraDistance <= LodMidDistance)
+        {
+            return family switch
+            {
+                PropFamily.Rock => 0.72f,
+                PropFamily.Tree => 0.60f,
+                PropFamily.Bush => 0.42f,
+                PropFamily.DeadWood or PropFamily.Log => 0.52f,
+                PropFamily.Reed or PropFamily.Flower => 0.34f,
+                PropFamily.GrassPatch => 0.22f,
+                _ => 0.40f,
+            };
+        }
+
+        return family switch
+        {
+            PropFamily.Rock => 0.34f,
+            PropFamily.Tree => 0.18f,
+            PropFamily.DeadWood or PropFamily.Log => 0.16f,
+            PropFamily.Bush => 0.10f,
+            PropFamily.Reed or PropFamily.Flower => 0.08f,
+            PropFamily.GrassPatch => 0f,
+            _ => 0.10f,
+        };
+    }
+
     private static float ResolveVisibleScale(PropVisualProfile profile)
     {
         var multiplier = profile.Family switch
         {
-            PropFamily.Tree => 2.55f,
-            PropFamily.Rock => 2.35f,
-            PropFamily.DeadWood or PropFamily.Log => 2.2f,
-            PropFamily.Bush => 1.85f,
-            PropFamily.GrassPatch or PropFamily.Reed or PropFamily.Flower => 1.7f,
+            PropFamily.Tree => 7.4f,
+            PropFamily.Rock => 4.2f,
+            PropFamily.DeadWood or PropFamily.Log => 5.6f,
+            PropFamily.Bush => 4.8f,
+            PropFamily.GrassPatch or PropFamily.Reed or PropFamily.Flower => 3.8f,
             _ => 1f,
         };
 
         return profile.BaseScale * multiplier;
+    }
+
+    private static float DensityMultiplier(PropFamily family)
+    {
+        return family switch
+        {
+            PropFamily.Tree => 1.75f,
+            PropFamily.Bush => 1.55f,
+            PropFamily.Rock => 1.65f,
+            PropFamily.DeadWood or PropFamily.Log => 1.35f,
+            PropFamily.GrassPatch or PropFamily.Reed or PropFamily.Flower => 1.35f,
+            _ => 1.15f,
+        };
     }
 
     private static Vector3 TileToWorld(PlayableSimulation simulation, PlayableTile tile)

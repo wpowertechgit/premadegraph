@@ -1,5 +1,6 @@
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Protocol;
+using TribalNeuroSim.Client.Rendering;
 
 namespace TribalNeuroSim.Client.Models;
 
@@ -7,6 +8,7 @@ public enum DemoMode
 {
     Normal,
     EmpireStress,
+    DisputeStress,
 }
 
 public sealed class PlayableSimulation
@@ -15,9 +17,9 @@ public sealed class PlayableSimulation
 
     // M18B: Polity tier progression thresholds (constituent tribe count)
     private const int TierCityThreshold = 3;
-    private const int TierCountyThreshold = 10;
-    private const int TierKingdomThreshold = 50;
-    private const int TierEmpireThreshold = 100;
+    private const int TierCountyThreshold = 6;
+    private const int TierKingdomThreshold = 12;
+    private const int TierEmpireThreshold = 20;
 
     private readonly Random _random;
     private readonly int _centerTileId;
@@ -53,6 +55,9 @@ public sealed class PlayableSimulation
 
     public DemoMode Mode => _demoMode;
 
+    /// <summary>M18C: Count of currently disputed tiles (2+ occupants with different tribe IDs).</summary>
+    public int DisputedTileCount => Tiles.Count(t => t.IsDisputed);
+
     public List<PlayableTile> Tiles { get; } = new();
 
     public List<PlayableTribe> Tribes { get; } = new();
@@ -65,6 +70,8 @@ public sealed class PlayableSimulation
 
     public int SelectedTribeId { get; set; } = -1;
 
+    public int SelectedTileId { get; set; } = -1;
+
     public static PlayableSimulation CreateDemo(int seed = 1337, int? width = null, int? height = null, int tribeCount = 12)
     {
         var size = PlayableWorldGenerator.CalculateDemoSize(tribeCount);
@@ -76,6 +83,25 @@ public sealed class PlayableSimulation
             DemoMode.Normal);
         simulation.GenerateTiles();
         simulation.GenerateTribes(Math.Max(2, tribeCount), DemoMode.Normal);
+        return simulation;
+    }
+
+    /// <summary>
+    /// M18C: Dispute stress preset — dense map, aggressive tribes, forced proximity.
+    /// Designed to reliably produce disputed tiles for visual validation.
+    /// </summary>
+    public static PlayableSimulation CreateDisputeStress(int seed = 5173, int tribeCount = 12)
+    {
+        var count = Math.Max(4, tribeCount);
+        var size = PlayableWorldGenerator.CalculateDisputeStressSize(count);
+        var simulation = new PlayableSimulation(
+            seed,
+            size.Width,
+            size.Height,
+            count,
+            DemoMode.DisputeStress);
+        simulation.GenerateTiles();
+        simulation.GenerateTribes(count, DemoMode.DisputeStress);
         return simulation;
     }
 
@@ -107,6 +133,7 @@ public sealed class PlayableSimulation
         Tombstones.Clear();
         HighestTierReached = PolityTier.Tribe;
         ActiveMergeCount = 0;
+        SelectedTileId = -1;
         _disputeCounts.Clear();
         GenerateTiles();
         GenerateTribes(_initialTribeCount, _demoMode);
@@ -185,7 +212,19 @@ public sealed class PlayableSimulation
             var homeTile = spawnTiles[i % spawnTiles.Count];
 
             ArtifactVector artifacts;
-            if (mode == DemoMode.EmpireStress)
+            if (mode == DemoMode.DisputeStress)
+            {
+                // M18C: High Combat (0.55-1.0) and Risk (0.55-1.0) → aggressive expansion.
+                // Moderate Resource (0.35-0.8), low Team (0.15-0.45) → reluctant to merge.
+                // This encourages territorial encroachment and disputed border creation.
+                artifacts = new ArtifactVector(
+                    Combat: 0.55f + (float)_random.NextDouble() * 0.45f,
+                    Resource: 0.35f + (float)_random.NextDouble() * 0.45f,
+                    MapObjective: 0.25f + (float)_random.NextDouble() * 0.75f,
+                    Risk: 0.55f + (float)_random.NextDouble() * 0.45f,
+                    Team: 0.15f + (float)_random.NextDouble() * 0.30f);
+            }
+            else if (mode == DemoMode.EmpireStress)
             {
                 // M18B: Bias artifacts toward merge-compatible tribes.
                 // Tribes are arranged into clusters of 3-4; each cluster gets high Team/Resource
@@ -215,11 +254,31 @@ public sealed class PlayableSimulation
                     Team: 0.25f + (float)_random.NextDouble() * 0.75f);
             }
 
-            // Stress mode: slightly higher initial population and food
-            var popBase = mode == DemoMode.EmpireStress ? 100 : 80;
-            var popExtra = mode == DemoMode.EmpireStress ? 110 : 90;
-            var foodBase = mode == DemoMode.EmpireStress ? 40f : 30f;
-            var foodExtra = mode == DemoMode.EmpireStress ? 40f : 35f;
+            // Mode-specific starting resources
+            var popBase = mode switch
+            {
+                DemoMode.EmpireStress => 100,
+                DemoMode.DisputeStress => 90,
+                _ => 80,
+            };
+            var popExtra = mode switch
+            {
+                DemoMode.EmpireStress => 110,
+                DemoMode.DisputeStress => 100,
+                _ => 90,
+            };
+            var foodBase = mode switch
+            {
+                DemoMode.EmpireStress => 40f,
+                DemoMode.DisputeStress => 38f,
+                _ => 30f,
+            };
+            var foodExtra = mode switch
+            {
+                DemoMode.EmpireStress => 40f,
+                DemoMode.DisputeStress => 38f,
+                _ => 35f,
+            };
 
             var tribe = new PlayableTribe(
                 id: id,
@@ -239,6 +298,7 @@ public sealed class PlayableSimulation
         }
 
         SelectedTribeId = Tribes.FirstOrDefault()?.Id ?? -1;
+        SelectedTileId = Tribes.FirstOrDefault()?.MainCampTileId ?? -1;
     }
 
     private List<int> BuildSpawnTiles(int tribeCount)
@@ -250,7 +310,7 @@ public sealed class PlayableSimulation
     {
         foreach (var tile in Tiles)
         {
-            tile.Food = MathF.Min(tile.MaxFood, tile.Food + tile.MaxFood * 0.012f);
+            tile.Food = MathF.Min(tile.MaxFood, tile.Food + tile.MaxFood * 0.030f);
         }
     }
 
@@ -265,7 +325,7 @@ public sealed class PlayableSimulation
             var disputeMultiplier = tile.IsDisputed ? 0.60f : 1f;
             // R8: Integration yield multiplier (newly claimed tiles start at 25% yield)
             var integrationMult = IntegrationMultiplier(tribe, tileId);
-            var amount = MathF.Min(tile.Food, tile.MaxFood * (0.012f + tribe.Artifacts.Resource * 0.018f) * share * disputeMultiplier * integrationMult);
+            var amount = MathF.Min(tile.Food, tile.MaxFood * (0.018f + tribe.Artifacts.Resource * 0.022f) * share * disputeMultiplier * integrationMult);
             tile.Food -= amount;
             harvest += amount;
         }
@@ -275,7 +335,7 @@ public sealed class PlayableSimulation
 
     private void ApplyPopulationPressure(PlayableTribe tribe)
     {
-        var upkeep = tribe.Population * 0.028f;
+        var upkeep = tribe.Population * 0.016f;
         tribe.FoodStores -= upkeep;
         var startingPopulation = tribe.Population;
 
@@ -312,13 +372,13 @@ public sealed class PlayableSimulation
     // ═══════════════════════════════════════════════════════════════════════════
     // R8: Expansion cost model constants
     // ═══════════════════════════════════════════════════════════════════════════
-    private const float ClaimBaseCost = 40f;
-    private const float ClaimTerritoryCostPerTile = 12f;
-    private const float ClaimDistanceCostPerStep = 8f;
-    private const float ClaimPressureCost = 25f;
-    private const float ClaimFoodFloor = 50f;
-    private const int ClaimPopBase = 80;
-    private const int ClaimPopPerTile = 25;
+    private const float ClaimBaseCost = 12f;
+    private const float ClaimTerritoryCostPerTile = 5f;
+    private const float ClaimDistanceCostPerStep = 3f;
+    private const float ClaimPressureCost = 12f;
+    private const float ClaimFoodFloor = 6f;
+    private const int ClaimPopBase = 55;
+    private const int ClaimPopPerTile = 14;
     private const int IntegrationTicks = 75;
     private const float IntegrationStartYield = 0.25f;
     private const int OverextensionPopDivisor = 120;
@@ -345,12 +405,44 @@ public sealed class PlayableSimulation
             .Where(id => Tiles[id].Controls.Count == 0 && !_thisTickClaims.Contains(id))
             .ToList();
 
-        if (neutralCandidates.Count == 0)
-            return;
+        var candidate = -1;
+        var cost = 0f;
+        var contestedShare = 1f;
 
-        var (candidate, cost) = neutralCandidates
-            .Select(id => (Id: id, Cost: CalculateClaimCost(tribe, id, overextended)))
-            .MinBy(x => x.Cost);
+        if ((_demoMode == DemoMode.EmpireStress || _demoMode == DemoMode.DisputeStress)
+            && (neutralCandidates.Count == 0 || (_demoMode == DemoMode.EmpireStress && Tick % 3 == 0)))
+        {
+            var hostileCandidates = tribe.Territory
+                .SelectMany(NeighborTileIds)
+                .Distinct()
+                .Where(id => !_thisTickClaims.Contains(id))
+                .Where(id => Tiles[id].Controls.Count > 0
+                             && Tiles[id].Controls.All(control => control.TribeId != tribe.Id)
+                             && Tiles[id].Controls.Count < 4)
+                .ToList();
+
+            if (hostileCandidates.Count > 0)
+            {
+                var contestedPick = hostileCandidates
+                    .Select(id => (Id: id, Cost: CalculateClaimCost(tribe, id, overextended) * 0.82f))
+                    .MinBy(x => x.Cost);
+                candidate = contestedPick.Id;
+                cost = contestedPick.Cost;
+                contestedShare = 0.58f;
+            }
+        }
+
+        if (candidate < 0)
+        {
+            if (neutralCandidates.Count == 0)
+                return;
+
+            var neutralPick = neutralCandidates
+                .Select(id => (Id: id, Cost: CalculateClaimCost(tribe, id, overextended)))
+                .MinBy(x => x.Cost);
+            candidate = neutralPick.Id;
+            cost = neutralPick.Cost;
+        }
 
         // Food affordability check
         if (tribe.FoodStores - cost < ClaimFoodFloor)
@@ -362,7 +454,7 @@ public sealed class PlayableSimulation
         tribe.LastClaimCost = cost;
         tribe.TileClaimedTick[candidate] = Tick;
         _thisTickClaims.Add(candidate);
-        ClaimTile(tribe, candidate, contestedShare: 1f, emitEvents: true);
+        ClaimTile(tribe, candidate, contestedShare: contestedShare, emitEvents: true);
 
         AddEvent(new PlayableEvent(
             Tick,
@@ -579,7 +671,8 @@ public sealed class PlayableSimulation
         _disputeCounts.TryGetValue(key, out var count);
         _disputeCounts[key] = count + 1;
 
-        if (_disputeCounts[key] >= 4)
+        var mergeTrigger = _demoMode == DemoMode.EmpireStress ? 2 : 4;
+        if (_disputeCounts[key] >= mergeTrigger)
         {
             TryMergeTribes(key.FirstTribeId, key.SecondTribeId, tileId);
         }
@@ -595,7 +688,8 @@ public sealed class PlayableSimulation
         }
 
         var averageTeam = (first.Artifacts.Team + second.Artifacts.Team) * 0.5f;
-        if (averageTeam < 0.78f)
+        var mergeThreshold = _demoMode == DemoMode.EmpireStress ? 0.68f : 0.78f;
+        if (averageTeam < mergeThreshold)
         {
             return;
         }
@@ -617,6 +711,13 @@ public sealed class PlayableSimulation
         // M18B: Polity tier progression — merge constituent counts,
         // then upgrade tier if threshold crossed.
         survivor.ConstituentCount += absorbed.ConstituentCount;
+        foreach (var member in absorbed.MemberTribes)
+        {
+            if (survivor.MemberTribes.Any(existing => existing.TribeId == member.TribeId))
+                continue;
+
+            survivor.MemberTribes.Add(member with { IsLeader = false });
+        }
         var newTier = PolityTierForCount(survivor.ConstituentCount);
         if (newTier > survivor.Tier)
         {
@@ -638,7 +739,7 @@ public sealed class PlayableSimulation
 
     /// <summary>
     /// M18B: Map constituent tribe count to appropriate polity tier.
-    /// Thresholds: 1=Tribe, 3=City, 10=County, 50=Kingdom, 100=Empire.
+    /// Thresholds: 1=Tribe, 3=City, 6=County, 12=Kingdom, 20=Empire.
     /// </summary>
     private static PolityTier PolityTierForCount(int constituentCount)
     {
@@ -672,6 +773,61 @@ public sealed class PlayableSimulation
             tile.Controls.Remove(absorbedClaim);
             NormalizeControls(tile);
         }
+    }
+
+    /// <summary>
+    /// M18C: Force a disputed tile between two nearby living tribes for visual validation.
+    /// Finds a neutral tile bordering two different-owner territories, then claims it for both.
+    /// Returns the tile ID if a dispute was created, or -1 if no suitable tile found.
+    /// </summary>
+    public int ForceDispute()
+    {
+        var livingTribes = Tribes.Where(t => t.IsAlive).ToList();
+        if (livingTribes.Count < 2)
+            return -1;
+
+        // Find neutral tiles that border at least two different tribes' territories
+        foreach (var tile in Tiles)
+        {
+            if (tile.Controls.Count > 0)
+                continue; // only target neutral tiles
+
+            var borderOwners = NeighborTileIds(tile.Id)
+                .Where(n => n < Tiles.Count)
+                .SelectMany(n => Tiles[n].Controls)
+                .Select(c => c.TribeId)
+                .Distinct()
+                .Where(id => livingTribes.Any(t => t.Id == id))
+                .Take(3) // need at least 2 distinct owners
+                .ToList();
+
+            if (borderOwners.Count < 2)
+                continue;
+
+            // Choose the two border-owning tribes and grant them each 50% control
+            var tribeA = livingTribes.First(t => t.Id == borderOwners[0]);
+            var tribeB = livingTribes.First(t => t.Id == borderOwners[1]);
+
+            tile.Controls.Clear();
+            tile.Controls.Add(new TileControlClaim(tribeA.Id, 0.5f));
+            tile.Controls.Add(new TileControlClaim(tribeB.Id, 0.5f));
+            tribeA.Territory.Add(tile.Id);
+            tribeB.Territory.Add(tile.Id);
+
+            AddEvent(new PlayableEvent(
+                Tick,
+                PlayableEventKind.DisputedTileCreated,
+                tribeA.Id,
+                tribeB.Id,
+                tile.Id,
+                PopulationDelta: 0,
+                Reason: null));
+
+            RecordDispute(tribeA.Id, tribeB.Id, tile.Id);
+            return tile.Id;
+        }
+
+        return -1;
     }
 
     private void RecordExtinction(PlayableTribe tribe, PlayableExtinctionReason reason)
@@ -818,6 +974,7 @@ public sealed class PlayableTribe
         FoodStores = foodStores;
         Tier = tier;
         Artifacts = artifacts;
+        MemberTribes.Add(new PlayablePolityMember(id, name, TribeVisuals.RoleLabel(artifacts), IsLeader: true));
     }
 
     public int Id { get; }
@@ -850,4 +1007,12 @@ public sealed class PlayableTribe
 
     // M18B: Number of original tribes absorbed into this merged polity
     public int ConstituentCount { get; set; } = 1;
+
+    public List<PlayablePolityMember> MemberTribes { get; } = new();
 }
+
+public sealed record PlayablePolityMember(
+    int TribeId,
+    string TribeName,
+    string Role,
+    bool IsLeader);

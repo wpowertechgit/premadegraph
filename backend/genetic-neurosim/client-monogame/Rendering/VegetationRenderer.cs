@@ -75,7 +75,7 @@ public sealed class VegetationRenderer : IDisposable
             _diagnostics.Info($"LOAD begin key={modelKey} path={fullPath} importer={importerLabel}");
             var meshData = isFbx
                 ? ModelMeshData.FromFbx(_graphicsDevice, fullPath, _diagnostics)
-                : ModelMeshData.FromGltf(_graphicsDevice, ModelRoot.Load(fullPath));
+                : ModelMeshData.FromGltfFile(_graphicsDevice, fullPath, _diagnostics);
             _loadedModels[modelKey] = meshData;
             if (TryLoadMaterialTextures(fullPath, modelKey))
             {

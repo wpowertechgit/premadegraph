@@ -70,7 +70,12 @@ public sealed class AssetRegistry
     public FactionInsigniaProfile ResolveInsignia(int tribeId, PolityTier tier, Protocol.ArtifactVector artifacts)
     {
         if (_insignias.TryGetValue(tribeId, out var cached))
-            return cached;
+        {
+            var cachedFrameKey = FactionInsigniaProfile.PolityFrameKeyForTier(tier);
+            var cachedColor = FactionInsigniaProfile.ColorFromArtifacts(artifacts);
+            if (cached.PolityFrameKey == cachedFrameKey && cached.PrimaryColor == cachedColor)
+                return cached;
+        }
 
         var color = FactionInsigniaProfile.ColorFromArtifacts(artifacts);
         var iconKey = FactionInsigniaProfile.PickIcon(tribeId, AvailableIconKeys);

@@ -29,13 +29,18 @@ public sealed class PropInstanceBatch
             if (!PropPlacementPlanner.IsFamilyVisibleAtDistance(instance.Family, cameraDistance))
                 continue;
 
+            var familyMultiplier = PropPlacementPlanner.FamilyDistanceMultiplier(instance.Family, cameraDistance);
+            if (familyMultiplier <= 0f)
+                continue;
+
             if (!_batches.TryGetValue(instance.ModelKey, out var list))
             {
                 list = new List<PropDrawInstance>();
                 _batches[instance.ModelKey] = list;
             }
 
-            if (list.Count >= MaxInstancesPerModel)
+            var familyCap = Math.Max(1, (int)MathF.Round(MaxInstancesPerModel * familyMultiplier));
+            if (list.Count >= familyCap)
                 continue;
 
             list.Add(new PropDrawInstance(instance.World, instance.WindPhase, instance.Family));

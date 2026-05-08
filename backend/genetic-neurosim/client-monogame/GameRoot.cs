@@ -27,6 +27,8 @@ public sealed class GameRoot : Game
     private readonly PlayableRenderAdapter _renderAdapter;
     private readonly IsometricCamera _camera;
     private readonly KeyboardCommandController _commandController;
+    private readonly PanelDragController _panelDragController = new();
+    private readonly Dictionary<DraggablePanelId, Rectangle> _panelBounds = new();
     private CancellationTokenSource? _receiverCancellation;
     private SimulationFrameReceiver? _frameReceiver;
     private Task? _receiverTask;
@@ -35,7 +37,10 @@ public sealed class GameRoot : Game
     private TabletopRenderer? _tabletopRenderer;
     private VegetationRenderer? _vegetationRenderer;
     private SettlementRenderer? _settlementRenderer;
+    private BlobShadowRenderer? _blobShadowRenderer;
+    private PostProcessRenderer? _postProcessRenderer;
     private BannerRenderer? _bannerRenderer;
+    private bool _postProcessEnabled = true;
     private DebugHud? _debugHud;
     private FontRenderer? _panelFontRenderer;
     private SelectionSystem? _selectionSystem;
@@ -78,14 +83,18 @@ public sealed class GameRoot : Game
         _isNetworkMode = launchOptions.ConnectMode;
         _mapWidth = launchOptions.MapWidth;
         _mapHeight = launchOptions.MapHeight;
+        var displayMode = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode;
+        var startupBounds = WindowDefaults.ResolveStartupBackBuffer(displayMode.Width, displayMode.Height);
         _graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = 1600,
-            PreferredBackBufferHeight = 900,
+            PreferredBackBufferWidth = startupBounds.X,
+            PreferredBackBufferHeight = startupBounds.Y,
             SynchronizeWithVerticalRetrace = true,
         };
+        IsFixedTimeStep = false;
 
         IsMouseVisible = true;
+        Window.AllowUserResizing = true;
         Window.Title = "Tribal NeuroSim v3";
 
         _connection = new SimulationConnection();
@@ -93,12 +102,23 @@ public sealed class GameRoot : Game
         _viewModel = new SimulationViewModel();
         _assetRegistry = AssetRegistry.CreateWithFallbacks();
         _diagnostics = new ClientDiagnostics();
-        _playableSimulation = launchOptions.IsEmpireStress
-            ? PlayableSimulation.CreateEmpireStress()
-            : PlayableSimulation.CreateDemo();
+        _playableSimulation = launchOptions.IsDisputeStress
+            ? PlayableSimulation.CreateDisputeStress()
+            : launchOptions.IsEmpireStress
+                ? PlayableSimulation.CreateEmpireStress()
+                : PlayableSimulation.CreateDemo();
 
-        // M18B: Empire stress uses a farther-out camera to fit the larger map
-        if (launchOptions.IsEmpireStress)
+        // M18C/M18B: Stress presets use a farther-out camera to fit larger maps
+        if (launchOptions.IsDisputeStress)
+        {
+            _camera = new IsometricCamera
+            {
+                FocalPoint = new Vector3(180f, 0f, 130f),
+                Distance = 420f,
+                Pitch = MathHelper.ToRadians(35f),
+            };
+        }
+        else if (launchOptions.IsEmpireStress)
         {
             _camera = new IsometricCamera
             {
@@ -123,6 +143,8 @@ public sealed class GameRoot : Game
 
     protected override void Initialize()
     {
+        Window.Position = Point.Zero;
+        _graphics.ApplyChanges();
         _receiverCancellation = new CancellationTokenSource();
         _receiverTask = Task.Run(() => ConnectAndReceiveFramesAsync(_receiverCancellation.Token));
 
@@ -143,9 +165,13 @@ public sealed class GameRoot : Game
         _runtimeAssets = new RuntimeAssetLoader(GraphicsDevice);
         _vegetationRenderer = new VegetationRenderer(GraphicsDevice);
         _settlementRenderer = new SettlementRenderer(GraphicsDevice);
+        _blobShadowRenderer = new BlobShadowRenderer();
+        _blobShadowRenderer.Initialize(GraphicsDevice);
+        _postProcessRenderer = new PostProcessRenderer();
+        Window.ClientSizeChanged += OnClientSizeChanged;
         _bannerRenderer = new BannerRenderer();
         if (_runtimeAssets is not null)
-            _bannerRenderer.Initialize(GraphicsDevice, _runtimeAssets);
+            _bannerRenderer.Initialize(GraphicsDevice, _runtimeAssets, _panelFontRenderer);
         LoadRuntimeTextures();
 
         LoadVegetationModels();
@@ -182,6 +208,7 @@ public sealed class GameRoot : Game
         }
 
         _camera.Update(gameTime, keyboard, mouse, _previousMouse, GraphicsDevice.Viewport);
+        _panelDragController.Update(mouse, _previousMouse, GraphicsDevice.Viewport, _panelBounds);
         HandlePlayableInput(commands);
 
         // M5: Toggle V3 stats panel with 'V' key
@@ -209,7 +236,7 @@ public sealed class GameRoot : Game
                 : _smoothedFps + 0.10f * (instantFps - _smoothedFps);
         }
 
-        GraphicsDevice.Clear(new Color(28, 22, 15)); // dark wood-table brown, no black void
+        GraphicsDevice.Clear(new Color(74, 54, 33)); // warm wood-table fallback, no black void
 
         // M12E: Isolated viewer renders one model at origin with a fixed camera
         if (_isolatedViewerEnabled)
@@ -236,8 +263,19 @@ public sealed class GameRoot : Game
             }
 
             var captureRt = _screenshotCapture.BeginDraw(GraphicsDevice);
-            if (captureRt is not null)
+            var usePostProcess = _postProcessEnabled && captureRt is null;
+
+            if (usePostProcess)
+            {
+                var vp = GraphicsDevice.Viewport;
+                _postProcessRenderer!.EnsureTargets(GraphicsDevice, vp.Width, vp.Height);
+                GraphicsDevice.SetRenderTarget(_postProcessRenderer.SceneTarget);
+                GraphicsDevice.Clear(new Color(74, 54, 33));
+            }
+            else if (captureRt is not null)
+            {
                 GraphicsDevice.SetRenderTarget(captureRt);
+            }
 
             // M6: In network mode with V1 data, render from Rust frame data.
             // Otherwise render the local PlayableSimulation demo.
@@ -281,6 +319,17 @@ public sealed class GameRoot : Game
             _vegetationRenderer?.CollectInstances(_playableSimulation, _assetRegistry, _camera.Distance);
             _vegetationRenderer?.Render(_camera, GraphicsDevice, (float)gameTime.TotalGameTime.TotalSeconds);
 
+            // 2.5 Blob ground shadows under settlement models (screen-space, after terrain, before models).
+            if (!useNetworkRender && _settlementRenderer is not null && _blobShadowRenderer is not null)
+            {
+                _blobShadowRenderer.DrawShadows(
+                    GraphicsDevice,
+                    _settlementRenderer.DrawList,
+                    _camera,
+                    GraphicsDevice.Viewport,
+                    selectedTribeId);
+            }
+
             // 3. Settlement 3D models on capital tiles (LOD-aware).
             if (!useNetworkRender)
             {
@@ -307,6 +356,13 @@ public sealed class GameRoot : Game
                 _camera,
                 selectedTribeId);
 
+            // Restore back buffer before post-process / screenshot finalize
+            GraphicsDevice.SetRenderTarget(null);
+
+            // M22: Apply post-process (warm tint + vignette) when enabled and not capturing
+            if (usePostProcess)
+                _postProcessRenderer!.Apply(GraphicsDevice);
+
             // M19: End screenshot capture frame if active (saves PNG, presents to back buffer)
             if (captureRt is not null)
             {
@@ -330,21 +386,23 @@ public sealed class GameRoot : Game
 
             if (_selectionPanel is not null && _panelFontRenderer is not null && !useNetworkRender)
             {
+                var defaultSelectionOrigin = new Point(GraphicsDevice.Viewport.Width - SelectionPanel.PanelWidth - 12, 12);
                 _selectionPanel.Draw(
                     _spriteBatch,
                     _playableSimulation,
                     _panelFontRenderer,
-                    new Point(GraphicsDevice.Viewport.Width - 310, 12));
+                    _panelDragController.ResolveOrigin(DraggablePanelId.Selection, defaultSelectionOrigin));
             }
 
             // M9: Lineage inspector (toggled with L)
             if (_panelFontRenderer is not null && !useNetworkRender)
             {
+                var defaultLineageOrigin = new Point(GraphicsDevice.Viewport.Width - 660, 12);
                 _lineageInspector.Draw(
                     _spriteBatch,
                     _playableSimulation,
                     _panelFontRenderer,
-                    new Point(GraphicsDevice.Viewport.Width - 660, 12),
+                    _panelDragController.ResolveOrigin(DraggablePanelId.Lineage, defaultLineageOrigin),
                     _lineagePanelVisible);
             }
 
@@ -355,11 +413,22 @@ public sealed class GameRoot : Game
                     _spriteBatch,
                     _playableSimulation,
                     _panelFontRenderer,
-                    new Point(12, 280),
+                    _panelDragController.ResolveOrigin(DraggablePanelId.Tombstone, new Point(12, 280)),
                     _tombstonePanelVisible);
             }
 
-            _debugHud?.Draw(_spriteBatch, BuildHudState());
+            if (_debugHud is not null)
+            {
+                _debugHud.ReservedTopRightPanel = _selectionPanel?.LastBounds;
+                var defaultPerformancePanel = DebugHud.ResolvePerformancePanelBounds(GraphicsDevice.Viewport, _selectionPanel?.LastBounds);
+                _debugHud.PerformancePanelOriginOverride = _panelDragController.ResolveOrigin(DraggablePanelId.Performance, defaultPerformancePanel.Location);
+                _debugHud.Draw(
+                    _spriteBatch,
+                    BuildHudState(),
+                    _panelDragController.ResolveOrigin(DraggablePanelId.DebugHud, new Point(12, 12)));
+            }
+
+            UpdatePanelBounds();
         }
 
         base.Draw(gameTime);
@@ -388,6 +457,8 @@ public sealed class GameRoot : Game
             _tabletopRenderer?.Dispose();
             _vegetationRenderer?.Dispose();
             _settlementRenderer?.Dispose();
+            _blobShadowRenderer?.Dispose();
+            _postProcessRenderer?.Dispose();
             _bannerRenderer?.Dispose();
             _debugHud?.Dispose();
             _panelFontRenderer?.Dispose();
@@ -465,6 +536,11 @@ public sealed class GameRoot : Game
 
     private void HandlePlayableInput(PlayableCommandSet commands)
     {
+        if (commands.ToggleFullscreen)
+        {
+            ToggleFullscreen();
+        }
+
         if (commands.TogglePause)
         {
             _playableSimulation.IsPaused = !_playableSimulation.IsPaused;
@@ -478,6 +554,11 @@ public sealed class GameRoot : Game
         if (commands.Reset)
         {
             _playableSimulation.Reset();
+        }
+
+        if (commands.ForceDispute)
+        {
+            _playableSimulation.ForceDispute();
         }
 
         if (commands.SelectNext)
@@ -495,7 +576,7 @@ public sealed class GameRoot : Game
             _ticksPerSecond = Math.Max(1, _ticksPerSecond - 2);
         }
 
-        if (commands.SelectAtScreenPosition && commands.SelectionScreenPosition is { } screenPosition)
+        if (commands.SelectAtScreenPosition && !_panelDragController.ConsumesPointer && commands.SelectionScreenPosition is { } screenPosition)
         {
             SelectTribeAtScreenPosition(screenPosition);
         }
@@ -503,6 +584,11 @@ public sealed class GameRoot : Game
         if (commands.ToggleIsolatedViewer)
         {
             ToggleIsolatedViewer();
+        }
+
+        if (commands.TogglePostProcess)
+        {
+            _postProcessEnabled = !_postProcessEnabled;
         }
 
         if (commands.CaptureScreenshots)
@@ -531,6 +617,18 @@ public sealed class GameRoot : Game
         if (commands.ToggleLineageInspector)
         {
             _lineagePanelVisible = !_lineagePanelVisible;
+        }
+
+        // M18C: Force dispute creation between two neighboring tribes for visual testing
+        if (commands.ForceDispute)
+        {
+            var forcedTileId = _playableSimulation.ForceDispute();
+            if (forcedTileId >= 0 && _playableSimulation.DisputedTileCount > 0)
+            {
+                var tile = _playableSimulation.Tiles[forcedTileId];
+                if (tile.Controls.Count > 0)
+                    _playableSimulation.SelectedTribeId = tile.Controls[0].TribeId;
+            }
         }
 
         // M9: Tombstone panel toggle
@@ -604,11 +702,14 @@ public sealed class GameRoot : Game
         if (living.Length == 0)
         {
             _playableSimulation.SelectedTribeId = -1;
+            _playableSimulation.SelectedTileId = -1;
             return;
         }
 
         var currentIndex = Array.FindIndex(living, tribe => tribe.Id == _playableSimulation.SelectedTribeId);
-        _playableSimulation.SelectedTribeId = living[(currentIndex + 1 + living.Length) % living.Length].Id;
+        var next = living[(currentIndex + 1 + living.Length) % living.Length];
+        _playableSimulation.SelectedTribeId = next.Id;
+        _playableSimulation.SelectedTileId = next.MainCampTileId;
     }
 
     private void SelectTribeAtScreenPosition(Vector2 screenPosition)
@@ -620,6 +721,13 @@ public sealed class GameRoot : Game
         {
             _playableSimulation.SelectedTribeId = result.TribeId;
         }
+        else
+        {
+            _playableSimulation.SelectedTribeId = -1;
+        }
+
+        if (result is { TileId: >= 0 })
+            _playableSimulation.SelectedTileId = result.TileId;
     }
 
     private void UpdateWindowTitle(GameTime gameTime)
@@ -734,6 +842,34 @@ public sealed class GameRoot : Game
         }
     }
 
+    private void ToggleFullscreen()
+    {
+        _graphics.ToggleFullScreen();
+    }
+
+    private void UpdatePanelBounds()
+    {
+        _panelBounds.Clear();
+
+        if (_debugHud is not null)
+        {
+            AddPanelBounds(DraggablePanelId.DebugHud, _debugHud.LastBounds);
+            AddPanelBounds(DraggablePanelId.Performance, _debugHud.LastPerformanceBounds);
+        }
+
+        if (_selectionPanel is not null)
+            AddPanelBounds(DraggablePanelId.Selection, _selectionPanel.LastBounds);
+
+        AddPanelBounds(DraggablePanelId.Lineage, _lineageInspector.LastBounds);
+        AddPanelBounds(DraggablePanelId.Tombstone, _tombstonePanel.LastBounds);
+    }
+
+    private void AddPanelBounds(DraggablePanelId panel, Rectangle bounds)
+    {
+        if (!bounds.IsEmpty)
+            _panelBounds[panel] = bounds;
+    }
+
     private void DrawIsolatedViewer(GameTime gameTime)
     {
         // Combine vegetation and settlement model keys for the isolated viewer
@@ -787,6 +923,16 @@ public sealed class GameRoot : Game
             LastError: "Arrow keys cycle models | F5 to exit isolated viewer"));
     }
 
+    private void OnClientSizeChanged(object? sender, EventArgs e)
+    {
+        // Post-process RT and vignette must resize with the window
+        if (_postProcessRenderer is not null && _graphics is not null)
+        {
+            var vp = _graphics.GraphicsDevice.Viewport;
+            _postProcessRenderer.EnsureTargets(_graphics.GraphicsDevice, vp.Width, vp.Height);
+        }
+    }
+
     private static bool KeyPressedOnce(KeyboardState current, KeyboardState previous, Keys key)
     {
         return current.IsKeyDown(key) && !previous.IsKeyDown(key);
@@ -801,7 +947,7 @@ public sealed class GameRoot : Game
         _renderMetrics.SettlementFarCulledCount = settlementStats.FarCulledCount;
         _renderMetrics.VegetationInstanceCount = vegetationInstances;
         _renderMetrics.EstimatedPrimitives = EstimatePrimitives(terrainTiles, settlementStats.TotalPrimitives, vegetationInstances);
-        _renderMetrics.AssetLoadFailures = _diagnostics.LastDecodeError is not null || _diagnostics.LastConnectionError is not null ? 1 : 0;
+        _renderMetrics.AssetLoadFailures = RenderMetrics.CalculateAssetLoadFailures(_diagnostics);
         _renderMetrics.FrameDecodeLatencyMs = _diagnostics.LastFrameReceivedAt is { } lastFrame
             ? (DateTimeOffset.UtcNow - lastFrame).TotalMilliseconds
             : -1;
@@ -857,6 +1003,7 @@ public sealed class GameRoot : Game
                 FrameDecodeLatencyMs: _renderMetrics.FrameDecodeLatencyMs,
                 CameraDistance: _renderMetrics.CameraDistance,
                 ZoomLevelLabel: _renderMetrics.ZoomLevelLabel,
+                VSyncEnabled: _renderMetrics.VSyncEnabled,
                 SelectedTerritoryCount: 0,
                 ExpansionCooldownRemaining: 0,
                 SelectedExpansionCost: 0f,
@@ -900,6 +1047,7 @@ public sealed class GameRoot : Game
             FrameDecodeLatencyMs: _renderMetrics.FrameDecodeLatencyMs,
             CameraDistance: _renderMetrics.CameraDistance,
             ZoomLevelLabel: _renderMetrics.ZoomLevelLabel,
+            VSyncEnabled: _renderMetrics.VSyncEnabled,
             // R8: Expansion metrics
             SelectedTerritoryCount: selected?.Territory.Count ?? 0,
             ExpansionCooldownRemaining: Math.Max(0L, cooldownRemaining),
@@ -932,12 +1080,12 @@ public sealed class GameRoot : Game
     /// M6: Compact tier label for HUD line
     private static string GetTierLabel(byte tier) => tier switch
     {
-        0 => "ribe",
+        0 => "Tribe",
         1 => "City",
         2 => "County",
         3 => "Duchy",
-        4 => "Kingd",
-        5 => "Emp",
+        4 => "Kingdom",
+        5 => "Empire",
         _ => $"?{tier}",
     };
 }

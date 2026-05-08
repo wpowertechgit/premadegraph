@@ -1,11 +1,18 @@
 namespace TribalNeuroSim.Client.Rendering;
 
+using TribalNeuroSim.Client.Models;
+
 /// <summary>
 /// Per-frame render performance counters. Collected in GameRoot.Draw and displayed in DebugHud.
 /// All fields are computed fresh each frame; zero allocations in hot path.
 /// </summary>
 public sealed class RenderMetrics
 {
+    public static int CalculateAssetLoadFailures(ClientDiagnostics diagnostics)
+    {
+        return diagnostics.LastDecodeError is null ? 0 : 1;
+    }
+
     /// <summary>Exponential-moving-average FPS (smoothed over ~0.5s).</summary>
     public float Fps { get; set; }
 

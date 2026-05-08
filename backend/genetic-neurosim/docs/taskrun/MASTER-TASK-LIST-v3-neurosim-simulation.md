@@ -1290,6 +1290,35 @@ public sealed record BiomePropRule(
 
 ---
 
+### Task M18C — Local Demo Dispute Behavior Harness (Done)
+
+**Critical for:** Validating disputed-zone visuals in the acceptance checklist.
+
+**Problem to solve:**
+- The renderer has disputed tile overlays, but the current local demo often reaches visual-review checkpoints with zero disputed tiles.
+- This blocks acceptance for:
+  - disputed zones visible
+  - disputed overlay subtle
+- The fix should be behavioral/test-harness oriented, not a fake always-on overlay.
+
+**Implementation direction:**
+- Add a deterministic local debug preset or hotkey that creates several contested tiles within a short tick budget.
+- Keep the default demo believable; use a separate dispute stress path if needed.
+- Ensure contested tiles have at least two real controlling tribes with normalized control shares.
+- Ensure the selection panel and HUD expose dispute count and selected tribe dispute state.
+- Capture close/mid/far screenshots from the dispute preset for the visual checklist.
+
+**Acceptance:**
+- [x] A fixed seed/preset produces non-zero disputed tiles within the documented tick budget.
+- [x] Disputed tiles render colored crosshatch/overlay using actual contesting tribe IDs.
+- [x] Overlay remains subtle enough that terrain texture is still readable.
+- [x] The run is deterministic for the same seed and preset.
+- [x] A taskrun note records seed, tick, disputed tile count, and screenshot paths.
+
+**Done:** Food economy rebalanced (regrowth 0.012→0.030, upkeep 0.028→0.016, relaxed expansion costs). Added `DemoMode.DisputeStress` with `--dispute-stress` CLI flag, dense 42 tiles/tribe map, high Combat/Risk artifact bias. Added `ForceDispute()` method and 'F' hotkey (changed from 'D' to avoid WASD camera conflict) for on-demand dispute creation. Selection panel and HUD already exposed dispute counts. See `docs/taskrun/TaskM18CRun.md`.
+
+---
+
 ### Task M19 — Visual Screenshot Acceptance Harness (Done)
 
 **Critical for:** Stopping "it builds but looks wrong" regressions.
@@ -1317,6 +1346,172 @@ public sealed record BiomePropRule(
 - A developer can run one command or press one debug key to capture comparison screenshots.
 - The taskrun folder contains a current visual acceptance checklist.
 - Future visual changes include screenshots before being called done.
+
+---
+
+### Task M21 — Settlement Lighting Coherence Fix
+
+**Critical for:** Settlements looking grounded instead of pasted on with a different sun.
+
+**Problem:** `SettlementRenderer.EnsureEffect()` calls `EnableDefaultLighting()` — MonoGame's built-in default directional setup. Terrain uses two custom directional lights (warm main `(0.5, -1, -0.3)` / cool fill `(-0.3, -0.6, 0.5)`). Settlements are shaded by a different sun than everything else, making them look disconnected.
+
+**Files to modify:**
+- `client-monogame/Rendering/SettlementRenderer.cs` — `EnsureEffect()` and `Render()`
+
+**Implementation:**
+Replace `_effect.EnableDefaultLighting()` with the same light setup as `WorldRenderer`:
+```csharp
+_effect = new BasicEffect(graphicsDevice)
+{
+    TextureEnabled = false,
+    VertexColorEnabled = false,
+    LightingEnabled = true,
+    PreferPerPixelLighting = true,
+    AmbientLightColor = new Vector3(0.30f, 0.30f, 0.28f),
+    DiffuseColor = new Vector3(0.75f, 0.68f, 0.55f),
+};
+_effect.DirectionalLight0.Enabled = true;
+_effect.DirectionalLight0.Direction = Vector3.Normalize(new Vector3(0.5f, -1f, -0.3f));
+_effect.DirectionalLight0.DiffuseColor = new Vector3(0.85f, 0.82f, 0.70f);
+_effect.DirectionalLight1.Enabled = true;
+_effect.DirectionalLight1.Direction = Vector3.Normalize(new Vector3(-0.3f, -0.6f, 0.5f));
+_effect.DirectionalLight1.DiffuseColor = new Vector3(0.20f, 0.22f, 0.30f);
+_effect.DirectionalLight2.Enabled = false;
+```
+
+Extract the shared light constants to a static class `SceneLighting` in `client-monogame/Rendering/SceneLighting.cs` so both renderers reference the same values rather than duplicating them.
+
+**Acceptance:**
+- Settlement models cast and receive the same directional shading as terrain tiles — same apparent sun angle
+- Shadows/highlights on a settlement match the shading direction on adjacent terrain hexes
+- `SceneLighting.cs` is the single source of truth for directional light vectors and colors
+- No new runtime cost — same BasicEffect, same draw calls
+
+---
+
+### Task M22 — Post-Process Render Target Pass (Vignette + Color Grade) (Done)
+
+**Critical for:** Making every screenshot look authored instead of raw debug output.
+
+**Problem:** Scene renders straight to back buffer. No color grade, no vignette, no post-processing of any kind. Even a minimal post-process pass makes the scene read as intentional and raises perceived quality significantly.
+
+**Files to create:**
+- `client-monogame/Rendering/PostProcessRenderer.cs`
+
+**Files to modify:**
+- `client-monogame/GameRoot.cs` — render scene to RT, apply post-process before Present
+
+**Implementation:**
+
+```csharp
+public sealed class PostProcessRenderer : IDisposable
+{
+    private RenderTarget2D? _sceneTarget;
+    private Texture2D? _vignetteOverlay;
+    private SpriteBatch? _spriteBatch;
+
+    // Called once at startup / on resize
+    public void EnsureTargets(GraphicsDevice gd, int width, int height);
+
+    // Returns the RenderTarget2D to draw the scene into
+    public RenderTarget2D SceneTarget => _sceneTarget!;
+
+    // Final composite: draw scene RT with color grade, then vignette overlay
+    public void Apply(GraphicsDevice gd);
+}
+```
+
+**Pipeline in `GameRoot.Update/Draw`:**
+1. `graphicsDevice.SetRenderTarget(postProcess.SceneTarget)` — begin scene
+2. Draw everything (tabletop, terrain, settlements, props, territory, banners, HUD)
+3. `graphicsDevice.SetRenderTarget(null)` — back to back buffer
+4. `postProcess.Apply(graphicsDevice)`:
+   - Draw scene RT with `SpriteBatch` using a warm multiply tint: `Color(255, 248, 235)` at ~90% alpha — gives the whole scene a warm parchment-adjacent grade
+   - Draw vignette overlay: a pre-baked `Texture2D` (or CPU-generated gradient) with `Color.Black` at edges, `Color.Transparent` center, `BlendState.AlphaBlend`
+
+**Vignette texture generation (no shader needed):**
+```csharp
+private static Texture2D GenerateVignette(GraphicsDevice gd, int width, int height)
+{
+    var pixels = new Color[width * height];
+    var cx = width * 0.5f;
+    var cy = height * 0.5f;
+    var maxDist = MathF.Sqrt(cx * cx + cy * cy);
+    for (var y = 0; y < height; y++)
+    for (var x = 0; x < width; x++)
+    {
+        var dx = (x - cx) / maxDist;
+        var dy = (y - cy) / maxDist;
+        var dist = MathF.Sqrt(dx * dx + dy * dy);
+        var alpha = MathF.Pow(MathHelper.Clamp(dist - 0.45f, 0f, 1f) / 0.55f, 2.2f);
+        pixels[y * width + x] = Color.Black * alpha;
+    }
+    // ... SetData
+}
+```
+
+**Scope guardrail:**
+- No HLSL custom shaders in V0. CPU-generated vignette texture + SpriteBatch tint only.
+- Only add a bloom pass if V0 compiles clean and the vignette alone looks good.
+- Resize the render target when the window resizes (hook `Window.ClientSizeChanged`).
+
+**Acceptance:**
+- All screenshots have soft darkened edges (vignette)
+- Scene has a subtle warm parchment color grade (not harsh orange, just enough to unify the palette)
+- No performance regression — one extra SpriteBatch pass at end of frame
+- HUD still renders on top (draw HUD after `postProcess.Apply`, not into the scene RT, or draw HUD into the RT after scene)
+- Toggle with `P` key for before/after comparison
+
+---
+
+### Task M23 — Settlement Ground Shadows (Blob AO)
+
+**Critical for:** 3D settlement models looking grounded on terrain instead of floating pasted-on.
+
+**Problem:** Settlement models sit on terrain tiles with no shadow connection. No ground contact shadow = models look like they're floating or added in Photoshop. A soft dark ellipse beneath each model gives instant depth perception at near-zero cost.
+
+**Files to create:**
+- `client-monogame/Rendering/BlobShadowRenderer.cs`
+
+**Files to modify:**
+- `client-monogame/GameRoot.cs` — draw blob shadows between terrain and settlement models
+- `client-monogame/Rendering/SettlementRenderer.cs` — expose draw list for shadow pass
+
+**Implementation:**
+```csharp
+public sealed class BlobShadowRenderer : IDisposable
+{
+    private Texture2D? _shadowTexture; // pre-baked radial gradient: white center → transparent edges
+    private SpriteBatch? _spriteBatch;
+
+    // Pre-bake shadow texture (64x64 soft radial gradient, greyscale)
+    public void Initialize(GraphicsDevice gd);
+
+    // Draw one blob shadow per settlement, projected to terrain surface
+    // Must be called AFTER terrain, BEFORE settlement models
+    public void DrawShadows(
+        GraphicsDevice gd,
+        IReadOnlyList<SettlementDraw> draws,
+        IsometricCamera camera,
+        int selectedTribeId);
+}
+```
+
+**Shadow placement:**
+- Project each settlement's 3D world position to screen space via camera view/projection matrices
+- Draw `_shadowTexture` at screen position, sized proportional to settlement model horizontal extent
+- Use `BlendState` with: `ColorSourceBlend = AlphaBlend, AlphaSourceBlend = Zero` (darkening blend)
+- Shadow color: `Color.Black * 0.35f` — subtle, not harsh
+- Shadow ellipse: horizontal radius = `modelHorizontalExtent * 1.2f`, vertical radius = `horizontal * 0.4f` (isometric foreshortening)
+- Offset shadow slightly in light direction: `+8px right, +4px down` (matches `DirectionalLight0` direction from M21/`SceneLighting`)
+- Selected tribe: shadow slightly larger and slightly darker (`0.50f` alpha) to reinforce selection
+
+**Acceptance:**
+- Each settlement capital has a soft dark ellipse on the terrain beneath it
+- Shadow size scales correctly from close to mid zoom (disappears at far zoom, same LOD cutoff as settlement model)
+- Shadow does not appear at far zoom where settlement is replaced by a marker
+- No z-fighting with terrain — shadow drawn with `DepthStencilState.None` in screen space pass
+- Scene does not look worse with shadows off (toggle available for comparison)
 
 ---
 
@@ -1550,7 +1745,11 @@ Remaining work should now prioritize behavior tuning, validation, performance, a
 | M17 — Render Performance Budget | DONE — FPS, draw counters, primitives estimate, budget bar in Debug HUD |
 | M18 — Local Demo World Quality | Keeps offline demo useful |
 | M18B — Local Demo Merger/Empire Stress Scenario | **Done** — `CreateEmpireStress()` preset, polity tier progression in merges, HUD tracking, `--empire-stress` flag |
+| M18C — Local Demo Dispute Behavior Harness | **Done** — food economy rebalance, `CreateDisputeStress()` preset, `ForceDispute()` + 'F' hotkey, `--dispute-stress` flag |
 | M19 — Visual Screenshot Acceptance Harness | DONE — F6 captures close/mid/far PNGs, checklist in docs/taskrun/visual-acceptance-checklist.md |
+| M21 — Settlement Lighting Coherence | Fix settlement BasicEffect lights to match terrain light directions. **Done** — `SceneLighting.cs` shared constants, both renderers use same directional lights |
+| M22 — Post-Process Render Target Pass | **Done** — warm parchment tint + radial vignette via CPU-generated texture; scene rendered to RT, composited before UI; P key toggles; no custom shaders |
+| M23 — Settlement Ground Shadows | **Done** — BlobShadowRenderer draws soft radial shadow ellipses under settlement capitals between terrain/vegetation and model passes; LOD-aware, screen-space, no z-fighting |
 | M20 — Tribe Stakes/Gameplay Readability | Deferred; answers why tribes matter after visuals stabilize |
 | N2 — Dataset Bootstrap | Needs dataset integration |
 
@@ -1563,8 +1762,11 @@ Remaining work should now prioritize behavior tuning, validation, performance, a
 5. M7 — biome visual polish on top of M15 prop rules. (Done)
 6. M8 — faction insignia/banner pass for far-zoom readability.
 7. M10 — final font and UI art direction pass, building on M16's FontRenderer.
-8. M20 — tribe stakes and gameplay-state readability.
-9. M6/M9/N2/N3 — live backend rendering, lineage UI, dataset bootstrap, and export integration when backend-facing work resumes.
+8. M21 — settlement lighting coherence (trivial fix, high visual impact).
+9. M23 — blob shadow pass under settlements (drawn between terrain and model passes).
+10. M22 — post-process render target pass (vignette + color grade, no custom shaders).
+11. M20 — tribe stakes and gameplay-state readability.
+12. M6/M9/N2/N3 — live backend rendering, lineage UI, dataset bootstrap, and export integration when backend-facing work resumes.
 
 ### Phase E — Validation
 | Task | WAIT-FOR |

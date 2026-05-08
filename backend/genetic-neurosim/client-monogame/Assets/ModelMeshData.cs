@@ -2,6 +2,8 @@ using Assimp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SharpGLTF.Schema2;
+using SharpGLTF.Validation;
+using System.Text.Json.Nodes;
 using AssimpMesh = Assimp.Mesh;
 
 namespace TribalNeuroSim.Client.Assets;
@@ -177,6 +179,45 @@ public sealed class ModelMeshData : IDisposable
     /// <summary>
     /// Extract glTF mesh data. glTF Y-up → MonoGame Y-up (same). Flip V coordinate for top-left origin.
     /// </summary>
+    public static ModelMeshData FromGltfFile(GraphicsDevice graphicsDevice, string fullPath, AssetLoadDiagnostics? diagnostics = null)
+    {
+        var modelRoot = ModelRoot.Load(fullPath, new ReadSettings
+        {
+            Validation = ValidationMode.Skip,
+            JsonPreprocessor = StripExternalImageReferences,
+        });
+
+        diagnostics?.Info($"GLTF load geometry-only key={Path.GetFileNameWithoutExtension(fullPath)} textureRefs=ignored");
+        return FromGltf(graphicsDevice, modelRoot);
+    }
+
+    /// <summary>
+    /// Test helper: parses glTF geometry without requiring a GraphicsDevice.
+    /// </summary>
+    public static GltfGeometrySummary FromGltfFile(string fullPath, AssetLoadDiagnostics? diagnostics = null)
+    {
+        var modelRoot = ModelRoot.Load(fullPath, new ReadSettings
+        {
+            Validation = ValidationMode.Skip,
+            JsonPreprocessor = StripExternalImageReferences,
+        });
+
+        diagnostics?.Info($"GLTF probe geometry-only key={Path.GetFileNameWithoutExtension(fullPath)} textureRefs=ignored");
+
+        var vertexCount = 0;
+        var indexCount = 0;
+        foreach (var mesh in modelRoot.LogicalMeshes)
+        {
+            foreach (var primitive in mesh.Primitives)
+            {
+                vertexCount += primitive.GetVertexAccessor("POSITION")?.Count ?? 0;
+                indexCount += primitive.GetIndices()?.Count ?? 0;
+            }
+        }
+
+        return new GltfGeometrySummary(vertexCount, indexCount / 3);
+    }
+
     public static ModelMeshData FromGltf(GraphicsDevice graphicsDevice, ModelRoot modelRoot)
     {
         var allVertices = new List<VertexPositionNormalTexture>();
@@ -229,4 +270,35 @@ public sealed class ModelMeshData : IDisposable
             allIndices.ToArray(),
             primitiveCount);
     }
+
+    private static string StripExternalImageReferences(string json)
+    {
+        var root = JsonNode.Parse(json)?.AsObject();
+        if (root is null)
+            return json;
+
+        if (root["materials"] is JsonArray materials)
+        {
+            foreach (var materialNode in materials.OfType<JsonObject>())
+            {
+                materialNode.Remove("normalTexture");
+                materialNode.Remove("occlusionTexture");
+                materialNode.Remove("emissiveTexture");
+
+                if (materialNode["pbrMetallicRoughness"] is JsonObject pbr)
+                {
+                    pbr.Remove("baseColorTexture");
+                    pbr.Remove("metallicRoughnessTexture");
+                }
+            }
+        }
+
+        root.Remove("images");
+        root.Remove("textures");
+        root.Remove("samplers");
+
+        return root.ToJsonString();
+    }
 }
+
+public readonly record struct GltfGeometrySummary(int VertexCount, int PrimitiveCount);

@@ -24,8 +24,8 @@ public sealed record SettlementLodProfile(
 
 public static class SettlementLodCatalog
 {
-    /// <summary>Maximum number of 3D settlement models drawn per frame (all LOD levels).</summary>
-    public const int MaxSettlementDraws = 8;
+    /// <summary>High safety cap only; normal/demo maps should draw every living capital.</summary>
+    public const int MaxSettlementDraws = 512;
 
     /// <summary>Default LOD profile used when no per-tier override exists.</summary>
     public static readonly SettlementLodProfile Default = new(SettlementLodLevel.Far, 200f, 500f);
@@ -43,5 +43,10 @@ public static class SettlementLodCatalog
     public static SettlementLodProfile Resolve(PolityTier tier)
     {
         return Profiles.TryGetValue(tier, out var profile) ? profile : Default;
+    }
+
+    public static int CountVisibleSettlements(int livingSettlementCount, float cameraDistance)
+    {
+        return Math.Clamp(livingSettlementCount, 0, MaxSettlementDraws);
     }
 }
