@@ -30,6 +30,14 @@ var tests = new (string Name, Action Body)[]
     ("playable render adapter hides abstract territory radii", PlayableRenderAdapterHidesAbstractTerritoryRadii),
     ("playable render adapter exposes subtle visual elevation", PlayableRenderAdapterExposesSubtleVisualElevation),
     ("playable visual elevation is visible at close zoom", PlayableVisualElevationIsVisibleAtCloseZoom),
+    ("playable terrain surface relief varies inside hill tiles", PlayableTerrainSurfaceReliefVariesInsideHillTiles),
+    ("playable terrain surface relief makes mountains sharper than hills", PlayableTerrainSurfaceReliefMakesMountainsSharperThanHills),
+    ("playable terrain surface relief makes mountains visibly tall", PlayableTerrainSurfaceReliefMakesMountainsVisiblyTall),
+    ("playable terrain surface relief blends mountain edge to flat neighbors", PlayableTerrainSurfaceReliefBlendsMountainEdgeToFlatNeighbors),
+    ("playable terrain surface relief blends hill edge to flat neighbors", PlayableTerrainSurfaceReliefBlendsHillEdgeToFlatNeighbors),
+    ("playable terrain surface relief joins hills to mountain foothills", PlayableTerrainSurfaceReliefJoinsHillsToMountainFoothills),
+    ("playable terrain surface relief preserves mountain edge beside mountain neighbors", PlayableTerrainSurfaceReliefPreservesMountainEdgeBesideMountainNeighbors),
+    ("playable terrain surface relief is world-space continuous", PlayableTerrainSurfaceReliefIsWorldSpaceContinuous),
     ("playable render adapter uses pointy hex geometry", PlayableRenderAdapterUsesPointyHexGeometry),
     ("territory border neighbors match simulation hex neighbors", TerritoryBorderNeighborsMatchSimulationHexNeighbors),
     ("territory border renderer rejects projected runaway segments", TerritoryBorderRendererRejectsProjectedRunawaySegments),
@@ -534,6 +542,157 @@ static void PlayableVisualElevationIsVisibleAtCloseZoom()
         $"close zoom needs visible relief, got range {elevations.Min():0.00}..{elevations.Max():0.00}");
     Assert(elevations.All(value => value is >= -1.25f and <= 4.75f),
         "visual elevation should stay subtle and map-like, not become terrain chunk cliffs");
+}
+
+static void PlayableTerrainSurfaceReliefVariesInsideHillTiles()
+{
+    const int seed = 91;
+    const int width = 24;
+    const int height = 18;
+    const float tileElevation = 1.2f;
+
+    var samples = new[]
+    {
+        PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, 320f, 240f, BiomeId.Hills, tileElevation),
+        PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, 328f, 240f, BiomeId.Hills, tileElevation),
+        PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, 320f, 248f, BiomeId.Hills, tileElevation),
+        PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, 312f, 236f, BiomeId.Hills, tileElevation),
+    };
+
+    Assert(samples.Max() - samples.Min() > 0.10f,
+        $"expected hill surface to vary within a tile, got range {samples.Min():0.00}..{samples.Max():0.00}");
+    Assert(samples.All(sample => sample is >= -1.5f and <= 11.0f),
+        "hill surface relief should stay readable and bounded");
+}
+
+static void PlayableTerrainSurfaceReliefMakesMountainsSharperThanHills()
+{
+    const int seed = 92;
+    const int width = 24;
+    const int height = 18;
+    const float tileElevation = 1.2f;
+
+    var offsets = new (float X, float Z)[]
+    {
+        (-16f, -12f), (-8f, -8f), (0f, 0f), (8f, 8f), (16f, 12f), (4f, -14f), (-12f, 10f),
+    };
+
+    var hillSamples = offsets
+        .Select(offset => PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, 420f + offset.X, 300f + offset.Z, BiomeId.Hills, tileElevation))
+        .ToArray();
+    var mountainSamples = offsets
+        .Select(offset => PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, 420f + offset.X, 300f + offset.Z, BiomeId.Mountains, tileElevation))
+        .ToArray();
+
+    var hillRange = hillSamples.Max() - hillSamples.Min();
+    var mountainRange = mountainSamples.Max() - mountainSamples.Min();
+
+    Assert(mountainRange > hillRange * 1.45f,
+        $"expected mountain relief to be sharper than hills, got hill {hillRange:0.00}, mountain {mountainRange:0.00}");
+}
+
+static void PlayableTerrainSurfaceReliefMakesMountainsVisiblyTall()
+{
+    const int seed = 94;
+    const int width = 24;
+    const int height = 18;
+    const float tileElevation = 2.0f;
+
+    var samples = Enumerable.Range(0, 9)
+        .SelectMany(ix => Enumerable.Range(0, 9).Select(iz => (X: 340f + ix * 5f, Z: 260f + iz * 5f)))
+        .Select(point => PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, point.X, point.Z, BiomeId.Mountains, tileElevation))
+        .ToArray();
+
+    Assert(samples.Max() - samples.Min() >= 14f,
+        $"mountains should visibly rise at close zoom, got surface range {samples.Min():0.00}..{samples.Max():0.00}");
+    Assert(samples.Max() >= 18f,
+        $"mountain peaks should be visibly above flat terrain, got max {samples.Max():0.00}");
+}
+
+static void PlayableTerrainSurfaceReliefBlendsMountainEdgeToFlatNeighbors()
+{
+    const int seed = 95;
+    const int width = 24;
+    const int height = 18;
+    const float tileElevation = 2.0f;
+    const float tileRadius = 28f;
+
+    var edgeHeight = PlayableWorldGenerator.VisualSurfaceElevation(
+        seed, width, height, 420f, 300f, BiomeId.Mountains, tileElevation,
+        localX: 24.25f, localZ: 0f, tileRadius: tileRadius, elevatedNeighborMask: 0);
+
+    Assert(Math.Abs(edgeHeight - PlayableWorldGenerator.BaseTerrainSurfaceElevation) < 0.20f,
+        $"mountain edge beside flat terrain should blend to tile surface, got {edgeHeight:0.00}");
+}
+
+static void PlayableTerrainSurfaceReliefBlendsHillEdgeToFlatNeighbors()
+{
+    const int seed = 95;
+    const int width = 24;
+    const int height = 18;
+    const float tileElevation = 1.0f;
+    const float tileRadius = 28f;
+
+    var edgeHeight = PlayableWorldGenerator.VisualSurfaceElevation(
+        seed, width, height, 420f, 300f, BiomeId.Hills, tileElevation,
+        localX: 24.25f, localZ: 0f, tileRadius: tileRadius, elevatedNeighborMask: 0);
+
+    Assert(Math.Abs(edgeHeight - PlayableWorldGenerator.BaseTerrainSurfaceElevation) < 0.20f,
+        $"hill edge beside flat terrain should blend to tile surface, got {edgeHeight:0.00}");
+}
+
+static void PlayableTerrainSurfaceReliefJoinsHillsToMountainFoothills()
+{
+    const int seed = 95;
+    const int width = 24;
+    const int height = 18;
+    const float tileRadius = 28f;
+    const int rightNeighborIsMountain = 2 << 2;
+    const int leftNeighborIsHill = 1 << 8;
+
+    var hillEdge = PlayableWorldGenerator.VisualSurfaceElevation(
+        seed, width, height, 420f, 300f, BiomeId.Hills, 1.0f,
+        localX: 24.25f, localZ: 0f, tileRadius: tileRadius, reliefNeighborMask: rightNeighborIsMountain);
+    var mountainEdge = PlayableWorldGenerator.VisualSurfaceElevation(
+        seed, width, height, 420f, 300f, BiomeId.Mountains, 2.0f,
+        localX: -24.25f, localZ: 0f, tileRadius: tileRadius, reliefNeighborMask: leftNeighborIsHill);
+
+    Assert(hillEdge >= 8f,
+        $"hill edge beside mountain should rise toward foothill height, got {hillEdge:0.00}");
+    Assert(Math.Abs(hillEdge - mountainEdge) < 1.0f,
+        $"hill/mountain shared edge should meet at foothill height, got hill {hillEdge:0.00}, mountain {mountainEdge:0.00}");
+}
+
+static void PlayableTerrainSurfaceReliefPreservesMountainEdgeBesideMountainNeighbors()
+{
+    const int seed = 95;
+    const int width = 24;
+    const int height = 18;
+    const float tileElevation = 2.0f;
+    const float tileRadius = 28f;
+    const int rightNeighborMask = 2 << 2;
+
+    var edgeHeight = PlayableWorldGenerator.VisualSurfaceElevation(
+        seed, width, height, 420f, 300f, BiomeId.Mountains, tileElevation,
+        localX: 24.25f, localZ: 0f, tileRadius: tileRadius, reliefNeighborMask: rightNeighborMask);
+
+    Assert(edgeHeight > tileElevation + 4.0f,
+        $"mountain edge beside another elevated tile should keep ridge continuity, got {edgeHeight:0.00}");
+}
+
+static void PlayableTerrainSurfaceReliefIsWorldSpaceContinuous()
+{
+    const int seed = 93;
+    const int width = 24;
+    const int height = 18;
+    const float worldX = 512.5f;
+    const float worldZ = 284.25f;
+
+    var first = PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, worldX, worldZ, BiomeId.Mountains, 2.0f);
+    var second = PlayableWorldGenerator.VisualSurfaceElevation(seed, width, height, worldX, worldZ, BiomeId.Mountains, 2.0f);
+
+    Assert(Math.Abs(first - second) < 0.0001f,
+        $"same world-space coordinate should produce same terrain height, got {first:0.0000} and {second:0.0000}");
 }
 
 static void PlayableRenderAdapterUsesPointyHexGeometry()

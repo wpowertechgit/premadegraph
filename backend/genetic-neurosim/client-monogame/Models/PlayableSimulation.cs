@@ -15,11 +15,17 @@ public sealed class PlayableSimulation
 {
     private const int MaxRecentEvents = 80;
 
-    // M18B: Polity tier progression thresholds (constituent tribe count)
-    private const int TierCityThreshold = 3;
-    private const int TierCountyThreshold = 6;
+    // Polity tier progression — constituent count thresholds (mergers/conquests)
+    private const int TierCityThreshold    =  3;
+    private const int TierDuchyThreshold   =  6;
     private const int TierKingdomThreshold = 12;
-    private const int TierEmpireThreshold = 20;
+    private const int TierEmpireThreshold  = 20;
+
+    // Polity tier progression — population thresholds (organic growth)
+    private const int PopCityThreshold    =  1_000;
+    private const int PopDuchyThreshold   =  5_000;
+    private const int PopKingdomThreshold = 10_000;
+    private const int PopEmpireThreshold  = 20_000;
 
     private readonly Random _random;
     private readonly int _centerTileId;
@@ -156,6 +162,11 @@ public sealed class PlayableSimulation
 
         // M18B: Track highest polity tier and active merge count each tick
         UpdateTierTracking();
+        CheckTierPromotions();
+
+        if (Tick % 10 == 0) CheckImperialisticWar();
+        ApplyWars();
+        if (Tick % 50 == 0) ApplyVeterancyXp();
 
         // R8: Periodic integration cleanup (every 80 ticks, with 5-tick grace beyond INTEGRATION_TICKS)
         if (Tick % 80 == 0)
@@ -365,6 +376,7 @@ public sealed class PlayableSimulation
         {
             tribe.Population = 0;
             tribe.IsAlive = false;
+            tribe.WarTargetTribeId = null;
             RecordExtinction(tribe, PlayableExtinctionReason.Starvation);
         }
     }
@@ -384,6 +396,15 @@ public sealed class PlayableSimulation
     private const int OverextensionPopDivisor = 120;
     private const float OverextensionClaimPenalty = 10f;
 
+    // Territory cap per polity tier and war system constants
+    private const int TerritoryCapTribe =  7;
+    private const int TerritoryCapCity  = 30;
+    // Duchy, Kingdom, Empire: no cap (int.MaxValue via TierTileCap)
+    private const int DisputeWarThreshold =  8;
+    private const int CombatInterval      =  5;
+    private const float HomelandDefenseBonus = 0.25f;
+    private const float SurrenderRatio    = 0.20f;
+
     private void Expand(PlayableTribe tribe)
     {
         // Cooldown gate
@@ -394,6 +415,11 @@ public sealed class PlayableSimulation
         var tileCount = tribe.Territory.Count;
         var requiredPop = ClaimPopBase + ClaimPopPerTile * tileCount;
         if (tribe.Population < requiredPop)
+            return;
+
+        // Territory cap per polity tier: Tribe≤7, City≤20, Duchy≤50, Kingdom≤150
+        // (cap is relaxed in empire-stress to preserve merge-speed budget)
+        if (_demoMode != DemoMode.EmpireStress && tileCount >= TierTileCap(tribe.Tier))
             return;
 
         var overextended = tileCount > 1 + tribe.Population / OverextensionPopDivisor;
@@ -674,24 +700,26 @@ public sealed class PlayableSimulation
         var mergeTrigger = _demoMode == DemoMode.EmpireStress ? 2 : 4;
         if (_disputeCounts[key] >= mergeTrigger)
         {
-            TryMergeTribes(key.FirstTribeId, key.SecondTribeId, tileId);
+            var merged = TryMergeTribes(key.FirstTribeId, key.SecondTribeId, tileId);
+            if (!merged && _disputeCounts[key] >= DisputeWarThreshold)
+                TryDeclareWarBetween(key.FirstTribeId, key.SecondTribeId);
         }
     }
 
-    private void TryMergeTribes(int firstTribeId, int secondTribeId, int tileId)
+    private bool TryMergeTribes(int firstTribeId, int secondTribeId, int tileId)
     {
         var first = Tribes.FirstOrDefault(tribe => tribe.Id == firstTribeId);
         var second = Tribes.FirstOrDefault(tribe => tribe.Id == secondTribeId);
         if (first is null || second is null || !first.IsAlive || !second.IsAlive)
         {
-            return;
+            return false;
         }
 
         var averageTeam = (first.Artifacts.Team + second.Artifacts.Team) * 0.5f;
         var mergeThreshold = _demoMode == DemoMode.EmpireStress ? 0.68f : 0.78f;
         if (averageTeam < mergeThreshold)
         {
-            return;
+            return false;
         }
 
         var survivor = first.Population >= second.Population ? first : second;
@@ -735,19 +763,46 @@ public sealed class PlayableSimulation
             tileId,
             PopulationDelta: populationGain,
             Reason: PlayableExtinctionReason.Merger));
+        return true;
     }
 
     /// <summary>
-    /// M18B: Map constituent tribe count to appropriate polity tier.
-    /// Thresholds: 1=Tribe, 3=City, 6=County, 12=Kingdom, 20=Empire.
+    /// Map constituent tribe count to appropriate polity tier.
+    /// Thresholds: 1=Tribe, 3=City, 6=Duchy, 12=Kingdom, 20=Empire.
     /// </summary>
     private static PolityTier PolityTierForCount(int constituentCount)
     {
         if (constituentCount >= TierEmpireThreshold) return PolityTier.Empire;
         if (constituentCount >= TierKingdomThreshold) return PolityTier.Kingdom;
-        if (constituentCount >= TierCountyThreshold) return PolityTier.Duchy;
+        if (constituentCount >= TierDuchyThreshold) return PolityTier.Duchy;
         if (constituentCount >= TierCityThreshold) return PolityTier.City;
         return PolityTier.Tribe;
+    }
+
+    /// <summary>
+    /// Map population to the tier it organically warrants.
+    /// Thresholds: 1000=City, 5000=Duchy, 10000=Kingdom, 20000=Empire.
+    /// </summary>
+    private static PolityTier PolityTierForPopulation(int population)
+    {
+        if (population >= PopEmpireThreshold)  return PolityTier.Empire;
+        if (population >= PopKingdomThreshold) return PolityTier.Kingdom;
+        if (population >= PopDuchyThreshold)   return PolityTier.Duchy;
+        if (population >= PopCityThreshold)    return PolityTier.City;
+        return PolityTier.Tribe;
+    }
+
+    private void CheckTierPromotions()
+    {
+        foreach (var tribe in Tribes.Where(t => t.IsAlive))
+        {
+            var popTier = PolityTierForPopulation(tribe.Population);
+            if (popTier > tribe.Tier)
+            {
+                tribe.Tier = popTier;
+                AddEvent(new PlayableEvent(Tick, PlayableEventKind.TierPromotion, tribe.Id, null, tribe.MainCampTileId, 0, null));
+            }
+        }
     }
 
     private void TransferControlClaims(int absorbedTribeId, int survivorTribeId)
@@ -865,6 +920,145 @@ public sealed class PlayableSimulation
 
         RecentEvents.RemoveRange(0, RecentEvents.Count - MaxRecentEvents);
     }
+
+    private static int TierTileCap(PolityTier tier) => tier switch
+    {
+        PolityTier.Tribe => TerritoryCapTribe,
+        PolityTier.City  => TerritoryCapCity,
+        _                => int.MaxValue,
+    };
+
+    private void TryDeclareWarBetween(int firstId, int secondId)
+    {
+        var first  = Tribes.FirstOrDefault(t => t.Id == firstId  && t.IsAlive);
+        var second = Tribes.FirstOrDefault(t => t.Id == secondId && t.IsAlive);
+        if (first is null || second is null) return;
+        if (first.WarTargetTribeId.HasValue || second.WarTargetTribeId.HasValue) return;
+
+        var aggressor = first.Population >= second.Population ? first : second;
+        var target    = aggressor.Id == first.Id ? second : first;
+        aggressor.WarTargetTribeId = target.Id;
+        AddEvent(new PlayableEvent(Tick, PlayableEventKind.WarDeclared, aggressor.Id, target.Id, aggressor.MainCampTileId, 0, null));
+    }
+
+    private void CheckImperialisticWar()
+    {
+        foreach (var tribe in Tribes.Where(t => t.IsAlive && !t.WarTargetTribeId.HasValue).ToList())
+        {
+            if (tribe.Territory.Count < TierTileCap(tribe.Tier)) continue;
+            if (tribe.FoodStores < tribe.Population * 0.25f) continue;
+
+            var target = Tribes
+                .Where(t => t.IsAlive && t.Id != tribe.Id && !t.WarTargetTribeId.HasValue)
+                .Where(t => t.Population < tribe.Population * 0.6f)
+                .Where(t => AreAdjacent(tribe, t))
+                .OrderBy(t => t.Population)
+                .FirstOrDefault();
+
+            if (target is null) continue;
+            tribe.WarTargetTribeId = target.Id;
+            AddEvent(new PlayableEvent(Tick, PlayableEventKind.WarDeclared, tribe.Id, target.Id, tribe.MainCampTileId, 0, null));
+        }
+    }
+
+    private bool AreAdjacent(PlayableTribe a, PlayableTribe b)
+    {
+        var bTiles = new HashSet<int>(b.Territory);
+        return a.Territory.Any(tile => NeighborTileIds(tile).Any(bTiles.Contains));
+    }
+
+    private void ApplyWars()
+    {
+        if (Tick % CombatInterval != 0) return;
+
+        var attackers = Tribes.Where(t => t.IsAlive && t.WarTargetTribeId.HasValue).ToList();
+        foreach (var attacker in attackers)
+        {
+            var defender = Tribes.FirstOrDefault(t => t.Id == attacker.WarTargetTribeId && t.IsAlive);
+            if (defender is null)
+            {
+                attacker.WarTargetTribeId = null;
+                continue;
+            }
+            ResolveCombatTick(attacker, defender);
+        }
+    }
+
+    private void ResolveCombatTick(PlayableTribe attacker, PlayableTribe defender)
+    {
+        var atkNoise = 0.8f + (float)_random.NextDouble() * 0.4f;
+        var defNoise = 0.8f + (float)_random.NextDouble() * 0.4f;
+
+        var atkStrength = attacker.Population * attacker.Artifacts.Combat * atkNoise;
+        var defStrength = defender.Population * (defender.Artifacts.Combat + HomelandDefenseBonus) * defNoise;
+        var ratio = Math.Clamp(atkStrength / Math.Max(defStrength, 0.1f), 0.2f, 5f);
+
+        var defCas = Math.Max(1, (int)(defender.Population * 0.06f * ratio));
+        var atkCas = Math.Max(1, (int)(attacker.Population * 0.04f / ratio));
+
+        attacker.Population = Math.Max(0, attacker.Population - atkCas);
+        defender.Population = Math.Max(0, defender.Population - defCas);
+
+        var defRouted = defender.Population == 0
+            || (attacker.Population > 0 && defender.Population < attacker.Population * SurrenderRatio);
+        var atkDestroyed = attacker.Population == 0;
+
+        if (atkDestroyed)
+        {
+            attacker.WarTargetTribeId = null;
+            attacker.IsAlive = false;
+            RecordExtinction(attacker, PlayableExtinctionReason.Combat);
+            return;
+        }
+        if (defRouted)
+        {
+            attacker.WarTargetTribeId = null;
+            AbsorbTribe(attacker, defender);
+        }
+    }
+
+    private void AbsorbTribe(PlayableTribe victor, PlayableTribe defeated)
+    {
+        var popGain = Math.Max(1, defeated.Population / 2);
+        victor.Population += popGain;
+        victor.FoodStores += Math.Max(0f, defeated.FoodStores * 0.5f);
+
+        foreach (var tileId in defeated.Territory)
+            victor.Territory.Add(tileId);
+
+        TransferControlClaims(defeated.Id, victor.Id);
+
+        victor.ConstituentCount += defeated.ConstituentCount;
+        var newTier = PolityTierForCount(victor.ConstituentCount);
+        if (newTier > victor.Tier)
+            victor.Tier = newTier;
+
+        defeated.Population = 0;
+        defeated.IsAlive = false;
+        defeated.WarTargetTribeId = null;
+        RecordExtinction(defeated, PlayableExtinctionReason.Combat);
+        AddEvent(new PlayableEvent(Tick, PlayableEventKind.Conquest, victor.Id, defeated.Id, defeated.MainCampTileId, popGain, null));
+    }
+
+    private void ApplyVeterancyXp()
+    {
+        foreach (var tribe in Tribes.Where(t => t.IsAlive))
+        {
+            if (tribe.NextVeterancyTick == 0)
+                tribe.NextVeterancyTick = (ulong)(700 + _random.Next(301));
+
+            if (Tick < tribe.NextVeterancyTick) continue;
+
+            tribe.NextVeterancyTick = Tick + (ulong)(700 + _random.Next(301));
+
+            if (tribe.Artifacts.Combat >= tribe.Artifacts.Resource)
+                tribe.Artifacts = tribe.Artifacts with { Combat = Math.Min(1f, tribe.Artifacts.Combat + 0.015f) };
+            else
+                tribe.Artifacts = tribe.Artifacts with { Resource = Math.Min(1f, tribe.Artifacts.Resource + 0.015f) };
+
+            AddEvent(new PlayableEvent(Tick, PlayableEventKind.VeterancyBump, tribe.Id, null, tribe.MainCampTileId, 0, null));
+        }
+    }
 }
 
 public enum PlayableEventKind
@@ -875,12 +1069,17 @@ public enum PlayableEventKind
     Extinction,
     MajorGrowth,
     Merger,
+    WarDeclared,
+    Conquest,
+    VeterancyBump,
+    TierPromotion,
 }
 
 public enum PlayableExtinctionReason
 {
     Starvation,
     Merger,
+    Combat,
 }
 
 public sealed record PlayableEvent(
@@ -989,7 +1188,7 @@ public sealed class PlayableTribe
 
     public PolityTier Tier { get; set; }
 
-    public ArtifactVector Artifacts { get; }
+    public ArtifactVector Artifacts { get; set; }
 
     public HashSet<int> Territory { get; } = new();
 
@@ -1007,6 +1206,10 @@ public sealed class PlayableTribe
 
     // M18B: Number of original tribes absorbed into this merged polity
     public int ConstituentCount { get; set; } = 1;
+
+    // War state
+    public int? WarTargetTribeId { get; set; }
+    public ulong NextVeterancyTick { get; set; }
 
     public List<PlayablePolityMember> MemberTribes { get; } = new();
 }

@@ -1,8 +1,34 @@
 version: '3.8'
 
+# Usage:
+#   docker-compose up                   # backend only (standalone, no cluster data)
+#   docker-compose --profile full up    # backend + postgres (seed via init.sql or PREMADEGRAPH_URL)
+#   PREMADEGRAPH_URL=http://host:3001 docker-compose up   # backend pulls clusters from Node API
+
 services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Uncomment to connect to postgres (requires --profile full)
+      # DATABASE_URL: postgres://postgres:postgres@database/premadegraph
+
+      # Uncomment to pull cluster profiles from the PremadeGraph Node backend
+      # PREMADEGRAPH_URL: http://host.docker.internal:3001
+      # PREMADEGRAPH_DATASET_ID: ""
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   database:
     image: postgres:15-alpine
+    profiles:
+      - full
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -12,15 +38,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-
-  backend:
-    build: .
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@database/premadegraph
-    ports:
-      - "8000:8000"
-    depends_on:
-      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   postgres_data:

@@ -97,3 +97,27 @@ Backend run command:
 cd .\backend
 cargo run
 ```
+How it works now:
+                                                                                                                        
+  dotnet run (no flags) will:                               
+  1. Start C# PlayableSimulation as fallback (always created)
+  2. Simultaneously in the background: try to connect to ws://127.0.0.1:8000/ws/desktop/v1/frames — the Rust backend
+  directly, no Node middleware
+  3. If Rust is running → connection succeeds within 5 seconds → _isNetworkMode flips to true → C# simulation stops
+  ticking, rendering switches to Rust frames
+  4. If Rust is not running → 4 attempts × 5s timeout = ~28s of silent retries, then falls back gracefully to the C# sim
+
+  To run with Rust:
+  # Terminal 1
+  cd backend\genetic-neurosim\backend
+  cargo run
+
+  # Terminal 2 (after Rust prints "listening on 0.0.0.0:8000")
+  cd backend\genetic-neurosim\client-monogame
+  dotnet run
+  The C# will auto-detect Rust and switch. No --connect needed, no Node middleware needed.
+
+  --connect flag still works — it just pre-sets _isNetworkMode = true immediately instead of waiting for connection.
+  Useful if you want to be explicit.
+
+  --node-ws=ws://... still works for when you do have Node in the loop.

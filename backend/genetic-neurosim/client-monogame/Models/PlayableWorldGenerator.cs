@@ -5,8 +5,10 @@ namespace TribalNeuroSim.Client.Models;
 public static class PlayableWorldGenerator
 {
     private const float SpawnEdgePadding = 2f;
+    public const float BaseTerrainSurfaceElevation = 0f;
     public const float MinimumVisualElevation = -1.15f;
     public const float MaximumVisualElevation = 4.50f;
+    public const float MaximumVisualSurfaceElevation = 32.0f;
 
     public static (int Width, int Height) CalculateDemoSize(int tribeCount)
     {
@@ -214,6 +216,151 @@ public static class PlayableWorldGenerator
         return Math.Clamp((elevation - 0.5f) * 2.35f + biomeLift * 2.55f, MinimumVisualElevation, MaximumVisualElevation);
     }
 
+    /// <summary>
+    /// Biome-aware surface height sampled in world space. This is visual-only relief:
+    /// ownership, movement, yields, and expansion still use the underlying tile model.
+    /// </summary>
+    public static float VisualSurfaceElevation(
+        int seed,
+        int width,
+        int height,
+        float worldX,
+        float worldZ,
+        BiomeId biome,
+        float tileElevation,
+        float localX = 0f,
+        float localZ = 0f,
+        float tileRadius = 0f,
+        int elevatedNeighborMask = 0b11_1111,
+        int reliefNeighborMask = -1)
+    {
+        var mapScale = 1f / MathF.Max(1f, MathF.Sqrt(width * height));
+        var x = worldX * mapScale;
+        var z = worldZ * mapScale;
+
+        var shaped = biome switch
+        {
+            BiomeId.Hills => Math.Clamp(HillRelief(seed, x, z), BaseTerrainSurfaceElevation, 11.0f),
+            BiomeId.Mountains => Math.Clamp(MountainRelief(seed, x, z), BaseTerrainSurfaceElevation, MaximumVisualSurfaceElevation),
+            _ => BaseTerrainSurfaceElevation,
+        };
+
+        if (biome is not (BiomeId.Hills or BiomeId.Mountains) || tileRadius <= 0f)
+            return shaped;
+
+        var neighborMask = reliefNeighborMask >= 0
+            ? reliefNeighborMask
+            : LegacyReliefNeighborMask(elevatedNeighborMask);
+        return Math.Clamp(ApplyReliefEdgeTransitions(
+            shaped,
+            biome,
+            localX,
+            localZ,
+            tileRadius,
+            neighborMask), MinimumVisualElevation, MaximumVisualSurfaceElevation);
+    }
+
+    private static float HillRelief(int seed, float x, float z)
+    {
+        var broad = SmoothStep(Fbm(seed + 503, x * 1.45f, z * 1.45f, 3));
+        var softDetail = Fbm(seed + 541, x * 4.25f, z * 4.25f, 3);
+        return 0.35f + broad * 5.75f + (softDetail - 0.5f) * 1.45f;
+    }
+
+    private static float MountainRelief(int seed, float x, float z)
+    {
+        var baseMass = SmoothStep(Fbm(seed + 607, x * 1.15f, z * 1.15f, 4));
+        var ridges = RidgedFbm(seed + 641, x * 8.50f, z * 8.50f, 5);
+        var fractures = RidgedFbm(seed + 673, x * 15.0f, z * 15.0f, 3);
+        var liftedMass = MathF.Pow(Math.Clamp(baseMass, 0f, 1f), 2.15f) * 17.0f;
+        var ridgeLift = MathF.Pow(Math.Clamp(ridges, 0f, 1f), 1.25f) * 13.0f;
+        var fractureLift = MathF.Pow(Math.Clamp(fractures, 0f, 1f), 1.80f) * 5.5f;
+        var valleyCut = (1f - baseMass) * 3.0f;
+        return 0.25f + liftedMass + ridgeLift + fractureLift - valleyCut;
+    }
+
+    private static float ApplyReliefEdgeTransitions(
+        float shapedHeight,
+        BiomeId biome,
+        float localX,
+        float localZ,
+        float tileRadius,
+        int reliefNeighborMask)
+    {
+        var blendWidth = tileRadius * (biome == BiomeId.Mountains ? 0.78f : 0.62f);
+        var height = shapedHeight;
+
+        for (var side = 0; side < 6; side++)
+        {
+            var (ax, az) = HexCorner2(tileRadius, side);
+            var (bx, bz) = HexCorner2(tileRadius, (side + 1) % 6);
+            var edgeX = bx - ax;
+            var edgeZ = bz - az;
+            var lengthSquared = edgeX * edgeX + edgeZ * edgeZ;
+            if (lengthSquared <= 0.0001f)
+                continue;
+
+            var projection = ((localX - ax) * edgeX + (localZ - az) * edgeZ) / lengthSquared;
+            if (projection is < 0f or > 1f)
+                continue;
+
+            var length = MathF.Sqrt(lengthSquared);
+            var distance = MathF.Abs(edgeX * (az - localZ) - (ax - localX) * edgeZ) / length;
+            var neighborBiome = DecodeReliefNeighbor(reliefNeighborMask, side);
+            if (ShouldPreserveReliefAcrossEdge(biome, neighborBiome))
+                continue;
+
+            var blend = SmoothStep(Math.Clamp(distance / blendWidth, 0f, 1f));
+            var target = EdgeTargetHeight(biome, neighborBiome);
+            height = Lerp(target, height, blend);
+        }
+
+        return height;
+    }
+
+    private static float EdgeTargetHeight(BiomeId biome, BiomeId neighborBiome)
+    {
+        return biome switch
+        {
+            BiomeId.Mountains when neighborBiome == BiomeId.Hills => 9.5f,
+            BiomeId.Hills when neighborBiome == BiomeId.Mountains => 9.5f,
+            _ => BaseTerrainSurfaceElevation,
+        };
+    }
+
+    private static bool ShouldPreserveReliefAcrossEdge(BiomeId biome, BiomeId neighborBiome)
+    {
+        return biome == neighborBiome && biome is BiomeId.Hills or BiomeId.Mountains;
+    }
+
+    private static BiomeId DecodeReliefNeighbor(int reliefNeighborMask, int side)
+    {
+        return ((reliefNeighborMask >> (side * 2)) & 0b11) switch
+        {
+            1 => BiomeId.Hills,
+            2 => BiomeId.Mountains,
+            _ => BiomeId.Unknown,
+        };
+    }
+
+    private static int LegacyReliefNeighborMask(int elevatedNeighborMask)
+    {
+        var mask = 0;
+        for (var side = 0; side < 6; side++)
+        {
+            if ((elevatedNeighborMask & (1 << side)) != 0)
+                mask |= 2 << (side * 2);
+        }
+
+        return mask;
+    }
+
+    private static (float X, float Z) HexCorner2(float radius, int corner)
+    {
+        var angle = MathF.PI / 180f * (-90f + corner * 60f);
+        return (MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
+    }
+
     private static bool IsSpawnBiome(BiomeId biome)
     {
         return biome is BiomeId.Plains
@@ -244,6 +391,26 @@ public static class PlayableWorldGenerator
             normalizer += amplitude;
             amplitude *= 0.5f;
             frequency *= 2f;
+        }
+
+        return normalizer <= 0f ? 0f : total / normalizer;
+    }
+
+    private static float RidgedFbm(int seed, float x, float y, int octaves)
+    {
+        var total = 0f;
+        var amplitude = 0.5f;
+        var frequency = 1f;
+        var normalizer = 0f;
+
+        for (var i = 0; i < octaves; i++)
+        {
+            var signed = Noise01(seed + i * 131, x * frequency, y * frequency) * 2f - 1f;
+            var ridge = 1f - MathF.Abs(signed);
+            total += ridge * ridge * amplitude;
+            normalizer += amplitude;
+            amplitude *= 0.52f;
+            frequency *= 2.15f;
         }
 
         return normalizer <= 0f ? 0f : total / normalizer;

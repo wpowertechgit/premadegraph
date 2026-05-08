@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TribalNeuroSim.Client.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fb6920f82e2c62c7d9ebf6132de7c48f916249b4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b4facba746974a339fce7fddd1bba78441a8a0a9")]
 [assembly: System.Reflection.AssemblyProductAttribute("TribalNeuroSim.Client.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TribalNeuroSim.Client.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

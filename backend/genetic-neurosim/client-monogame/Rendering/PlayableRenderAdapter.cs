@@ -19,6 +19,8 @@ public sealed class PlayableRenderAdapter
 
     public IEnumerable<RenderableTile> BuildTiles(PlayableSimulation simulation)
     {
+        var biomeByCoordinate = simulation.Tiles.ToDictionary(tile => (tile.X, tile.Y), tile => tile.Biome);
+
         foreach (var tile in simulation.Tiles)
         {
             var hasCamp = simulation.Tribes.Any(tribe => tribe.MainCampTileId == tile.Id && tribe.IsAlive);
@@ -47,7 +49,11 @@ public sealed class PlayableRenderAdapter
                 Y: tile.Y,
                 VisualElevation: PlayableWorldGenerator.VisualElevation(simulation.Seed, simulation.Width, simulation.Height, tile.X, tile.Y, tile.Biome),
                 ContestingTribeIds: contestingIds,
-                Biome: tile.Biome);
+                Biome: tile.Biome,
+                TerrainSeed: simulation.Seed,
+                MapWidth: simulation.Width,
+                MapHeight: simulation.Height,
+                ReliefNeighborMask: ReliefNeighborMask(tile.X, tile.Y, simulation.Width, simulation.Height, biomeByCoordinate));
         }
     }
 
@@ -102,7 +108,11 @@ public sealed class PlayableRenderAdapter
                 Y: y,
                 VisualElevation: 0f,
                 ContestingTribeIds: null,
-                Biome: biome);
+                Biome: biome,
+                TerrainSeed: 0,
+                MapWidth: mapWidth,
+                MapHeight: mapHeight,
+                ReliefNeighborMask: 0);
         }
     }
 
@@ -178,6 +188,57 @@ public sealed class PlayableRenderAdapter
             BiomeId.DenseForest or BiomeId.SparseWoodland => RuntimeAssetCatalog.ForestGround,
             BiomeId.FertileValley or BiomeId.Plains => RuntimeAssetCatalog.GrassMedium,
             _ => RuntimeAssetCatalog.GrassMedium,
+        };
+    }
+
+    private static int ReliefNeighborMask(
+        int x,
+        int y,
+        int width,
+        int height,
+        Dictionary<(int X, int Y), BiomeId> biomeByCoordinate)
+    {
+        var mask = 0;
+        var neighbors = y % 2 == 0
+            ? new (int X, int Y)[]
+            {
+                (x, y - 1),
+                (x + 1, y),
+                (x, y + 1),
+                (x - 1, y + 1),
+                (x - 1, y),
+                (x - 1, y - 1),
+            }
+            : new (int X, int Y)[]
+            {
+                (x + 1, y - 1),
+                (x + 1, y),
+                (x + 1, y + 1),
+                (x, y + 1),
+                (x - 1, y),
+                (x, y - 1),
+            };
+
+        for (var side = 0; side < neighbors.Length; side++)
+        {
+            var neighbor = neighbors[side];
+            if (neighbor.X >= 0 && neighbor.X < width && neighbor.Y >= 0 && neighbor.Y < height
+                && biomeByCoordinate.TryGetValue(neighbor, out var neighborBiome))
+            {
+                mask |= ReliefClass(neighborBiome) << (side * 2);
+            }
+        }
+
+        return mask;
+    }
+
+    private static int ReliefClass(BiomeId biome)
+    {
+        return biome switch
+        {
+            BiomeId.Hills => 1,
+            BiomeId.Mountains => 2,
+            _ => 0,
         };
     }
 

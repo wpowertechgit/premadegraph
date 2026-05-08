@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir C:\\\\Users\\\\admin\\\\Downloads\\\\premgraph\\\\premadegraph\\\\backend\\\\genetic-neurosim\\\\docs *)",
+      "Bash(dir C:\\\\Users\\\\admin\\\\Downloads\\\\premgraph\\\\premadegraph\\\\backend\\\\genetic-neurosim\\\\client-monogame\\\\Domain *)",
+      "Bash(cargo build *)",
+      "Bash(cargo test *)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet test *)",
+      "Bash(dotnet run *)",
+      "Bash(cargo check *)"
+    ]
+  }
+}

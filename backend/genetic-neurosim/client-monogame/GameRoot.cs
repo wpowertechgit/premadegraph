@@ -55,7 +55,7 @@ public sealed class GameRoot : Game
     private int _ticksPerSecond = 12;
 
     // M6: Network mode
-    private readonly bool _isNetworkMode;
+    private volatile bool _isNetworkMode;
     private int _mapWidth;
     private int _mapHeight;
 
@@ -483,25 +483,43 @@ public sealed class GameRoot : Game
 
     private async Task ConnectAndReceiveFramesAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            await _connection.ConnectAsync(_launchOptions.NodeWebSocketEndpoint, cancellationToken)
-                .ConfigureAwait(false);
-            _diagnostics.RecordConnectionOpened(_launchOptions.NodeWebSocketEndpoint);
+        const int MaxAttempts = 4;
+        const int RetryDelayMs = 2000;
 
-            _frameReceiver = new SimulationFrameReceiver(
-                _connection.ReceiveBinaryFrameAsync,
-                payload => _frameDecoder.Decode(payload),
-                _diagnostics);
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            try
+            {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attemptCts.CancelAfter(TimeSpan.FromSeconds(5));
 
-            await _frameReceiver.RunAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            _diagnostics.RecordConnectionError(_launchOptions.NodeWebSocketEndpoint, ex);
+                await _connection.ConnectAsync(_launchOptions.NodeWebSocketEndpoint, attemptCts.Token)
+                    .ConfigureAwait(false);
+
+                _diagnostics.RecordConnectionOpened(_launchOptions.NodeWebSocketEndpoint);
+                _isNetworkMode = true;
+
+                _frameReceiver = new SimulationFrameReceiver(
+                    _connection.ReceiveBinaryFrameAsync,
+                    payload => _frameDecoder.Decode(payload),
+                    _diagnostics);
+
+                await _frameReceiver.RunAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex) when (attempt < MaxAttempts)
+            {
+                _diagnostics.RecordConnectionError(_launchOptions.NodeWebSocketEndpoint, ex);
+                await Task.Delay(RetryDelayMs, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.RecordConnectionError(_launchOptions.NodeWebSocketEndpoint, ex);
+            }
         }
     }
 
@@ -958,8 +976,7 @@ public sealed class GameRoot : Game
 
     private static int EstimatePrimitives(int terrainTiles, int settlementPrimitives, int vegetationInstances)
     {
-        // Hex terrain: ~4 triangles (2 primitives) per tile
-        var terrainPrim = terrainTiles * 2;
+        var terrainPrim = terrainTiles * HexTerrainMesh.TerrainPrimitivesPerTile;
         // Vegetation: ~150 triangles (50 primitives) avg per instance (trees ~200, grass ~20)
         var vegPrim = vegetationInstances * 50;
         return terrainPrim + settlementPrimitives + vegPrim;
@@ -1082,10 +1099,9 @@ public sealed class GameRoot : Game
     {
         0 => "Tribe",
         1 => "City",
-        2 => "County",
-        3 => "Duchy",
-        4 => "Kingdom",
-        5 => "Empire",
+        2 => "Duchy",
+        3 => "Kingdom",
+        4 => "Empire",
         _ => $"?{tier}",
     };
 }

@@ -13,7 +13,7 @@ use crate::tribes::BehaviorState;
 
 pub type SharedSimulation = Arc<RwLock<TribeSimulation>>;
 
-pub const INPUT_COUNT: usize = 8;
+pub const INPUT_COUNT: usize = 10;
 pub const OUTPUT_COUNT: usize = 3;
 
 pub const INPUT_LABELS: [&str; INPUT_COUNT] = [
@@ -21,8 +21,10 @@ pub const INPUT_LABELS: [&str; INPUT_COUNT] = [
     "pop_ratio",
     "territory",
     "feed_risk",
-    "combat",
-    "resource",
+    "a_combat",
+    "a_resource",
+    "a_map_objective",
+    "a_team",
     "nearest_enemy",
     "nearest_ally",
 ];
@@ -1415,13 +1417,38 @@ impl TribeSimulation {
             let new_pop = (tribe.population as i32 + delta).max(0) as u32;
             tribe.population = new_pop.min(tribe.max_population);
 
-            tribe.food_stores = (tribe.food_stores - tribe.population as f32 * 0.5).max(0.0);
+            tribe.food_stores = (tribe.food_stores - tribe.population as f32 * 0.003).max(0.0);
 
             if tribe.population == 0 {
                 tribe.alive = false;
             }
 
             tribe.ticks_alive += 1;
+        }
+
+        // Population-based polity tier promotion (never demote)
+        {
+            let promotions: Vec<(usize, crate::tribes::PolityTier)> = self.tribes.iter()
+                .enumerate()
+                .filter(|(_, t)| t.alive)
+                .filter_map(|(i, t)| {
+                    let pop_tier = Self::polity_tier_for_population(t.population);
+                    if pop_tier as u8 > t.polity_tier as u8 { Some((i, pop_tier)) } else { None }
+                })
+                .collect();
+            let tick = self.tick;
+            let gen = self.generation;
+            for (i, new_tier) in promotions {
+                self.tribes[i].polity_tier = new_tier;
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, tick, gen,
+                    crate::events::EventType::PolityUpgraded,
+                    crate::events::EventSeverity::Important,
+                    self.tribes[i].id as u32,
+                );
+                ev.value_b = new_tier as u8 as f32;
+                self.push_event(ev);
+            }
         }
 
         // R8: Cleanup expired integration entries (tiles fully integrated after 75+ ticks)
@@ -1477,12 +1504,33 @@ impl TribeSimulation {
     fn apply_state_machine(&mut self) {
         use crate::tribes::BehaviorState;
 
+        // Compute nearest enemy/ally tile distances (immutable pass)
+        let max_dist = (self.world.grid_w + self.world.grid_h) as f32;
+        let spatial: Vec<(f32, f32)> = (0..self.tribes.len()).map(|i| {
+            if !self.tribes[i].alive { return (1.0, 1.0); }
+            let my_home = self.tribes[i].home_tile as usize;
+            let enemy_min = self.tribes.iter().enumerate()
+                .filter(|(j, t)| *j != i && t.alive && matches!(t.behavior, BehaviorState::AtWar))
+                .flat_map(|(_, t)| t.territory.iter().map(|&tile| self.world.hex_distance(my_home, tile as usize)))
+                .min();
+            let ally_min = self.tribes[i].ally_tribe
+                .and_then(|aj| if aj < self.tribes.len() && self.tribes[aj].alive {
+                    self.tribes[aj].territory.iter()
+                        .map(|&tile| self.world.hex_distance(my_home, tile as usize))
+                        .min()
+                } else { None });
+            let enemy_norm = enemy_min.map(|d| (d as f32 / max_dist).min(1.0)).unwrap_or(1.0);
+            let ally_norm  = ally_min.map(|d| (d as f32 / max_dist).min(1.0)).unwrap_or(1.0);
+            (enemy_norm, ally_norm)
+        }).collect();
+
         // Update neural net inputs for each tribe
-        for tribe in self.tribes.iter_mut() {
+        for (i, tribe) in self.tribes.iter_mut().enumerate() {
             if !tribe.alive { continue; }
             let food_ratio = if tribe.population > 0 {
                 tribe.food_stores / tribe.population as f32
             } else { 0.0 };
+            let (enemy_dist, ally_dist) = spatial[i];
             tribe.last_inputs = [
                 food_ratio.min(1.0),
                 (tribe.population as f32 / tribe.max_population as f32).min(1.0),
@@ -1490,8 +1538,10 @@ impl TribeSimulation {
                 tribe.stats.feed_risk,
                 tribe.stats.a_combat,
                 tribe.stats.a_resource,
-                0.5, // nearest enemy distance placeholder
-                0.5, // nearest ally distance placeholder
+                tribe.stats.a_map_objective,
+                tribe.stats.a_team,
+                enemy_dist,
+                ally_dist,
             ];
         }
 
@@ -1531,6 +1581,8 @@ impl TribeSimulation {
                 BehaviorState::Settling => {
                     if food_ratio < 0.3 { BehaviorState::Foraging }
                     else if aggression > 0.7 && self.has_neighbor(i) { BehaviorState::AtWar }
+                    // Imperialistic conquest: attack weaker adjacent tribe at lower aggression threshold
+                    else if aggression > 0.45 && food_ratio > 0.6 && self.has_weaker_neighbor(i) { BehaviorState::AtWar }
                     else { current }
                 }
                 BehaviorState::Foraging => {
@@ -1645,9 +1697,9 @@ impl TribeSimulation {
     const CLAIM_TERRITORY_COST_PER_TILE: f32 = 12.0;
     const CLAIM_DISTANCE_COST_PER_STEP: f32 = 8.0;
     const CLAIM_PRESSURE_COST: f32 = 25.0;
-    const CLAIM_FOOD_FLOOR: f32 = 50.0;
-    const CLAIM_POP_BASE: u32 = 80;
-    const CLAIM_POP_PER_TILE: u32 = 25;
+    const CLAIM_FOOD_FLOOR: f32 = 15.0;
+    const CLAIM_POP_BASE: u32 = 30;
+    const CLAIM_POP_PER_TILE: u32 = 8;
     const INTEGRATION_TICKS: u64 = 75;
     const INTEGRATION_START_YIELD: f32 = 0.25;
     const INTEGRATION_END_YIELD: f32 = 1.0;
@@ -1733,6 +1785,16 @@ impl TribeSimulation {
                 continue;
             }
 
+            // Territory cap per polity tier: Tribe≤7, City≤30, Duchy/Kingdom/Empire=∞
+            let tier_cap: u32 = match tribe.polity_tier {
+                crate::tribes::PolityTier::Tribe => 7,
+                crate::tribes::PolityTier::City  => 30,
+                _                                => u32::MAX,
+            };
+            if tile_count >= tier_cap {
+                continue;
+            }
+
             // Resource drive (output index 1) drives expansion — lowered threshold with cost model
             let resource_drive = tribe.last_outputs[1];
             if resource_drive < 0.25 {
@@ -1789,6 +1851,24 @@ impl TribeSimulation {
             self.tribes[tribe_idx].territory.iter().cloned().collect();
         for (i, other) in self.tribes.iter().enumerate() {
             if i == tribe_idx || !other.alive { continue; }
+            for &tile in &other.territory {
+                let adjacent = self.world.adjacent_tiles(tile as usize);
+                if adjacent.iter().any(|&a| my_tiles.contains(&(a as u16))) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// True if any adjacent tribe has population < self.population * 0.6 (imperialistic target).
+    fn has_weaker_neighbor(&self, tribe_idx: usize) -> bool {
+        let my_pop = self.tribes[tribe_idx].population;
+        let my_tiles: std::collections::HashSet<u16> =
+            self.tribes[tribe_idx].territory.iter().cloned().collect();
+        for (i, other) in self.tribes.iter().enumerate() {
+            if i == tribe_idx || !other.alive { continue; }
+            if other.population as f32 >= my_pop as f32 * 0.6 { continue; }
             for &tile in &other.territory {
                 let adjacent = self.world.adjacent_tiles(tile as usize);
                 if adjacent.iter().any(|&a| my_tiles.contains(&(a as u16))) {
@@ -1904,8 +1984,11 @@ impl TribeSimulation {
             let def_tile_bonus = self.tribes[defender_idx].territory.first()
                 .map(|&t| self.world.tiles[t as usize].defense_bonus)
                 .unwrap_or(0.0);
+            let homeland_bonus = if self.tribes[defender_idx].territory.first()
+                .map(|&t| t == self.tribes[defender_idx].home_tile)
+                .unwrap_or(false) { 0.3 } else { 0.0 };
             let defender_strength = self.tribes[defender_idx].population as f32
-                * (self.tribes[defender_idx].stats.a_risk + def_tile_bonus)
+                * (self.tribes[defender_idx].stats.a_combat + def_tile_bonus + homeland_bonus)
                 * (1.0 + z1 * 0.15).max(0.1);
 
             let ratio = (attacker_strength / defender_strength.max(0.01)).min(5.0);
@@ -1953,8 +2036,11 @@ impl TribeSimulation {
                 let absorbed_founders: Vec<crate::tribes::FounderTag> =
                     self.tribes[defender_idx].founders.clone();
                 let absorbed_cluster_id = self.tribes[defender_idx].cluster_id.clone();
+                let absorbed_max_pop = self.tribes[defender_idx].max_population;
                 let attacker_id = self.tribes[attacker_idx].id as u32;
                 self.tribes[attacker_idx].territory.extend(absorbed_territory.iter().copied());
+                self.tribes[attacker_idx].max_population =
+                    self.tribes[attacker_idx].max_population.saturating_add(absorbed_max_pop);
                 // K2: transfer tile ownership to attacker
                 for &t in &absorbed_territory {
                     self.world.set_tile_owner(t as usize, attacker_id);
@@ -2139,8 +2225,18 @@ impl TribeSimulation {
         if total >= 100 { PolityTier::Empire }
         else if total >= 50 { PolityTier::Kingdom }
         else if total >= 25 { PolityTier::Duchy }
-        else if total >= 10 { PolityTier::County }
         else if total >= 3 { PolityTier::City }
+        else { PolityTier::Tribe }
+    }
+
+    /// Map population to the tier it organically warrants.
+    /// Thresholds: 1000=City, 5000=Duchy, 10000=Kingdom, 20000=Empire.
+    fn polity_tier_for_population(pop: u32) -> crate::tribes::PolityTier {
+        use crate::tribes::PolityTier;
+        if pop >= 20_000 { PolityTier::Empire }
+        else if pop >= 10_000 { PolityTier::Kingdom }
+        else if pop >= 5_000 { PolityTier::Duchy }
+        else if pop >= 1_000 { PolityTier::City }
         else { PolityTier::Tribe }
     }
 
@@ -2214,7 +2310,9 @@ impl TribeSimulation {
         let absorbed_founders = self.tribes[absorbed].founders.clone();
         let absorbed_cluster_id = self.tribes[absorbed].cluster_id.clone();
 
+        let absorbed_max_pop = self.tribes[absorbed].max_population;
         self.tribes[absorber].population = self.tribes[absorber].population.saturating_add(absorbed_pop);
+        self.tribes[absorber].max_population = self.tribes[absorber].max_population.saturating_add(absorbed_max_pop);
         self.tribes[absorber].food_stores += absorbed_food;
         self.tribes[absorber].citizens.extend(absorbed_citizens);
         self.tribes[absorber].founders.extend(absorbed_founders);

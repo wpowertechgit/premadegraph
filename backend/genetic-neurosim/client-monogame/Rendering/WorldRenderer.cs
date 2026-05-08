@@ -25,7 +25,11 @@ public readonly record struct RenderableTile(
     int Y = 0,
     float VisualElevation = 0f,
     int[]? ContestingTribeIds = null,
-    BiomeId Biome = BiomeId.Unknown);
+    BiomeId Biome = BiomeId.Unknown,
+    int TerrainSeed = 0,
+    int MapWidth = 1,
+    int MapHeight = 1,
+    int ReliefNeighborMask = 0);
 
 public readonly record struct RenderableTribe(
     int Id,
@@ -220,7 +224,7 @@ public sealed class WorldRenderer : IDisposable
 
         graphicsDevice.BlendState = BlendState.Opaque;
         graphicsDevice.DepthStencilState = DepthStencilState.Default;
-        graphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+        graphicsDevice.RasterizerState = RasterizerState.CullNone;
         graphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
 
         // Group tiles by (BiomeId, TextureKey) for per-biome ambient tint
@@ -255,7 +259,18 @@ public sealed class WorldRenderer : IDisposable
 
             foreach (var tile in batch)
             {
-                _hexMesh.Draw(graphicsDevice, _hexEffect, tile.Center, tile.Size, tile.VisualElevation);
+                _hexMesh.Draw(
+                    graphicsDevice,
+                    _hexEffect,
+                    tile.TileId,
+                    tile.Center,
+                    tile.Size,
+                    tile.VisualElevation,
+                    tile.Biome,
+                    tile.TerrainSeed,
+                    tile.MapWidth,
+                    tile.MapHeight,
+                    tile.ReliefNeighborMask);
             }
         }
     }

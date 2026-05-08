@@ -32,10 +32,9 @@ pub enum BehaviorState {
 pub enum PolityTier {
     Tribe = 0,
     City = 1,
-    County = 2,
-    Duchy = 3,
-    Kingdom = 4,
-    Empire = 5,
+    Duchy = 2,
+    Kingdom = 3,
+    Empire = 4,
 }
 
 impl Default for PolityTier {
@@ -210,7 +209,7 @@ impl TribeState {
             cluster_id: profile.id.clone(),
             population: max_population / 2,
             max_population,
-            food_stores: (max_population / 2) as f32 * 0.5,
+            food_stores: (max_population / 2) as f32 * 3.0,
             territory: vec![home_tile],
             home_tile,
             behavior: BehaviorState::Settling,

@@ -12,8 +12,8 @@ public sealed record LaunchOptions(
 {
     public static LaunchOptions FromArgs(IReadOnlyList<string> args)
     {
-        var endpoint = new Uri("ws://127.0.0.1:3001/api/neurosim/desktop/v1/frames");
-        var httpEndpoint = new Uri("http://127.0.0.1:3001/api/neurosim/desktop/v1");
+        var endpoint = new Uri("ws://127.0.0.1:8000/ws/desktop/v1/frames");
+        var httpEndpoint = new Uri("http://127.0.0.1:8000/api/desktop/v1");
         string? sessionId = null;
         var connectMode = false;
         var mapWidth = 0;

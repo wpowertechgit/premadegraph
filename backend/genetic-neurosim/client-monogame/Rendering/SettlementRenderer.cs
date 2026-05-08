@@ -379,9 +379,12 @@ public sealed class SettlementRenderer : IDisposable
         var rowOffset = tile.Y % 2 == 0 ? 0f : horizontalSpacing * 0.5f;
         var x = tile.X * horizontalSpacing + rowOffset;
         var z = tile.Y * tileSize * 1.5f;
-        var y = PlayableWorldGenerator.VisualElevation(
+        var tileElevation = PlayableWorldGenerator.VisualElevation(
             simulation.Seed, simulation.Width, simulation.Height,
             tile.X, tile.Y, tile.Biome);
+        var y = PlayableWorldGenerator.VisualSurfaceElevation(
+            simulation.Seed, simulation.Width, simulation.Height,
+            x, z, tile.Biome, tileElevation);
         return new Vector3(x, y, z);
     }
 

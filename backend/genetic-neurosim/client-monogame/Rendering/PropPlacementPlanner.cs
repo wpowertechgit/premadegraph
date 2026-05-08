@@ -70,7 +70,7 @@ public static class PropPlacementPlanner
             var lodMultiplier = LodCountMultiplier(cameraDistance);
 
             var tileInstances = PlanTile(
-                center, tile, biomeRules, profileByKey, isCapital, rng, lodMultiplier);
+                simulation, center, tile, biomeRules, profileByKey, isCapital, rng, lodMultiplier);
             instances.AddRange(tileInstances);
         }
 
@@ -78,6 +78,7 @@ public static class PropPlacementPlanner
     }
 
     private static List<PlannedPropInstance> PlanTile(
+        PlayableSimulation simulation,
         Vector3 center,
         PlayableTile tile,
         BiomePropRule[] biomeRules,
@@ -133,14 +134,23 @@ public static class PropPlacementPlanner
                 var scale = ResolveVisibleScale(profile)
                           * (1f - profile.ScaleVariance * 0.5f + (float)rng.NextDouble() * profile.ScaleVariance);
                 var rotation = (float)(rng.NextDouble() * Math.Tau);
-                var elevation = center.Y + rule.ElevationBias;
+                var worldX = center.X + offsetX;
+                var worldZ = center.Z + offsetZ;
+                var elevation = PlayableWorldGenerator.VisualSurfaceElevation(
+                    simulation.Seed,
+                    simulation.Width,
+                    simulation.Height,
+                    worldX,
+                    worldZ,
+                    tile.Biome,
+                    center.Y) + rule.ElevationBias;
 
                 var world = Matrix.CreateScale(scale)
                           * Matrix.CreateRotationY(rotation)
                           * Matrix.CreateTranslation(
-                              center.X + offsetX,
+                              worldX,
                               elevation,
-                              center.Z + offsetZ);
+                              worldZ);
 
                 results.Add(new PlannedPropInstance(
                     profile.ModelKey, world, (float)rng.NextDouble() * MathHelper.TwoPi, profile.Family));
@@ -240,9 +250,12 @@ public static class PropPlacementPlanner
         var rowOffset = tile.Y % 2 == 0 ? 0f : horizontalSpacing * 0.5f;
         var x = tile.X * horizontalSpacing + rowOffset;
         var z = tile.Y * tileSize * 1.5f;
-        var y = PlayableWorldGenerator.VisualElevation(
+        var tileElevation = PlayableWorldGenerator.VisualElevation(
             simulation.Seed, simulation.Width, simulation.Height,
             tile.X, tile.Y, tile.Biome);
+        var y = PlayableWorldGenerator.VisualSurfaceElevation(
+            simulation.Seed, simulation.Width, simulation.Height,
+            x, z, tile.Biome, tileElevation);
         return new Vector3(x, y, z);
     }
 
