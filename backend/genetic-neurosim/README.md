@@ -4,6 +4,32 @@
 - C# MonoGame desktop client in `client-monogame/`
 - Node as the required middleman between the desktop client and Rust
 
+## Installation
+
+Install the required SDKs first:
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+winget install Rustlang.Rust.MSVC
+```
+
+Then restore/build the projects from this folder:
+
+```powershell
+dotnet restore .\client-monogame\TribalNeuroSim.Client.csproj
+dotnet build .\client-monogame\TribalNeuroSim.Client.csproj
+
+cd .\backend
+cargo check
+cd ..
+```
+
+Notes:
+
+- the desktop client targets `.NET 8`
+- the Rust backend uses Cargo; no Python `requirements.txt` exists in this subtree
+- Postgres is optional for the backend; it can start in HTTP-only mode if the database is unavailable
+
 
 ## Layout
 
@@ -46,13 +72,28 @@ client-monogame/
 
 Backend:
 
-```bash
-cd backend/genetic-neurosim/backend
+```powershell
+cd .\backend
 cargo check
 ```
 
 Desktop client:
 
-Use the MonoGame project under `backend/genetic-neurosim/client-monogame/`.
-- Launch: `dotnet run --empire-stress` → starts stress demo with 28 tribes
-- Launch: `dotnet run` → unchanged default demo (12 tribes)
+```powershell
+cd .\client-monogame
+dotnet run
+```
+
+Useful launch variants:
+
+- `dotnet run` -> default local demo
+- `dotnet run -- --empire-stress` -> stress demo with 28 tribes
+- `dotnet run -- --dispute-stress` -> dispute-heavy local scenario
+- `dotnet run -- --connect` -> connect to the default Node endpoint at `ws://127.0.0.1:3001/api/neurosim/desktop/v1/frames`
+
+Backend run command:
+
+```powershell
+cd .\backend
+cargo run
+```
