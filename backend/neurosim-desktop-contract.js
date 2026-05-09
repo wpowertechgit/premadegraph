@@ -2,9 +2,11 @@ const DESKTOP_V1 = {
   version: 1,
   basePath: "/api/neurosim/desktop/v1",
   framesPath: "/api/neurosim/desktop/v1/frames",
+  framesV2Path: "/api/neurosim/desktop/v2/frames",
   statusPath: "/api/neurosim/desktop/v1/status",
   controlPath: "/api/neurosim/desktop/v1/control",
   rustFramesPath: "/ws/desktop/v1/frames",
+  rustFramesV2Path: "/ws/desktop/v2/frames",
   rustStatusPath: "/api/desktop/v1/status",
   rustControlPath: "/api/desktop/v1/control",
   allowedCommands: new Set(["pause", "resume", "step-tick"]),
@@ -19,6 +21,10 @@ function resolveDesktopUpstream(url) {
 
   if (pathname === DESKTOP_V1.framesPath) {
     return DESKTOP_V1.rustFramesPath;
+  }
+
+  if (pathname === DESKTOP_V1.framesV2Path) {
+    return DESKTOP_V1.rustFramesV2Path;
   }
 
   if (pathname === DESKTOP_V1.statusPath) {

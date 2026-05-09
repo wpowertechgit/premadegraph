@@ -21,6 +21,12 @@ public sealed class SimulationControlClient
             cancellationToken);
     }
 
+    public Task<Models.WorldSnapshotDto?> GetWorldSnapshotAsync(CancellationToken cancellationToken)
+    {
+        return _httpClient.GetFromJsonAsync<Models.WorldSnapshotDto>(
+            Resolve("world-snapshot"), cancellationToken);
+    }
+
     public Task PauseAsync(CancellationToken cancellationToken)
     {
         return SendControlAsync("pause", cancellationToken);
@@ -34,6 +40,11 @@ public sealed class SimulationControlClient
     public Task StepTickAsync(CancellationToken cancellationToken)
     {
         return SendControlAsync("step-tick", cancellationToken);
+    }
+
+    public Task ResetAsync(CancellationToken cancellationToken)
+    {
+        return SendControlAsync("reset", cancellationToken);
     }
 
     private async Task SendControlAsync(string command, CancellationToken cancellationToken)

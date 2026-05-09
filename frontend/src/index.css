@@ -300,6 +300,10 @@ button:focus-visible {
 }
 
 .app-sidebar__link {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  width: 100%;
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);
   gap: 0.75rem;
@@ -325,6 +329,12 @@ button:focus-visible {
   background: rgba(107, 124, 255, 0.10);
   border-color: rgba(107, 124, 255, 0.22);
   color: var(--text-primary);
+}
+
+.app-sidebar__link.is-pending,
+.app-sidebar__link:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .app-sidebar.is-collapsed .app-sidebar__link {

@@ -4,6 +4,7 @@ using SharpGLTF.Schema2;
 using TribalNeuroSim.Client.Assets;
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 using PrimitiveType = Microsoft.Xna.Framework.Graphics.PrimitiveType;
 
 namespace TribalNeuroSim.Client.Rendering;
@@ -130,6 +131,29 @@ public sealed class VegetationRenderer : IDisposable
     public void ClearInstances()
     {
         _batch.Clear();
+    }
+
+    /// Network-mode overload: collect instances from RenderableTile list (no PlayableSimulation).
+    public void CollectInstances(IReadOnlyList<RenderableTile> tiles, IReadOnlyList<RenderableTribe> tribes, AssetRegistry registry, float cameraDistance = 200f)
+    {
+        if (cameraDistance > 1500f)
+        {
+            // No vegetation at max zoom — skip entirely for performance
+            ClearInstances();
+            return;
+        }
+
+        ClearInstances();
+
+        var rules = AssetManifest.BiomePropRules;
+        var profiles = AssetManifest.PropProfiles;
+
+        if (rules.Count > 0 && profiles.Count > 0)
+        {
+            var capitalTileIds = new HashSet<int>(tribes.Select(t => t.MainCampTileId));
+            var planned = PropPlacementPlanner.Plan(tiles, capitalTileIds, rules, profiles, cameraDistance);
+            _batch.Build(planned, cameraDistance);
+        }
     }
 
     /// <summary>

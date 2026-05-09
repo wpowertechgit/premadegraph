@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   FaBars,
   FaBookOpen,
@@ -42,14 +42,19 @@ type AppNavbarProps = {
   runtimeKeysLoading: boolean;
   onSaveRuntimeKey: (keyName: RuntimeKeyRecord["keyName"], value: string) => Promise<void>;
   onStartResize: () => void;
+  landingSidebarOpen: boolean;
+  onOpenLandingSidebar: () => void;
+  onCloseLandingSidebar: () => void;
 };
 
 type NavItem = {
-  to: string;
+  to?: string;
   label: string;
   description: string;
   icon: React.ReactNode;
   external?: boolean;
+  onAction?: () => void;
+  actionPending?: boolean;
 };
 
 type ActionCardProps = {
@@ -85,6 +90,26 @@ function SidebarLink({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  if (item.onAction) {
+    return (
+      <button
+        type="button"
+        title={collapsed ? item.label : item.description}
+        className={`app-sidebar__link${item.actionPending ? " is-pending" : ""}`}
+        onClick={() => { item.onAction!(); onNavigate?.(); }}
+        disabled={item.actionPending}
+      >
+        <span className="app-sidebar__link-icon">{item.icon}</span>
+        {!collapsed ? (
+          <span className="app-sidebar__link-copy">
+            <span className="app-sidebar__link-label">{item.actionPending ? "Launching…" : item.label}</span>
+            <span className="app-sidebar__link-meta">{item.description}</span>
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+
   if (item.external) {
     return (
       <a
@@ -106,7 +131,7 @@ function SidebarLink({
 
   return (
     <NavLink
-      to={item.to}
+      to={item.to ?? "/"}
       title={collapsed ? item.label : item.description}
       className={({ isActive }) => `app-sidebar__link${isActive ? " is-active" : ""}`}
       onClick={onNavigate}
@@ -161,6 +186,9 @@ export default function AppNavbar({
   runtimeKeysLoading,
   onSaveRuntimeKey,
   onStartResize,
+  landingSidebarOpen,
+  onOpenLandingSidebar,
+  onCloseLandingSidebar,
 }: AppNavbarProps) {
   const { language, setLanguage, t } = useI18n();
   const [generateLoading, setGenerateLoading] = useState(false);
@@ -171,6 +199,15 @@ export default function AppNavbar({
   const [createDatasetLoading, setCreateDatasetLoading] = useState(false);
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [runtimeKeyDrafts, setRuntimeKeyDrafts] = useState<Record<string, string>>({});
+  const [launchingDesktop] = useState(false);
+
+  const handleLaunchDesktop = () => {
+    const nodeWs   = "ws://localhost:3001/api/neurosim/desktop/v2/frames";
+    const nodeHttp = "http://localhost:3001/api/neurosim/desktop/v1";
+    const session  = currentDatasetId ?? "";
+    const uri = `neurosim://?nodeWs=${encodeURIComponent(nodeWs)}&nodeHttp=${encodeURIComponent(nodeHttp)}&session=${encodeURIComponent(session)}`;
+    window.location.href = uri;
+  };
   const [savingRuntimeKey, setSavingRuntimeKey] = useState<string | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const visibleRuntimeKeys = runtimeKeys.filter(
@@ -279,12 +316,13 @@ export default function AppNavbar({
       icon: <FaBookOpen />,
     },
     {
-      to: "/tribal-simulation",
-      label: language === "hu" ? "Törzsi Szimuláció" : "Tribal Simulation",
+      label: language === "hu" ? "TribalNeuroSim" : "TribalNeuroSim",
       description: language === "hu"
-        ? "Canvas2D törzsi szimuláció valós idejű megjelenítővel"
-        : "Canvas2D tribal simulation with real-time viewer",
+        ? "MonoGame kliens indítása az aktív adatkészlettel"
+        : "Launch MonoGame desktop client with active dataset",
       icon: <FaGlobe />,
+      onAction: handleLaunchDesktop,
+      actionPending: launchingDesktop,
     },
     {
       to: "http://localhost:3001/db-explorer/",
@@ -319,14 +357,25 @@ export default function AppNavbar({
     };
   }, [collapsed, isMobileLayout, mobileOpen]);
 
+  const location = useLocation();
+  const isLanding = location.pathname === "/";
+
+  // On landing page: sidebar renders as overlay, triggered by landingSidebarOpen
+  const showMobileBar = isMobileLayout;
+  const showMobileNav = isLanding ? landingSidebarOpen : mobileOpen;
+  const handleCloseMobileNav = isLanding ? onCloseLandingSidebar : onCloseMobileNav;
+  const handleOpenMobileNav = isLanding
+    ? onOpenLandingSidebar
+    : onOpenMobileNav;
+
   return (
     <>
-      {isMobileLayout ? (
+      {showMobileBar ? (
         <div className="app-mobile-bar">
           <button
             type="button"
             className="app-mobile-bar__menu"
-            onClick={onOpenMobileNav}
+            onClick={handleOpenMobileNav}
             aria-label={t.app.nav.expandNavigation}
           >
             <FaBars />
@@ -341,17 +390,18 @@ export default function AppNavbar({
         </div>
       ) : null}
 
-      {isMobileLayout && mobileOpen ? (
+      {(showMobileBar || isLanding) && showMobileNav ? (
         <button
           type="button"
           className="app-sidebar__backdrop"
           aria-label={t.app.nav.collapseNavigation}
-          onClick={onCloseMobileNav}
+          onClick={handleCloseMobileNav}
         />
       ) : null}
 
+      {(!isLanding || landingSidebarOpen) ? (
       <aside
-        className={`app-sidebar${collapsed ? " is-collapsed" : ""}${mobileOpen ? " is-mobile-open" : ""}`}
+        className={`app-sidebar${collapsed ? " is-collapsed" : ""}${showMobileNav ? " is-mobile-open" : ""}${isLanding ? " app-sidebar--landing-overlay" : ""}`}
         aria-label={`Sidebar navigation width ${desktopWidth}px`}
       >
         <div className="app-sidebar__top">
@@ -371,23 +421,23 @@ export default function AppNavbar({
           <button
             type="button"
             className="app-sidebar__collapse"
-            onClick={isMobileLayout ? onCloseMobileNav : onToggleCollapsed}
+            onClick={showMobileBar ? handleCloseMobileNav : onToggleCollapsed}
             title={
-              isMobileLayout
+              showMobileBar
                 ? t.app.nav.collapseNavigation
                 : collapsed
                   ? t.app.nav.expandNavigation
                   : t.app.nav.collapseNavigation
             }
             aria-label={
-              isMobileLayout
+              showMobileBar
                 ? t.app.nav.collapseNavigation
                 : collapsed
                   ? t.app.nav.expandNavigation
                   : t.app.nav.collapseNavigation
             }
           >
-            {isMobileLayout ? <FaTimes /> : collapsed ? <FaChevronRight /> : <FaChevronLeft />}
+            {showMobileBar ? <FaTimes /> : collapsed ? <FaChevronRight /> : <FaChevronLeft />}
           </button>
         </div>
 
@@ -396,10 +446,10 @@ export default function AppNavbar({
             <nav className="app-sidebar__nav">
               {navItems.map((item) => (
                 <SidebarLink
-                  key={item.to}
+                  key={item.to ?? item.label}
                   item={item}
                   collapsed={collapsed}
-                  onNavigate={isMobileLayout ? onCloseMobileNav : undefined}
+                  onNavigate={showMobileBar ? handleCloseMobileNav : undefined}
                 />
               ))}
             </nav>
@@ -679,6 +729,7 @@ export default function AppNavbar({
           />
         ) : null}
       </aside>
+      ) : null}
     </>
   );
 }

@@ -3395,6 +3395,14 @@ app.get("/api/neurosim/desktop/v1/status", (req, res) => {
   neurosimBridge.proxyHttpToPath(req, res, upstreamPath);
 });
 
+app.get("/api/neurosim/desktop/v1/world-snapshot", (req, res) => {
+  neurosimBridge.proxyHttpToPath(req, res, "/api/world-snapshot");
+});
+
+app.post("/api/neurosim/desktop/v1/control/reset", (req, res) => {
+  neurosimBridge.proxyHttpToPath(req, res, "/api/control/reset");
+});
+
 app.post("/api/neurosim/desktop/v1/control/:command", (req, res) => {
   const upstreamPath = resolveDesktopUpstream(req.url);
   if (!upstreamPath) {
@@ -3402,6 +3410,16 @@ app.post("/api/neurosim/desktop/v1/control/:command", (req, res) => {
   }
 
   neurosimBridge.proxyHttpToPath(req, res, upstreamPath);
+});
+
+app.post("/api/neurosim/launch-client", (req, res) => {
+  const datasetId = req.body?.datasetId ?? null;
+  const result = neurosimBridge.launchMonoGameClient({ nodePort: PORT, datasetId });
+  if (result.ok) {
+    res.json({ ok: true, pid: result.pid });
+  } else {
+    res.status(503).json({ ok: false, error: result.error });
+  }
 });
 
 app.get([
@@ -3438,7 +3456,7 @@ const server = app.listen(PORT, () => {
 
 server.on("upgrade", (req, socket, head) => {
   const desktopFramesPath = resolveDesktopUpstream(req.url || "");
-  if (desktopFramesPath === "/ws/desktop/v1/frames") {
+  if (desktopFramesPath === "/ws/desktop/v1/frames" || desktopFramesPath === "/ws/desktop/v2/frames") {
     neurosimBridge.proxyWebSocket(req, socket, head, desktopFramesPath);
     return;
   }

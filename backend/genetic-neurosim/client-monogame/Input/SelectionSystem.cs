@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 using TribalNeuroSim.Client.Rendering;
 
 namespace TribalNeuroSim.Client.Input;
@@ -63,6 +64,61 @@ public sealed class SelectionSystem
         var tribeId = tribe?.Id ?? -1;
 
         return new SelectionResult(bestTileId, tribeId);
+    }
+
+    /// Network-mode overload: picks from a flat RenderableTile/RenderableTribe list.
+    public SelectionResult? Pick(
+        Vector2 screenPosition,
+        Viewport viewport,
+        IsometricCamera camera,
+        int mapWidth,
+        int mapHeight,
+        IReadOnlyList<RenderableTile> tiles,
+        IReadOnlyList<RenderableTribe> tribes)
+    {
+        var worldPos = camera.ScreenToWorld2D(screenPosition, viewport);
+        var approx = WorldToHex(worldPos);
+
+        Span<int> candidates = stackalloc int[7];
+        var count = 0;
+        candidates[count++] = ToTileId(approx.X, approx.Y, mapWidth, mapHeight);
+        foreach (var (nx, ny) in HexNeighbors(approx.X, approx.Y))
+        {
+            if (count >= candidates.Length) break;
+            candidates[count++] = ToTileId(nx, ny, mapWidth, mapHeight);
+        }
+
+        var bestDistance = float.MaxValue;
+        var bestTileId = -1;
+
+        for (var i = 0; i < count; i++)
+        {
+            var tileId = candidates[i];
+            if (tileId < 0 || tileId >= tiles.Count) continue;
+
+            var tile = tiles[tileId];
+            var dist = Vector2.Distance(worldPos, tile.Center);
+            if (dist < bestDistance && IsPointInHex(worldPos, tile.Center, _tileSize))
+            {
+                bestDistance = dist;
+                bestTileId = tileId;
+            }
+        }
+
+        if (bestTileId < 0) return null;
+
+        var found = false;
+        var foundTribeId = -1;
+        foreach (var t in tribes)
+        {
+            if (t.MainCampTileId == bestTileId)
+            {
+                foundTribeId = t.Id;
+                found = true;
+                break;
+            }
+        }
+        return new SelectionResult(bestTileId, found ? foundTribeId : -1);
     }
 
     private static (int X, int Y) WorldToHex(Vector2 worldPos)

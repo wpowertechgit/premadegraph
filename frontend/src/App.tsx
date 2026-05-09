@@ -15,6 +15,7 @@ const BetweennessCentralityPage = lazy(() => import("./features/centrality/Betwe
 const PathfinderLabPage = lazy(() => import("./features/pathfinder/PathfinderLabPage"));
 const DocumentationPage = lazy(() => import("./features/documentation/DocumentationPage"));
 const TribalSimulationPage = lazy(() => import("./features/simulation/TribalSimulationPage"));
+const LandingPage = lazy(() => import("./features/landing/LandingPage"));
 
 const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
 const NAV_WIDTH_MIN = 280;
@@ -65,15 +66,28 @@ function TransitionNavigationHandler() {
   return null;
 }
 
-function AppRoutes({ navCollapsed }: { navCollapsed: boolean }) {
+function AppRoutes({ navCollapsed, onOpenLandingSidebar }: { navCollapsed: boolean; onOpenLandingSidebar: () => void }) {
   const { t } = useI18n();
+  const location = useLocation();
+  const isLanding = location.pathname === "/";
+
+  if (isLanding) {
+    return (
+      <Routes>
+        <Route path="/" element={(
+          <Suspense fallback={<div className="app-route-fallback">{t.common.loading}</div>}>
+            <LandingPage onOpenSidebar={onOpenLandingSidebar} />
+          </Suspense>
+        )} />
+      </Routes>
+    );
+  }
 
   return (
     <main className={`app-main${navCollapsed ? " is-collapsed" : ""}`}>
       <div className="app-route-stage">
         <div className="app-route-content">
           <Routes>
-            <Route path="/" element={<Navigate to="/matchanalysis" replace />} />
             <Route
               path="/matchanalysis"
               element={(
@@ -183,6 +197,7 @@ function App() {
   const [runtimeKeys, setRuntimeKeys] = useState<RuntimeKeyRecord[]>([]);
   const [runtimeKeysLoading, setRuntimeKeysLoading] = useState(false);
   const [navResizeActive, setNavResizeActive] = useState(false);
+  const [landingSidebarOpen, setLandingSidebarOpen] = useState(false);
 
   React.useEffect(() => {
     document.title = t.app.title;
@@ -406,6 +421,9 @@ function App() {
           runtimeKeysLoading={runtimeKeysLoading}
           onSaveRuntimeKey={saveRuntimeKey}
           desktopWidth={navWidth}
+          landingSidebarOpen={landingSidebarOpen}
+          onOpenLandingSidebar={() => setLandingSidebarOpen(true)}
+          onCloseLandingSidebar={() => setLandingSidebarOpen(false)}
           onStartResize={() => {
             if (isMobileLayout || navCollapsed) {
               return;
@@ -413,7 +431,7 @@ function App() {
             setNavResizeActive(true);
           }}
         />
-        <AppRoutes navCollapsed={isMobileLayout ? false : navCollapsed} />
+        <AppRoutes navCollapsed={isMobileLayout ? false : navCollapsed} onOpenLandingSidebar={() => setLandingSidebarOpen(true)} />
         <Snackbar
           open={Boolean(feedback)}
           autoHideDuration={4200}

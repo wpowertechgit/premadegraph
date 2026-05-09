@@ -138,6 +138,40 @@ function proxyWebSocket(req, clientSocket, head, upstreamPath = "/ws/tribal-simu
   });
 }
 
+const monoGameProjectDir = path.resolve(__dirname, "genetic-neurosim", "client-monogame");
+
+function resolveMonoGameBinary() {
+  const candidates = [
+    path.join(monoGameProjectDir, "bin", "Release", "net8.0", "win-x64", "TribalNeuroSim.Client.exe"),
+    path.join(monoGameProjectDir, "bin", "Release", "net8.0", "TribalNeuroSim.Client.exe"),
+    path.join(monoGameProjectDir, "bin", "Debug",   "net8.0", "win-x64", "TribalNeuroSim.Client.exe"),
+    path.join(monoGameProjectDir, "bin", "Debug",   "net8.0", "TribalNeuroSim.Client.exe"),
+    path.join(monoGameProjectDir, "bin", "Release", "net8.0", "TribalNeuroSim.Client"),
+    path.join(monoGameProjectDir, "bin", "Debug",   "net8.0", "TribalNeuroSim.Client"),
+  ].filter(fs.existsSync);
+  if (candidates.length === 0) return null;
+  return candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+}
+
+function launchMonoGameClient({ nodePort = 3001, datasetId } = {}) {
+  if (NEUROSIM_MANAGED) {
+    return { ok: false, error: "Backend running in Docker — launch MonoGame locally via: dotnet run --project backend/genetic-neurosim/client-monogame -- --connect" };
+  }
+  const binary = resolveMonoGameBinary();
+  if (!binary) {
+    return { ok: false, error: "MonoGame client not built. Run: dotnet build backend/genetic-neurosim/client-monogame" };
+  }
+  const nodeWs   = `ws://localhost:${nodePort}/api/neurosim/desktop/v1/frames`;
+  const nodeHttp = `http://localhost:${nodePort}/api/neurosim/desktop/v1`;
+  const args = [`--node-ws=${nodeWs}`, `--node-http=${nodeHttp}`];
+  if (datasetId) args.push(`--session=${datasetId}`);
+
+  const proc = spawn(binary, args, { detached: true, stdio: "ignore", windowsHide: false });
+  proc.unref();
+  console.log(`[neurosim-bridge] launched MonoGame client pid=${proc.pid}: ${binary}`);
+  return { ok: true, pid: proc.pid };
+}
+
 function triggerNeurosimRefresh() {
   return new Promise((resolve) => {
     const req = http.request(
@@ -165,5 +199,7 @@ module.exports = {
   proxyHttpToPath,
   proxyWebSocket,
   resolveNeurosimBinary,
+  resolveMonoGameBinary,
+  launchMonoGameClient,
   triggerNeurosimRefresh,
 };

@@ -40,6 +40,7 @@ public sealed class ClientDiagnostics
             IsConnected = true;
             LastConnectionError = null;
         }
+        Console.WriteLine($"[net] connected: {endpoint}");
     }
 
     public void RecordConnectionError(Uri endpoint, Exception error)
@@ -50,6 +51,7 @@ public sealed class ClientDiagnostics
             IsConnected = false;
             LastConnectionError = error.Message;
         }
+        Console.WriteLine($"[net] connection error: {endpoint} — {error.GetType().Name}: {error.Message}");
     }
 
     public void RecordDecodedFrame(SimulationFrame frame, int payloadBytes)

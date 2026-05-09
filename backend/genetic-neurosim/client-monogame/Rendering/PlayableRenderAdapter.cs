@@ -84,25 +84,55 @@ public sealed class PlayableRenderAdapter
 
     // ── Network mode: build renderables from SimulationViewModel (FrameV1 data) ──
 
-    public IEnumerable<RenderableTile> BuildTiles(SimulationViewModel viewModel, int mapWidth, int mapHeight)
+    public IEnumerable<RenderableTile> BuildTiles(
+        SimulationViewModel viewModel,
+        int mapWidth,
+        int mapHeight,
+        byte[]? worldBiomeCache = null)
     {
-        foreach (var (tileId, tile) in viewModel.TileData)
+        var campOwner = new Dictionary<int, int>(viewModel.V1Tribes.Count);
+        foreach (var (_, tribe) in viewModel.V1Tribes)
+        {
+            if (tribe.IsAlive)
+                campOwner[(int)tribe.MainCampTile] = (int)tribe.Id;
+        }
+
+        var total = mapWidth * mapHeight;
+        for (var tileId = 0; tileId < total; tileId++)
         {
             var x = tileId % mapWidth;
             var y = tileId / mapWidth;
-            var biome = (BiomeId)tile.BiomeId;
+
+            BiomeId biome;
+            float food = 0f;
+            bool isDisputed = false;
+
+            if (viewModel.TileData.TryGetValue((ushort)tileId, out var tile))
+            {
+                biome = RustBiomeToBiomeId(tile.BiomeId);
+                food = tile.FoodAmount;
+                isDisputed = tile.IsDisputed;
+            }
+            else if (worldBiomeCache is not null && tileId < worldBiomeCache.Length)
+            {
+                biome = (BiomeId)worldBiomeCache[tileId];
+            }
+            else
+            {
+                biome = BiomeId.DrySteppe;
+            }
 
             yield return new RenderableTile(
-                TileId: tileId,
+                TileId: (ushort)tileId,
                 Center: TileCenter(x, y),
                 Size: _tileSize,
                 BaseColor: BiomeColor(biome),
                 TextureKey: TextureKey(biome),
                 ModelKey: null,
-                FoodAmount: tile.FoodAmount,
+                FoodAmount: food,
                 MaxFoodAmount: 100f,
-                IsDisputed: tile.IsDisputed,
-                OwnerTribeId: -1,
+                IsDisputed: isDisputed,
+                OwnerTribeId: campOwner.TryGetValue(tileId, out var ownedByTribe) ? ownedByTribe : -1,
                 HasCamp: false,
                 X: x,
                 Y: y,
@@ -126,7 +156,7 @@ public sealed class PlayableRenderAdapter
             var homeX = tribe.MainCampTile % mapWidth;
             var homeY = tribe.MainCampTile / mapWidth;
             var biome = viewModel.TileData.TryGetValue(tribe.MainCampTile, out var tileData)
-                ? (BiomeId)tileData.BiomeId
+                ? RustBiomeToBiomeId(tileData.BiomeId)
                 : (BiomeId?)null;
             var radius = MathHelper.Clamp(5f + tribe.Population * 0.035f, 7f, 18f);
 
@@ -140,7 +170,7 @@ public sealed class PlayableRenderAdapter
                 HasCamp: true,
                 CampPosition: TileCenter(homeX, homeY),
                 TerritoryRadius: 0f,
-                Tier: (PolityTier)tribe.PolityTier,
+                Tier: RustPolityTierToPolityTier(tribe.PolityTier),
                 MainCampTileId: tribe.MainCampTile,
                 Biome: biome,
                 Artifacts: tribe.Artifacts,
@@ -231,6 +261,29 @@ public sealed class PlayableRenderAdapter
 
         return mask;
     }
+
+    /// Map raw Rust biome byte (Biome enum 0-5) to the C# BiomeId enum.
+    public static BiomeId RustBiomeToBiomeId(byte rustBiome) => rustBiome switch
+    {
+        0 => BiomeId.Plains,
+        1 => BiomeId.DenseForest,
+        2 => BiomeId.DrySteppe,
+        3 => BiomeId.Mountains,
+        4 => BiomeId.Marsh,
+        5 => BiomeId.Riverland,
+        _ => BiomeId.Plains,
+    };
+
+    /// Map raw Rust PolityTier byte (0=Tribe…4=Empire) to the C# PolityTier enum (1=Tribe…5=Empire).
+    public static Domain.PolityTier RustPolityTierToPolityTier(byte rustTier) => rustTier switch
+    {
+        0 => Domain.PolityTier.Tribe,
+        1 => Domain.PolityTier.City,
+        2 => Domain.PolityTier.Duchy,
+        3 => Domain.PolityTier.Kingdom,
+        4 => Domain.PolityTier.Empire,
+        _ => Domain.PolityTier.Tribe,
+    };
 
     private static int ReliefClass(BiomeId biome)
     {

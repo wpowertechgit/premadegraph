@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using TribalNeuroSim.Client.Assets;
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 
 namespace TribalNeuroSim.Client.Rendering;
 
@@ -75,6 +76,96 @@ public static class PropPlacementPlanner
         }
 
         return instances;
+    }
+
+    /// Network-mode overload: plans props from RenderableTile list (no PlayableSimulation needed).
+    /// Uses tile.VisualElevation (0 in network mode) for Y position.
+    public static List<PlannedPropInstance> Plan(
+        IReadOnlyList<RenderableTile> tiles,
+        HashSet<int> capitalTileIds,
+        IReadOnlyList<BiomePropRule> rules,
+        IReadOnlyList<PropVisualProfile> profiles,
+        float cameraDistance = 200f)
+    {
+        var instances = new List<PlannedPropInstance>();
+        var profileByKey = profiles.ToDictionary(p => p.Key, StringComparer.OrdinalIgnoreCase);
+        var rulesByBiome = rules.GroupBy(r => r.Biome).ToDictionary(g => g.Key, g => g.ToArray());
+        var lodMultiplier = LodCountMultiplier(cameraDistance);
+
+        foreach (var tile in tiles)
+        {
+            if (!rulesByBiome.TryGetValue(tile.Biome, out var biomeRules))
+                continue;
+
+            var isCapital = capitalTileIds.Contains(tile.TileId);
+            var center = new Vector3(tile.Center.X, tile.VisualElevation, tile.Center.Y);
+            var rng = new Random(tile.TileId * 1337 + 42);
+
+            var tileInstances = PlanTileFlat(center, tile.Biome, biomeRules, profileByKey, isCapital, rng, lodMultiplier);
+            instances.AddRange(tileInstances);
+        }
+
+        return instances;
+    }
+
+    private static List<PlannedPropInstance> PlanTileFlat(
+        Vector3 center,
+        Domain.BiomeId biome,
+        BiomePropRule[] biomeRules,
+        Dictionary<string, PropVisualProfile> profileByKey,
+        bool isCapital,
+        Random rng,
+        float lodMultiplier)
+    {
+        var results = new List<PlannedPropInstance>();
+
+        foreach (var rule in biomeRules)
+        {
+            if (rule.CandidatePropKeys.Length == 0)
+                continue;
+
+            var densityMultiplier = DensityMultiplier(rule.Family);
+            var minCount = (int)MathF.Max(1, MathF.Ceiling(rule.MinPerTile * lodMultiplier * densityMultiplier));
+            var maxCount = (int)MathF.Max(minCount, MathF.Ceiling(rule.MaxPerTile * lodMultiplier * densityMultiplier));
+            var count = minCount + rng.Next(maxCount - minCount + 1);
+            var remaining = MaxPropsPerTile - results.Count;
+            if (remaining <= 0) break;
+            count = Math.Min(count, remaining);
+
+            for (var i = 0; i < count; i++)
+            {
+                if (results.Count >= MaxPropsPerTile) break;
+
+                var propKey = rule.CandidatePropKeys[rng.Next(rule.CandidatePropKeys.Length)];
+                if (!profileByKey.TryGetValue(propKey, out var profile)) continue;
+
+                var angle = (float)(rng.NextDouble() * Math.Tau);
+                var minDist = rule.MinDistanceFromTileCenter;
+                var maxDist = rule.MaxDistanceFromTileCenter;
+
+                if (profile.Family is PropFamily.Tree or PropFamily.Rock)
+                    minDist = MathF.Max(minDist, isCapital ? CapitalClearRadius : MinCenterAvoidTree);
+
+                var dist = minDist + (float)rng.NextDouble() * (maxDist - minDist);
+                dist = Math.Clamp(dist, 0f, TileRadius - 1f);
+
+                var scale = ResolveVisibleScale(profile)
+                          * (1f - profile.ScaleVariance * 0.5f + (float)rng.NextDouble() * profile.ScaleVariance);
+                var rotation = (float)(rng.NextDouble() * Math.Tau);
+
+                var world = Matrix.CreateScale(scale)
+                          * Matrix.CreateRotationY(rotation)
+                          * Matrix.CreateTranslation(
+                              center.X + MathF.Cos(angle) * dist,
+                              center.Y + rule.ElevationBias,
+                              center.Z + MathF.Sin(angle) * dist);
+
+                results.Add(new PlannedPropInstance(
+                    profile.ModelKey, world, (float)rng.NextDouble() * MathHelper.TwoPi, profile.Family));
+            }
+        }
+
+        return results;
     }
 
     private static List<PlannedPropInstance> PlanTile(

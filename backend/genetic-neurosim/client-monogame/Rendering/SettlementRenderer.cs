@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using TribalNeuroSim.Client.Assets;
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 using PrimitiveType = Microsoft.Xna.Framework.Graphics.PrimitiveType;
 
 namespace TribalNeuroSim.Client.Rendering;
@@ -17,6 +18,9 @@ public sealed class SettlementRenderer : IDisposable
     private readonly List<SettlementDraw> _drawList = new();
     private BasicEffect? _effect;
     private GraphicsDevice? _effectDevice;
+    private float _lodDistanceScale = 1f;
+    private int _lastNetworkTribesCount = -1;
+    private int _lastNetworkDrawCount = -1;
 
     /// <summary>Render stats from the most recent Render() call.</summary>
     public SettlementRenderStats LastStats { get; private set; }
@@ -124,6 +128,55 @@ public sealed class SettlementRenderer : IDisposable
             }
         }
     }
+
+    /// Network-mode overload: collect settlement instances from RenderableTribe/RenderableTile lists.
+    public void CollectInstances(IReadOnlyList<RenderableTribe> tribes, IReadOnlyList<RenderableTile> tiles, AssetRegistry registry)
+    {
+        // Cache hit: skip rebuild if tribe count and draw count are unchanged.
+        if (tribes.Count == _lastNetworkTribesCount && _drawList.Count == _lastNetworkDrawCount && _drawList.Count > 0)
+            return;
+
+        _drawList.Clear();
+
+        var tileById = new Dictionary<int, RenderableTile>(tiles.Count);
+        foreach (var t in tiles)
+            tileById[(int)t.TileId] = t;
+
+        foreach (var tribe in tribes)
+        {
+            if (!tileById.TryGetValue(tribe.MainCampTileId, out var tile))
+                continue;
+
+            var center = new Vector3(tile.Center.X, tile.VisualElevation, tile.Center.Y);
+            var biome = tile.Biome;
+            var profile = registry.ResolveSettlement(tribe.Tier, biome);
+            var modelKey = ResolveLoadedSettlementKey(profile.ModelAssetKey, tribe.Tier, biome, registry);
+
+            if (modelKey is not null && _loadedModels.TryGetValue(modelKey, out var meshData))
+            {
+                var scale = FitModelToTile(meshData, TileWidth) * TierScaleMultiplier(tribe.Tier);
+                var yLift = GroundLift(meshData, scale, tribe.Tier);
+                _drawList.Add(new SettlementDraw(
+                    TribeId: tribe.Id,
+                    Position: center + new Vector3(0f, yLift, 0f),
+                    Scale: scale,
+                    ModelKey: modelKey,
+                    Tier: tribe.Tier,
+                    HorizontalExtent: meshData.HorizontalExtent));
+            }
+            else
+            {
+                AddKenneyCompound(center, new Random(tribe.Id * 1337 + 42));
+            }
+        }
+
+        _lastNetworkTribesCount = tribes.Count;
+        _lastNetworkDrawCount = _drawList.Count;
+    }
+
+    public void SetLodDistanceScale(float scale) { _lodDistanceScale = scale; }
+
+    public void InvalidateSettlementCache() { _lastNetworkTribesCount = -1; }
 
     // ─────────────────────────────────────────────────────────────
     //  Render with LOD
@@ -235,19 +288,19 @@ public sealed class SettlementRenderer : IDisposable
     //  LOD selection
     // ─────────────────────────────────────────────────────────────
 
-    private static SettlementLodLevel SelectLod(SettlementDraw draw, float cameraDistance, int selectedTribeId)
+    private SettlementLodLevel SelectLod(SettlementDraw draw, float cameraDistance, int selectedTribeId)
     {
         if (draw.TribeId == selectedTribeId)
             return SettlementLodLevel.Close;
 
         var profile = SettlementLodCatalog.Resolve(draw.Tier);
 
-        if (cameraDistance <= profile.CloseDistance)
+        if (cameraDistance <= profile.CloseDistance * _lodDistanceScale)
             return SettlementLodLevel.Close;
-        if (cameraDistance <= profile.MidDistance)
+        if (cameraDistance <= profile.MidDistance * _lodDistanceScale)
             return SettlementLodLevel.Mid;
 
-        return SettlementLodLevel.Mid;
+        return SettlementLodLevel.Far;
     }
 
     // ─────────────────────────────────────────────────────────────

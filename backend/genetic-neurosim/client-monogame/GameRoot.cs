@@ -29,6 +29,10 @@ public sealed class GameRoot : Game
     private readonly KeyboardCommandController _commandController;
     private readonly PanelDragController _panelDragController = new();
     private readonly Dictionary<DraggablePanelId, Rectangle> _panelBounds = new();
+    private readonly HttpClient _httpClient = new();
+    private Net.SimulationControlClient? _controlClient;
+    private byte[]? _worldBiomeCache;
+    private bool _networkPaused = false;
     private CancellationTokenSource? _receiverCancellation;
     private SimulationFrameReceiver? _frameReceiver;
     private Task? _receiverTask;
@@ -58,6 +62,9 @@ public sealed class GameRoot : Game
     private volatile bool _isNetworkMode;
     private int _mapWidth;
     private int _mapHeight;
+    private bool _useNetworkRender;
+    private RenderableTile[]? _lastRenderTiles;
+    private RenderableTribe[]? _lastRenderTribes;
 
     // M17: Performance metrics
     private float _smoothedFps;
@@ -139,6 +146,13 @@ public sealed class GameRoot : Game
 
         _renderAdapter = new PlayableRenderAdapter();
         _commandController = new KeyboardCommandController();
+
+        // Network mode: increase camera range for large maps (55×55 → ~2700 world units wide)
+        if (launchOptions.ConnectMode)
+        {
+            _camera.MaxDistance = 4000f;
+            _camera.Distance = 1200f;
+        }
     }
 
     protected override void Initialize()
@@ -279,15 +293,19 @@ public sealed class GameRoot : Game
 
             // M6: In network mode with V1 data, render from Rust frame data.
             // Otherwise render the local PlayableSimulation demo.
-            var useNetworkRender = _isNetworkMode && _viewModel.HasV1Data && _mapWidth > 0;
+            _useNetworkRender = _isNetworkMode && _mapWidth > 0 && (_viewModel.HasV1Data || _worldBiomeCache is not null);
 
-            var tiles = useNetworkRender
-                ? _renderAdapter.BuildTiles(_viewModel, _mapWidth, _mapHeight).ToArray()
+            var tiles = _useNetworkRender
+                ? _renderAdapter.BuildTiles(_viewModel, _mapWidth, _mapHeight, _worldBiomeCache).ToArray()
                 : _renderAdapter.BuildTiles(_playableSimulation).ToArray();
-            var tribes = useNetworkRender
+            var tribes = _useNetworkRender
                 ? _renderAdapter.BuildTribes(_viewModel, _mapWidth).ToArray()
                 : _renderAdapter.BuildTribes(_playableSimulation).ToArray();
-            var selectedTribeId = useNetworkRender ? -1 : _playableSimulation.SelectedTribeId;
+            _lastRenderTiles = tiles;
+            _lastRenderTribes = tribes;
+            var selectedTribeId = _useNetworkRender
+                ? (_playableSimulation.SelectedTribeId >= 0 ? _playableSimulation.SelectedTribeId : -1)
+                : _playableSimulation.SelectedTribeId;
 
             // 0. Table and parchment under the map (world-space 3D presentation).
             if (_tabletopRenderer is not null)
@@ -314,13 +332,19 @@ public sealed class GameRoot : Game
                 tiles,
                 _camera);
 
-            // 2. Vegetation dressing (trees, grass, bushes, rocks).
-            // Network tile data drives terrain; local playable sim still drives deterministic prop instances.
-            _vegetationRenderer?.CollectInstances(_playableSimulation, _assetRegistry, _camera.Distance);
+            // 2. Vegetation dressing.
+            if (_useNetworkRender)
+            {
+                _vegetationRenderer?.CollectInstances(tiles, tribes, _assetRegistry, _camera.Distance);
+            }
+            else
+            {
+                _vegetationRenderer?.CollectInstances(_playableSimulation, _assetRegistry, _camera.Distance);
+            }
             _vegetationRenderer?.Render(_camera, GraphicsDevice, (float)gameTime.TotalGameTime.TotalSeconds);
 
             // 2.5 Blob ground shadows under settlement models (screen-space, after terrain, before models).
-            if (!useNetworkRender && _settlementRenderer is not null && _blobShadowRenderer is not null)
+            if (_settlementRenderer is not null && _blobShadowRenderer is not null)
             {
                 _blobShadowRenderer.DrawShadows(
                     GraphicsDevice,
@@ -331,7 +355,11 @@ public sealed class GameRoot : Game
             }
 
             // 3. Settlement 3D models on capital tiles (LOD-aware).
-            if (!useNetworkRender)
+            if (_useNetworkRender)
+            {
+                _settlementRenderer?.CollectInstances(tribes, tiles, _assetRegistry);
+            }
+            else
             {
                 _settlementRenderer?.CollectInstances(_playableSimulation, _assetRegistry);
             }
@@ -384,7 +412,7 @@ public sealed class GameRoot : Game
                 _settlementRenderer?.LastStats ?? default,
                 _vegetationRenderer?.BatchTotalInstances ?? 0);
 
-            if (_selectionPanel is not null && _panelFontRenderer is not null && !useNetworkRender)
+            if (_selectionPanel is not null && _panelFontRenderer is not null)
             {
                 var defaultSelectionOrigin = new Point(GraphicsDevice.Viewport.Width - SelectionPanel.PanelWidth - 12, 12);
                 _selectionPanel.Draw(
@@ -395,7 +423,7 @@ public sealed class GameRoot : Game
             }
 
             // M9: Lineage inspector (toggled with L)
-            if (_panelFontRenderer is not null && !useNetworkRender)
+            if (_panelFontRenderer is not null && !_useNetworkRender)
             {
                 var defaultLineageOrigin = new Point(GraphicsDevice.Viewport.Width - 660, 12);
                 _lineageInspector.Draw(
@@ -407,7 +435,7 @@ public sealed class GameRoot : Game
             }
 
             // M9: Tombstone ledger (toggled with K) — positioned below debug HUD
-            if (_panelFontRenderer is not null && !useNetworkRender)
+            if (_panelFontRenderer is not null && !_useNetworkRender)
             {
                 _tombstonePanel.Draw(
                     _spriteBatch,
@@ -453,6 +481,7 @@ public sealed class GameRoot : Game
 
             _receiverCancellation?.Dispose();
             _connection.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            _httpClient.Dispose();
             _worldRenderer?.Dispose();
             _tabletopRenderer?.Dispose();
             _vegetationRenderer?.Dispose();
@@ -499,6 +528,27 @@ public sealed class GameRoot : Game
                 _diagnostics.RecordConnectionOpened(_launchOptions.NodeWebSocketEndpoint);
                 _isNetworkMode = true;
 
+                _controlClient = new Net.SimulationControlClient(_httpClient, _launchOptions.NodeHttpEndpoint);
+                await FetchWorldSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                _settlementRenderer?.SetLodDistanceScale(8f);
+
+                // Pause simulation on connect so user starts from a known state
+                try
+                {
+                    var status = await _controlClient.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+                    _networkPaused = status?.Paused ?? false;
+                    if (!_networkPaused)
+                    {
+                        await _controlClient.PauseAsync(cancellationToken).ConfigureAwait(false);
+                        _networkPaused = true;
+                        Console.WriteLine("[ctrl] auto-paused on connect");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ctrl] auto-pause failed: {ex.Message}");
+                }
+
                 _frameReceiver = new SimulationFrameReceiver(
                     _connection.ReceiveBinaryFrameAsync,
                     payload => _frameDecoder.Decode(payload),
@@ -520,6 +570,29 @@ public sealed class GameRoot : Game
             {
                 _diagnostics.RecordConnectionError(_launchOptions.NodeWebSocketEndpoint, ex);
             }
+        }
+    }
+
+    private async Task FetchWorldSnapshotAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var snapshot = await _controlClient!.GetWorldSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            if (snapshot is null) return;
+
+            _mapWidth = snapshot.Width;
+            _mapHeight = snapshot.Height;
+
+            var cache = new byte[snapshot.Tiles.Count];
+            for (var i = 0; i < snapshot.Tiles.Count; i++)
+                cache[i] = (byte)PlayableRenderAdapter.RustBiomeToBiomeId(snapshot.Tiles[i].Biome);
+            _worldBiomeCache = cache;
+
+            Console.WriteLine($"[world] snapshot loaded: {snapshot.Width}×{snapshot.Height}, {snapshot.Tiles.Count} tiles, seed={snapshot.Seed}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[world] snapshot fetch failed: {ex.Message}");
         }
     }
 
@@ -561,17 +634,54 @@ public sealed class GameRoot : Game
 
         if (commands.TogglePause)
         {
-            _playableSimulation.IsPaused = !_playableSimulation.IsPaused;
+            if (_isNetworkMode && _controlClient is not null)
+            {
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                if (_networkPaused)
+                {
+                    _networkPaused = false;
+                    _ = _controlClient.ResumeAsync(cts.Token)
+                        .ContinueWith(t => { if (t.IsFaulted) Console.WriteLine($"[ctrl] resume failed: {t.Exception?.GetBaseException().Message}"); });
+                }
+                else
+                {
+                    _networkPaused = true;
+                    _ = _controlClient.PauseAsync(cts.Token)
+                        .ContinueWith(t => { if (t.IsFaulted) Console.WriteLine($"[ctrl] pause failed: {t.Exception?.GetBaseException().Message}"); });
+                }
+            }
+            else
+            {
+                _playableSimulation.IsPaused = !_playableSimulation.IsPaused;
+            }
         }
 
         if (commands.StepTick)
         {
-            _playableSimulation.Step();
+            if (_isNetworkMode && _controlClient is not null)
+            {
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                _ = _controlClient.StepTickAsync(cts.Token)
+                    .ContinueWith(t => { if (t.IsFaulted) Console.WriteLine($"[ctrl] step-tick failed: {t.Exception?.GetBaseException().Message}"); });
+            }
+            else
+            {
+                _playableSimulation.Step();
+            }
         }
 
         if (commands.Reset)
         {
-            _playableSimulation.Reset();
+            if (_isNetworkMode && _controlClient is not null)
+            {
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                _ = _controlClient.ResetAsync(cts.Token)
+                    .ContinueWith(t => { if (t.IsFaulted) Console.WriteLine($"[ctrl] reset failed: {t.Exception?.GetBaseException().Message}"); });
+            }
+            else
+            {
+                _playableSimulation.Reset();
+            }
         }
 
         if (commands.ForceDispute)
@@ -734,18 +844,28 @@ public sealed class GameRoot : Game
     {
         if (_selectionSystem is null) return;
 
-        var result = _selectionSystem.Pick(screenPosition, GraphicsDevice.Viewport, _camera, _playableSimulation, _renderAdapter);
-        if (result is { TribeId: >= 0 })
+        if (_useNetworkRender && _lastRenderTiles is not null && _lastRenderTribes is not null)
         {
-            _playableSimulation.SelectedTribeId = result.TribeId;
+            var result = _selectionSystem.Pick(
+                screenPosition, GraphicsDevice.Viewport, _camera,
+                _mapWidth, _mapHeight, _lastRenderTiles, _lastRenderTribes);
+            if (result is { TribeId: >= 0 })
+                _playableSimulation.SelectedTribeId = result.TribeId;
+            else
+                _playableSimulation.SelectedTribeId = -1;
+            if (result is { TileId: >= 0 })
+                _playableSimulation.SelectedTileId = result.TileId;
         }
         else
         {
-            _playableSimulation.SelectedTribeId = -1;
+            var result = _selectionSystem.Pick(screenPosition, GraphicsDevice.Viewport, _camera, _playableSimulation, _renderAdapter);
+            if (result is { TribeId: >= 0 })
+                _playableSimulation.SelectedTribeId = result.TribeId;
+            else
+                _playableSimulation.SelectedTribeId = -1;
+            if (result is { TileId: >= 0 })
+                _playableSimulation.SelectedTileId = result.TileId;
         }
-
-        if (result is { TileId: >= 0 })
-            _playableSimulation.SelectedTileId = result.TileId;
     }
 
     private void UpdateWindowTitle(GameTime gameTime)
@@ -997,17 +1117,24 @@ public sealed class GameRoot : Game
             var warCount = _viewModel.Wars.Count;
             var entityCount = (int)_viewModel.V1Tribes.Where(kv => kv.Value.IsAlive).Sum(kv => (long)kv.Value.EntityCount);
 
+            TribeFrameV1Record? selectedV1Tribe = null;
+            if (_playableSimulation.SelectedTribeId >= 0)
+                _viewModel.V1Tribes.TryGetValue((uint)_playableSimulation.SelectedTribeId, out selectedV1Tribe);
+
+            var selectedTierLabel = selectedV1Tribe is not null ? GetTierLabel(selectedV1Tribe.PolityTier) : null;
+            var selectedNameStr = selectedV1Tribe is not null ? $"Tribe {selectedV1Tribe.Id} ({selectedTierLabel})" : null;
+
             return new DebugHudState(
                 ModeText: _diagnostics.IsConnected ? "NETWORK (FrameV1)" : "NETWORK (connecting...)",
                 Tick: checked((long)_viewModel.Tick),
                 LivingTribes: v1Living,
                 DisputedTiles: v1Disputed,
-                SelectedName: null,
-                SelectedPopulation: 0,
-                SelectedFood: 0f,
+                SelectedName: selectedNameStr,
+                SelectedPopulation: selectedV1Tribe is not null ? (int)selectedV1Tribe.Population : 0,
+                SelectedFood: selectedV1Tribe?.FoodStores ?? 0f,
                 IsConnected: _diagnostics.IsConnected,
                 TicksPerSecond: _ticksPerSecond,
-                Paused: true,
+                Paused: _networkPaused,
                 LastError: _diagnostics.LastDecodeError ?? _diagnostics.LastConnectionError,
                 Fps: _renderMetrics.Fps,
                 TerrainTiles: _renderMetrics.TerrainTilesDrawn,
@@ -1021,7 +1148,7 @@ public sealed class GameRoot : Game
                 CameraDistance: _renderMetrics.CameraDistance,
                 ZoomLevelLabel: _renderMetrics.ZoomLevelLabel,
                 VSyncEnabled: _renderMetrics.VSyncEnabled,
-                SelectedTerritoryCount: 0,
+                SelectedTerritoryCount: selectedV1Tribe is not null ? selectedV1Tribe.TerritoryCount : 0,
                 ExpansionCooldownRemaining: 0,
                 SelectedExpansionCost: 0f,
                 SelectedOverextended: false,

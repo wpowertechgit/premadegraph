@@ -21,22 +21,44 @@ public static class TribeVisuals
         new(132, 255, 210),
     ];
 
+    private static readonly Dictionary<int, Color> _colorCache = new();
+
     public static Color ColorForTribe(int tribeId)
     {
-        if (tribeId <= 0)
-            return OverviewPalette[0];
+        if (_colorCache.TryGetValue(tribeId, out var cached))
+            return cached;
+        var color = GenerateDistinctColor(_colorCache.Count);
+        _colorCache[tribeId] = color;
+        return color;
+    }
 
-        var baseColor = OverviewPalette[(tribeId - 1) % OverviewPalette.Length];
-        var cycle = (tribeId - 1) / OverviewPalette.Length;
-        if (cycle == 0)
-            return baseColor;
+    private static Color GenerateDistinctColor(int index)
+    {
+        // Golden ratio HSV: hue cycles with maximum spread
+        const float GoldenRatio = 0.618033988749895f;
+        var hue = (index * GoldenRatio) % 1f;
+        var saturation = 0.75f + (index % 3) * 0.08f;    // 0.75..0.91
+        var value = 0.80f + (index % 2) * 0.10f;          // 0.80..0.90
+        return HsvToRgb(hue, saturation, value);
+    }
 
-        var brighten = Math.Min(0.18f, 0.06f * cycle);
-        var darken = Math.Min(0.16f, 0.05f * cycle);
-        return new Color(
-            ClampChannel(baseColor.R / 255f * (1f - darken) + brighten),
-            ClampChannel(baseColor.G / 255f * (1f - darken) + brighten),
-            ClampChannel(baseColor.B / 255f * (1f - darken) + brighten));
+    private static Color HsvToRgb(float h, float s, float v)
+    {
+        var hi = (int)(h * 6f) % 6;
+        var f = h * 6f - MathF.Floor(h * 6f);
+        var p = v * (1f - s);
+        var q = v * (1f - f * s);
+        var t = v * (1f - (1f - f) * s);
+        var (r, g, b) = hi switch
+        {
+            0 => (v, t, p),
+            1 => (q, v, p),
+            2 => (p, v, t),
+            3 => (p, q, v),
+            4 => (t, p, v),
+            _ => (v, p, q),
+        };
+        return new Color(ClampChannel(r), ClampChannel(g), ClampChannel(b));
     }
 
     public static string RoleLabel(ArtifactVector artifacts)

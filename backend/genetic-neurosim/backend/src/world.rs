@@ -36,7 +36,7 @@ impl WorldGenerationConfig {
             seed,
             tribe_count,
             total_initial_population,
-            target_tiles_per_tribe: 4,
+            target_tiles_per_tribe: 25,
             target_population_density: 10.0,
             min_tiles: TOTAL_TILES,
         }
@@ -175,7 +175,7 @@ impl WorldGrid {
         let total_tiles = grid_w * grid_h;
 
         let mut rng = SmallRng::seed_from_u64(config.seed);
-        let n_centroids = config.tribe_count.max(6).min(30);
+        let n_centroids = (config.tribe_count / 4).max(20).min(120);
 
         let mut centroid_coords: Vec<(usize, usize)> = Vec::with_capacity(n_centroids);
         for _ in 0..n_centroids {
@@ -319,8 +319,8 @@ impl WorldGrid {
 
         let cols = (n as f32).sqrt().ceil() as usize;
         let rows = (n + cols - 1) / cols;
-        let col_size = (self.grid_w + cols - 1) / cols;
-        let row_size = (self.grid_h + rows - 1) / rows;
+        let col_size = (self.grid_w / cols).max(1);
+        let row_size = (self.grid_h / rows).max(1);
 
         let mut result: Vec<u16> = Vec::with_capacity(n);
         let mut used: std::collections::HashSet<u16> = std::collections::HashSet::new();
@@ -330,9 +330,9 @@ impl WorldGrid {
             let row = zone_idx / cols;
 
             let x_start = col * col_size;
-            let x_end = ((col + 1) * col_size).min(self.grid_w);
+            let x_end = if col + 1 == cols { self.grid_w } else { ((col + 1) * col_size).min(self.grid_w) };
             let y_start = row * row_size;
-            let y_end = ((row + 1) * row_size).min(self.grid_h);
+            let y_end = if row + 1 == rows { self.grid_h } else { ((row + 1) * row_size).min(self.grid_h) };
 
             let mut candidates: Vec<u16> = Vec::new();
             for ty in y_start..y_end {
