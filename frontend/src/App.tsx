@@ -422,7 +422,7 @@ function App() {
           onSaveRuntimeKey={saveRuntimeKey}
           desktopWidth={navWidth}
           landingSidebarOpen={landingSidebarOpen}
-          onOpenLandingSidebar={() => setLandingSidebarOpen(true)}
+          onOpenLandingSidebar={() => setLandingSidebarOpen((prev) => !prev)}
           onCloseLandingSidebar={() => setLandingSidebarOpen(false)}
           onStartResize={() => {
             if (isMobileLayout || navCollapsed) {

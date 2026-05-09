@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   FaBars,
   FaBookOpen,
@@ -358,6 +358,7 @@ export default function AppNavbar({
   }, [collapsed, isMobileLayout, mobileOpen]);
 
   const location = useLocation();
+  const navigate = useNavigate();
   const isLanding = location.pathname === "/";
 
   // On landing page: sidebar renders as overlay, triggered by landingSidebarOpen
@@ -405,7 +406,18 @@ export default function AppNavbar({
         aria-label={`Sidebar navigation width ${desktopWidth}px`}
       >
         <div className="app-sidebar__top">
-          <div className="app-sidebar__brand">
+          <a
+            href="/"
+            className="app-sidebar__brand"
+            onClick={(e) => {
+              e.preventDefault();
+              if (isLanding) {
+                onCloseLandingSidebar();
+              } else {
+                navigate("/");
+              }
+            }}
+          >
             <div className="app-sidebar__badge">
               <img src="/mushroom-icon.png" alt="PremadeGraph mushroom icon" className="app-sidebar__badge-image" />
             </div>
@@ -416,28 +428,28 @@ export default function AppNavbar({
                 <div className="app-sidebar__subtitle">{t.app.nav.brandSubtitle}</div>
               </div>
             ) : null}
-          </div>
+          </a>
 
           <button
             type="button"
             className="app-sidebar__collapse"
-            onClick={showMobileBar ? handleCloseMobileNav : onToggleCollapsed}
+            onClick={showMobileBar || isLanding ? handleCloseMobileNav : onToggleCollapsed}
             title={
-              showMobileBar
+              showMobileBar || isLanding
                 ? t.app.nav.collapseNavigation
                 : collapsed
                   ? t.app.nav.expandNavigation
                   : t.app.nav.collapseNavigation
             }
             aria-label={
-              showMobileBar
+              showMobileBar || isLanding
                 ? t.app.nav.collapseNavigation
                 : collapsed
                   ? t.app.nav.expandNavigation
                   : t.app.nav.collapseNavigation
             }
           >
-            {showMobileBar ? <FaTimes /> : collapsed ? <FaChevronRight /> : <FaChevronLeft />}
+            {showMobileBar || isLanding ? <FaTimes /> : collapsed ? <FaChevronRight /> : <FaChevronLeft />}
           </button>
         </div>
 
