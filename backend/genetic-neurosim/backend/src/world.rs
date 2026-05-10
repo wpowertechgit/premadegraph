@@ -36,7 +36,7 @@ impl WorldGenerationConfig {
             seed,
             tribe_count,
             total_initial_population,
-            target_tiles_per_tribe: 25,
+            target_tiles_per_tribe: 60,
             target_population_density: 10.0,
             min_tiles: TOTAL_TILES,
         }
@@ -79,6 +79,7 @@ pub enum Biome {
     Mountain = 3,
     Swamp = 4,
     River = 5,
+    Cold = 6,
 }
 
 pub struct BiomeStats {
@@ -120,6 +121,12 @@ impl Biome {
                 move_cost: 1.8,
                 defense_bonus: 0.1,
                 disease_rate: 0.08,
+            },
+            Biome::Cold => BiomeStats {
+                food_density: 0.35,
+                move_cost: 1.6,
+                defense_bonus: 0.2,
+                disease_rate: 0.005,
             },
             Biome::River => BiomeStats {
                 food_density: 0.6,
@@ -186,13 +193,14 @@ impl WorldGrid {
 
         let centroid_biomes: Vec<Biome> = (0..n_centroids)
             .map(|_| {
-                let b: u8 = rng.random_range(0u8..5u8);
+                let b: u8 = rng.random_range(0u8..6u8);
                 match b {
                     0 => Biome::Plains,
                     1 => Biome::Forest,
                     2 => Biome::Desert,
                     3 => Biome::Mountain,
-                    _ => Biome::Swamp,
+                    4 => Biome::Swamp,
+                    _ => Biome::Cold,
                 }
             })
             .collect();
@@ -242,12 +250,14 @@ impl WorldGrid {
         for i in 0..total_tiles {
             let biome = biome_map[i];
             let stats = biome.stats();
+            // Tuned 2026-05-10: max_food + regen scaled up so single-tile
+            // tribes earn surplus food faster than upkeep drains it.
             if biome == Biome::River {
                 tiles.push(BiomeTile {
                     biome,
-                    food: 0.6,
-                    max_food: stats.food_density,
-                    food_regen: stats.food_density * 0.1,
+                    food: 60.0,
+                    max_food: stats.food_density * 100.0,
+                    food_regen: stats.food_density * 4.0,
                     move_cost: 3.0,
                     defense_bonus: stats.defense_bonus,
                     disease_rate: stats.disease_rate,
@@ -256,9 +266,9 @@ impl WorldGrid {
                 let noise: f32 = rng.random_range(0.8f32..1.0f32);
                 tiles.push(BiomeTile {
                     biome,
-                    food: stats.food_density * noise,
-                    max_food: stats.food_density,
-                    food_regen: stats.food_density * 0.1,
+                    food: stats.food_density * 100.0 * noise,
+                    max_food: stats.food_density * 100.0,
+                    food_regen: stats.food_density * 4.0,
                     move_cost: stats.move_cost,
                     defense_bonus: stats.defense_bonus,
                     disease_rate: stats.disease_rate,
@@ -631,6 +641,7 @@ impl WorldGrid {
             Biome::Desert => 15.0,
             Biome::Mountain => 20.0,
             Biome::Swamp => 20.0,
+            Biome::Cold => 12.0,
             Biome::River => 0.0,
         };
         if river_adjacent {

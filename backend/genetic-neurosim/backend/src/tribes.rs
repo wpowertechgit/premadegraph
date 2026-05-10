@@ -109,23 +109,27 @@ pub struct TribeStats {
 
 impl TribeStats {
     pub fn from_profile(p: &crate::simulation::ClusterProfile) -> TribeStats {
+        // Linear normalization: raw score / 10.0 clamped to [0,1].
+        // Score 6.3 → 0.63. Preserves database proportionality without tanh squashing.
+        // Max scale 10.0 covers the full premadegraph opscore range.
+        let c = |v: f32| (v / 10.0).clamp(0.0, 1.0);
         TribeStats {
-            a_combat: p.a_combat,
-            a_risk: p.a_risk,
-            a_resource: p.a_resource,
-            a_map_objective: p.a_map_objective,
-            a_team: p.a_team,
-            feed_risk: p.feed_risk,
-            fight_conversion: p.fight_conversion,
-            damage_pressure: p.damage_pressure,
-            death_cost: p.death_cost,
-            survival_quality: p.survival_quality,
-            economy: p.economy,
-            tempo: p.tempo,
-            vision_control: p.vision_control,
-            objective_conversion: p.objective_conversion,
-            setup_control: p.setup_control,
-            protection_support: p.protection_support,
+            a_combat: c(p.a_combat),
+            a_risk: c(p.a_risk),
+            a_resource: c(p.a_resource),
+            a_map_objective: c(p.a_map_objective),
+            a_team: c(p.a_team),
+            feed_risk: c(p.feed_risk),
+            fight_conversion: c(p.fight_conversion),
+            damage_pressure: c(p.damage_pressure),
+            death_cost: c(p.death_cost),
+            survival_quality: c(p.survival_quality),
+            economy: c(p.economy),
+            tempo: c(p.tempo),
+            vision_control: c(p.vision_control),
+            objective_conversion: c(p.objective_conversion),
+            setup_control: c(p.setup_control),
+            protection_support: c(p.protection_support),
         }
     }
 }
@@ -183,6 +187,10 @@ pub struct TribeState {
     // New tiles start at 0.25 yield, rise linearly to 1.0 over 75 ticks.
     #[serde(skip)]
     pub tile_integration: std::collections::HashMap<u16, u64>,
+    // Migration destination tile. u16::MAX = no active target.
+    pub migration_target_tile: u16,
+    // Fitness score updated at each generation boundary.
+    pub fitness_score: f32,
 }
 
 impl TribeState {
@@ -195,7 +203,9 @@ impl TribeState {
         profile: &crate::simulation::ClusterProfile,
         home_tile: u16,
     ) -> TribeState {
-        let max_population = (profile.cluster_size * 25).min(2000).max(50);
+        // max_pop uncapped so tiers earn through gameplay; start small in Tribe tier.
+        let max_population = (profile.cluster_size as u32 * 600).min(50_000).max(6_000);
+        let starting_pop   = (profile.cluster_size as u32 * 10).min(250).max(40);
         let founders = profile
             .founder_puuids
             .iter()
@@ -207,9 +217,9 @@ impl TribeState {
         TribeState {
             id,
             cluster_id: profile.id.clone(),
-            population: max_population / 2,
+            population: starting_pop,
             max_population,
-            food_stores: (max_population / 2) as f32 * 3.0,
+            food_stores: starting_pop as f32 * 5.0,
             territory: vec![home_tile],
             home_tile,
             behavior: BehaviorState::Settling,
@@ -238,6 +248,8 @@ impl TribeState {
             last_expansion_tick: 0,
             expansion_cooldown_ticks: 25,
             tile_integration: std::collections::HashMap::new(),
+            migration_target_tile: u16::MAX, // sentinel: no target
+            fitness_score: 0.0,
         }
     }
 

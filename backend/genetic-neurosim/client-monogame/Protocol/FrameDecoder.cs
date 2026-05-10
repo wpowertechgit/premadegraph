@@ -144,6 +144,30 @@ public sealed class FrameDecoder
             }
         }
 
+        // ── Territory section ──
+        if ((flags & DesktopProtocol.FlagTerritoryData) != 0)
+        {
+            var tribeCount = ReadUInt16(payload, offset);
+            offset += 2;
+            var territoryMap = new Dictionary<uint, ushort[]>(tribeCount);
+            for (var i = 0; i < tribeCount; i++)
+            {
+                var tribeId = ReadUInt32(payload, offset); offset += 4;
+                var tileCount = ReadUInt16(payload, offset); offset += 2;
+                var tileIds = new ushort[tileCount];
+                for (var j = 0; j < tileCount; j++)
+                {
+                    tileIds[j] = ReadUInt16(payload, offset); offset += 2;
+                }
+                territoryMap[tribeId] = tileIds;
+            }
+            for (var i = 0; i < v1Tribes.Count; i++)
+            {
+                if (territoryMap.TryGetValue(v1Tribes[i].Id, out var tileIds))
+                    v1Tribes[i] = v1Tribes[i] with { TerritoryTiles = tileIds };
+            }
+        }
+
         var v1Data = new SimulationFrameV1(
             protocolVersion, tick, generation, v1Tribes, tiles, wars, events);
 

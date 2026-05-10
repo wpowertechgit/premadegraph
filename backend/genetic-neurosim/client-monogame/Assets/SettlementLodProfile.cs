@@ -24,8 +24,8 @@ public sealed record SettlementLodProfile(
 
 public static class SettlementLodCatalog
 {
-    /// <summary>High safety cap only; normal/demo maps should draw every living capital.</summary>
-    public const int MaxSettlementDraws = 512;
+    /// <summary>Hard per-frame cap. Viewport cull handles the rest; this prevents worst-case spikes.</summary>
+    public const int MaxSettlementDraws = 40;
 
     /// <summary>Default LOD profile used when no per-tier override exists.</summary>
     public static readonly SettlementLodProfile Default = new(SettlementLodLevel.Far, 200f, 500f);

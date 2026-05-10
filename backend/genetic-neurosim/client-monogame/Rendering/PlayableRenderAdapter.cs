@@ -90,11 +90,20 @@ public sealed class PlayableRenderAdapter
         int mapHeight,
         byte[]? worldBiomeCache = null)
     {
-        var campOwner = new Dictionary<int, int>(viewModel.V1Tribes.Count);
+        // Build tile-owner lookup from both main camp tiles and territory tile lists
+        var tileOwner = new Dictionary<int, int>(viewModel.V1Tribes.Count * 8);
         foreach (var (_, tribe) in viewModel.V1Tribes)
         {
-            if (tribe.IsAlive)
-                campOwner[(int)tribe.MainCampTile] = (int)tribe.Id;
+            if (!tribe.IsAlive)
+                continue;
+            // Main camp tile (always owned)
+            tileOwner[(int)tribe.MainCampTile] = (int)tribe.Id;
+            // Full territory from FLAG_TERRITORY_DATA section
+            if (tribe.TerritoryTiles is not null)
+            {
+                foreach (var tileId in tribe.TerritoryTiles)
+                    tileOwner[tileId] = (int)tribe.Id;
+            }
         }
 
         var total = mapWidth * mapHeight;
@@ -132,7 +141,7 @@ public sealed class PlayableRenderAdapter
                 FoodAmount: food,
                 MaxFoodAmount: 100f,
                 IsDisputed: isDisputed,
-                OwnerTribeId: campOwner.TryGetValue(tileId, out var ownedByTribe) ? ownedByTribe : -1,
+                OwnerTribeId: tileOwner.TryGetValue(tileId, out var ownedByTribe) ? ownedByTribe : -1,
                 HasCamp: false,
                 X: x,
                 Y: y,
@@ -271,6 +280,7 @@ public sealed class PlayableRenderAdapter
         3 => BiomeId.Mountains,
         4 => BiomeId.Marsh,
         5 => BiomeId.Riverland,
+        6 => BiomeId.Cold,
         _ => BiomeId.Plains,
     };
 

@@ -319,9 +319,11 @@ public sealed class PlayableSimulation
 
     private void GrowFood()
     {
+        // Tuned 2026-05-10: faster regen so single-tile tribes do not starve
+        // before they can afford their first expansion claim.
         foreach (var tile in Tiles)
         {
-            tile.Food = MathF.Min(tile.MaxFood, tile.Food + tile.MaxFood * 0.030f);
+            tile.Food = MathF.Min(tile.MaxFood, tile.Food + tile.MaxFood * 0.060f);
         }
     }
 
@@ -346,7 +348,9 @@ public sealed class PlayableSimulation
 
     private void ApplyPopulationPressure(PlayableTribe tribe)
     {
-        var upkeep = tribe.Population * 0.016f;
+        // Tuned 2026-05-10: lower upkeep so 1-tile tribes can grow population
+        // up to the ClaimPopBase gate without starving.
+        var upkeep = tribe.Population * 0.009f;
         tribe.FoodStores -= upkeep;
         var startingPopulation = tribe.Population;
 
@@ -384,13 +388,15 @@ public sealed class PlayableSimulation
     // ═══════════════════════════════════════════════════════════════════════════
     // R8: Expansion cost model constants
     // ═══════════════════════════════════════════════════════════════════════════
-    private const float ClaimBaseCost = 12f;
-    private const float ClaimTerritoryCostPerTile = 5f;
+    // Tuned 2026-05-10: lowered population gate so tribes start expanding
+    // shortly after spawn instead of dying at 1 tile.
+    private const float ClaimBaseCost = 10f;
+    private const float ClaimTerritoryCostPerTile = 4f;
     private const float ClaimDistanceCostPerStep = 3f;
-    private const float ClaimPressureCost = 12f;
-    private const float ClaimFoodFloor = 6f;
-    private const int ClaimPopBase = 55;
-    private const int ClaimPopPerTile = 14;
+    private const float ClaimPressureCost = 10f;
+    private const float ClaimFoodFloor = 5f;
+    private const int ClaimPopBase = 35;
+    private const int ClaimPopPerTile = 10;
     private const int IntegrationTicks = 75;
     private const float IntegrationStartYield = 0.25f;
     private const int OverextensionPopDivisor = 120;

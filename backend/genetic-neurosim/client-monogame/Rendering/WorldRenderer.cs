@@ -82,8 +82,19 @@ public sealed class WorldRenderer : IDisposable
     {
         EnsureEffects(spriteBatch.GraphicsDevice);
         LoadBiomeTextures();
-        DrawHexTerrain(spriteBatch.GraphicsDevice, tiles, camera);
-        DrawTerritoryOverlays(spriteBatch, tiles, camera);
+        if (camera.Distance <= 900f)
+        {
+            DrawHexTerrain(spriteBatch.GraphicsDevice, tiles, camera);
+            DrawTerritoryOverlays(spriteBatch, tiles, camera);
+            DrawWaterOverlay(spriteBatch, tiles, camera);
+        }
+        else
+        {
+            // Strategic/overview zoom: render flat 2D biome quads so the map is always visible.
+            // Owned tiles show tribe color. Much cheaper than 3D mesh at this scale.
+            DrawFlatTerrainOverview(spriteBatch, tiles, camera);
+            DrawTerritoryOverlays(spriteBatch, tiles, camera);
+        }
     }
 
     public void DrawSymbolOverlays(
@@ -205,8 +216,90 @@ public sealed class WorldRenderer : IDisposable
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  Flat 2D overview rendering (strategic/far zoom)
+    // ─────────────────────────────────────────────────────────────
+
+    private void DrawFlatTerrainOverview(
+        SpriteBatch spriteBatch,
+        IReadOnlyList<RenderableTile> tiles,
+        IsometricCamera camera)
+    {
+        if (_pixel is null || _graphicsDevice is null || tiles.Count == 0)
+            return;
+
+        var viewport = _graphicsDevice.Viewport;
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = ComputeVisibleAabb(camera, viewport, tiles[0].Size * 3f);
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend,
+            samplerState: SamplerState.PointClamp);
+
+        // Pre-project two reference points to get screen tile size
+        var sampleCenter = tiles[tiles.Count / 2].Center;
+        var screenSample = camera.HexToScreen(sampleCenter, viewport);
+        var screenSampleEdge = camera.HexToScreen(sampleCenter + new Vector2(tiles[0].Size, 0f), viewport);
+        var screenTileRadius = Math.Max(1f, Vector2.Distance(screenSample, screenSampleEdge));
+        var pixelSize = Math.Max(1, (int)MathF.Ceiling(screenTileRadius * 2.0f));
+
+        foreach (var tile in tiles)
+        {
+            if (tile.Center.X < aabbMinX || tile.Center.X > aabbMaxX ||
+                tile.Center.Y < aabbMinY || tile.Center.Y > aabbMaxY)
+                continue;
+
+            var screenCenter = camera.HexToScreen(tile.Center, viewport);
+            var x = (int)(screenCenter.X - pixelSize * 0.5f);
+            var y = (int)(screenCenter.Y - pixelSize * 0.5f);
+
+            Color color;
+            if (tile.OwnerTribeId >= 0)
+            {
+                var tribeColor = TribeVisuals.ColorForTribe(tile.OwnerTribeId);
+                color = new Color(tribeColor.R, tribeColor.G, tribeColor.B, (byte)200);
+            }
+            else
+            {
+                color = new Color(tile.BaseColor.R, tile.BaseColor.G, tile.BaseColor.B, (byte)220);
+            }
+
+            spriteBatch.Draw(_pixel, new Rectangle(x, y, pixelSize, pixelSize), color);
+        }
+
+        spriteBatch.End();
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  Hex terrain rendering (proper hex tiles with UV-mapped textures)
     // ─────────────────────────────────────────────────────────────
+
+    /// Compute visible world-space AABB from viewport corners with margin.
+    public static (float MinX, float MinY, float MaxX, float MaxY) ComputeVisibleAabbStatic(
+        IsometricCamera camera, Viewport viewport, float margin)
+        => ComputeVisibleAabb(camera, viewport, margin);
+
+    private static (float MinX, float MinY, float MaxX, float MaxY) ComputeVisibleAabb(
+        IsometricCamera camera, Viewport viewport, float margin)
+    {
+        Span<Vector2> corners = stackalloc Vector2[4];
+        corners[0] = camera.ScreenToWorld2D(new Vector2(0f, 0f), viewport);
+        corners[1] = camera.ScreenToWorld2D(new Vector2(viewport.Width, 0f), viewport);
+        corners[2] = camera.ScreenToWorld2D(new Vector2(0f, viewport.Height), viewport);
+        corners[3] = camera.ScreenToWorld2D(new Vector2(viewport.Width, viewport.Height), viewport);
+
+        var minX = float.MaxValue;
+        var minY = float.MaxValue;
+        var maxX = float.MinValue;
+        var maxY = float.MinValue;
+        foreach (var c in corners)
+        {
+            if (c.X < minX) minX = c.X;
+            if (c.Y < minY) minY = c.Y;
+            if (c.X > maxX) maxX = c.X;
+            if (c.Y > maxY) maxY = c.Y;
+        }
+        return (minX - margin, minY - margin, maxX + margin, maxY + margin);
+    }
 
     private void DrawHexTerrain(
         GraphicsDevice graphicsDevice,
@@ -227,10 +320,19 @@ public sealed class WorldRenderer : IDisposable
         graphicsDevice.RasterizerState = RasterizerState.CullNone;
         graphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
 
-        // Group tiles by (BiomeId, TextureKey) for per-biome ambient tint
+        var viewport = graphicsDevice.Viewport;
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = ComputeVisibleAabb(camera, viewport, tiles[0].Size * 2f);
+
+        // AABB cull is the only filter — terrain is only called at Distance <= 900f
+        // so the visible tile count is already small; stride sampling removed because
+        // modulo-index skipping creates visible zigzag seams.
         var groups = new Dictionary<(BiomeId Biome, string TextureKey), List<RenderableTile>>();
         foreach (var tile in tiles)
         {
+            if (tile.Center.X < aabbMinX || tile.Center.X > aabbMaxX ||
+                tile.Center.Y < aabbMinY || tile.Center.Y > aabbMaxY)
+                continue;
+
             var key = tile.TextureKey ?? "default";
             var groupKey = (tile.Biome, key);
             if (!groups.TryGetValue(groupKey, out var list))
@@ -287,11 +389,82 @@ public sealed class WorldRenderer : IDisposable
         if (_territoryRenderer is null || tiles.Count == 0)
             return;
 
-        var gridWidth = tiles.Max(t => t.X) + 1;
-        var gridHeight = tiles.Max(t => t.Y) + 1;
+        // MapWidth/MapHeight are baked into every tile — O(1) vs O(n) LINQ
+        var gridWidth  = tiles[0].MapWidth;
+        var gridHeight = tiles[0].MapHeight;
+        if (gridWidth <= 0 || gridHeight <= 0)
+            return;
 
         _territoryRenderer.DrawBorders(spriteBatch, tiles, gridWidth, gridHeight, camera, _graphicsDevice!.Viewport, camera.Distance);
         _territoryRenderer.DrawDisputedZones(spriteBatch, tiles, camera, _graphicsDevice!.Viewport, camera.Distance);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Riverland water overlay
+    // ─────────────────────────────────────────────────────────────
+
+    private void DrawWaterOverlay(
+        SpriteBatch spriteBatch,
+        IReadOnlyList<RenderableTile> tiles,
+        IsometricCamera camera)
+    {
+        if (_pixel is null || _graphicsDevice is null) return;
+
+        if (camera.Distance > 900f) return;
+
+        var waterColor = new Color(30, 90, 180, 90);
+        var viewport = _graphicsDevice.Viewport;
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend);
+
+        foreach (var tile in tiles)
+        {
+            if (tile.Biome != BiomeId.Riverland) continue;
+
+            var screenCenter = camera.HexToScreen(tile.Center, viewport);
+            var screenEdge = camera.HexToScreen(tile.Center + new Vector2(tile.Size, 0f), viewport);
+            var screenRadius = Vector2.Distance(screenCenter, screenEdge);
+            if (screenRadius < 2f) continue;
+
+            var corners = HexCorners(screenCenter, screenRadius);
+            FillHexScanline(spriteBatch, corners, waterColor);
+        }
+
+        spriteBatch.End();
+    }
+
+    private void FillHexScanline(SpriteBatch spriteBatch, Vector2[] corners, Color color)
+    {
+        var minY = corners[0].Y;
+        var maxY = corners[0].Y;
+        for (var i = 1; i < corners.Length; i++)
+        {
+            if (corners[i].Y < minY) minY = corners[i].Y;
+            if (corners[i].Y > maxY) maxY = corners[i].Y;
+        }
+
+        for (var y = (int)MathF.Ceiling(minY); y <= (int)MathF.Floor(maxY); y++)
+        {
+            var xMin = float.MaxValue;
+            var xMax = float.MinValue;
+            for (var i = 0; i < corners.Length; i++)
+            {
+                var a = corners[i];
+                var b = corners[(i + 1) % corners.Length];
+                if ((a.Y <= y && b.Y >= y) || (b.Y <= y && a.Y >= y))
+                {
+                    var dy = b.Y - a.Y;
+                    if (MathF.Abs(dy) < 0.001f) continue;
+                    var x = a.X + (y - a.Y) * (b.X - a.X) / dy;
+                    if (x < xMin) xMin = x;
+                    if (x > xMax) xMax = x;
+                }
+            }
+            if (xMax > xMin)
+                spriteBatch.Draw(_pixel, new Rectangle((int)xMin, y, (int)(xMax - xMin) + 1, 1), color);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -307,16 +480,30 @@ public sealed class WorldRenderer : IDisposable
     {
         if (_graphicsDevice is null) return;
 
+        var vp = _graphicsDevice.Viewport;
+        var tileSize = tiles.Count > 0 ? tiles[0].Size : 28f;
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = ComputeVisibleAabb(camera, vp, tileSize * 2f);
+
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
             blendState: BlendState.AlphaBlend,
             samplerState: SamplerState.LinearClamp);
 
         foreach (var tile in tiles)
-            DrawTileMarker(spriteBatch, tile, camera, _graphicsDevice.Viewport);
+        {
+            if (tile.Center.X < aabbMinX || tile.Center.X > aabbMaxX ||
+                tile.Center.Y < aabbMinY || tile.Center.Y > aabbMaxY)
+                continue;
+            DrawTileMarker(spriteBatch, tile, camera, vp);
+        }
 
         foreach (var tribe in tribes)
-            DrawTribe(spriteBatch, tribe, tribe.Id == selectedTribeId, camera, _graphicsDevice.Viewport);
+        {
+            if (tribe.Position.X < aabbMinX || tribe.Position.X > aabbMaxX ||
+                tribe.Position.Y < aabbMinY || tribe.Position.Y > aabbMaxY)
+                continue;
+            DrawTribe(spriteBatch, tribe, tribe.Id == selectedTribeId, camera, vp);
+        }
 
         spriteBatch.End();
     }

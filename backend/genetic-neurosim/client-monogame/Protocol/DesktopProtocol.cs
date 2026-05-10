@@ -15,6 +15,7 @@ public static class DesktopProtocol
     public const byte FlagTileData = 0x01;
     public const byte FlagWarData = 0x02;
     public const byte FlagEventData = 0x04;
+    public const byte FlagTerritoryData = 0x08;
 
     // Record sizes (match Rust frame_v1.rs constants)
     public const int FrameV1TribeRecordBytes = 50;

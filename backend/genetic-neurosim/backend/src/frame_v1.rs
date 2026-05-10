@@ -9,6 +9,7 @@ pub const FRAME_V1_EVENT_RECORD_BYTES: usize = 5;
 pub const FLAG_TILE_DATA: u8 = 0x01;
 pub const FLAG_WAR_DATA: u8 = 0x02;
 pub const FLAG_EVENT_DATA: u8 = 0x04;
+pub const FLAG_TERRITORY_DATA: u8 = 0x08;
 
 // ─── Encoder helpers ─────────────────────────────────────────────────────────
 

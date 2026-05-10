@@ -11,7 +11,8 @@ public sealed class PropInstanceBatch
 {
     private readonly Dictionary<string, List<PropDrawInstance>> _batches = new(StringComparer.OrdinalIgnoreCase);
 
-    private const int MaxInstancesPerModel = 2000;
+    // Lower per-model cap to avoid excessive draw calls on very large maps.
+    private const int MaxInstancesPerModel = 512;
 
     public IReadOnlyDictionary<string, List<PropDrawInstance>> Batches => _batches;
 

@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 using TribalNeuroSim.Client.Rendering;
 
 namespace TribalNeuroSim.Client.UI;
@@ -200,6 +201,140 @@ public sealed class SelectionPanel
             DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Dispute",
                 selectedTile.IsDisputed ? $"{selectedTile.Controls.Count} claimants" : "none",
                 selectedTile.IsDisputed ? WarningColor : MutedColor);
+        }
+
+        spriteBatch.End();
+    }
+
+    /// Network-mode overload: renders selection panel from V1 frame data instead of PlayableSimulation.
+    public void DrawNetwork(
+        SpriteBatch spriteBatch,
+        TribeFrameV1Record? tribe,
+        RenderableTile? selectedTile,
+        FontRenderer fontRenderer,
+        Point origin)
+    {
+        ArgumentNullException.ThrowIfNull(spriteBatch);
+
+        if (_font is null || !ReferenceEquals(_graphicsDevice, spriteBatch.GraphicsDevice))
+        {
+            _pixel?.Dispose();
+            _graphicsDevice = spriteBatch.GraphicsDevice;
+            _pixel = new Texture2D(_graphicsDevice, 1, 1);
+            _pixel.SetData(new[] { Microsoft.Xna.Framework.Color.White });
+            _font = fontRenderer;
+        }
+
+        if (tribe is null && selectedTile is null)
+        {
+            DrawEmptyState(spriteBatch, origin);
+            return;
+        }
+
+        var lineHeight = _font.LineHeight(FontSize.Body);
+        var smallHeight = _font.LineHeight(FontSize.Small);
+        var headerHeight = _font.LineHeight(FontSize.Header);
+
+        var dynamicHeight = PanelMargin * 2;
+        if (tribe is not null)
+        {
+            dynamicHeight += headerHeight + 6
+                + lineHeight       // population
+                + 4                // bar
+                + lineHeight       // food
+                + lineHeight       // territory
+                + 1 + 6            // separator
+                + smallHeight + 4  // artifacts header
+                + lineHeight * 5   // artifact rows
+                + 1 + 6 + smallHeight + 2 + lineHeight * 2; // polity section
+        }
+        if (selectedTile is not null)
+        {
+            dynamicHeight += 1 + 6 + smallHeight + 2 + lineHeight * 3;
+        }
+
+        var panel = ResolvePanelBounds(
+            spriteBatch.GraphicsDevice.Viewport,
+            lineHeight, smallHeight, headerHeight,
+            hasSelection: tribe is not null,
+            preferredOrigin: origin);
+        panel = new Rectangle(panel.X, panel.Y, panel.Width, dynamicHeight);
+        LastBounds = panel;
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend,
+            samplerState: SamplerState.LinearClamp);
+
+        FillRect(spriteBatch, panel, PanelColor);
+        DrawRectOutline(spriteBatch, panel, PanelBorderColor, 1);
+
+        var x = panel.X + PanelMargin;
+        var y = panel.Y + PanelMargin;
+
+        if (tribe is not null)
+        {
+            var tierLabel = PlayableRenderAdapter.RustPolityTierToPolityTier(tribe.PolityTier).ToString().ToUpperInvariant();
+            var tierWidth = (int)_font.Measure(tierLabel, FontSize.Small).X + 10;
+            _font.DrawString(spriteBatch, $"Tribe {tribe.Id}", new Vector2(x, y), FontSize.Header, TextColor);
+            FillRect(spriteBatch, new Rectangle(panel.Right - PanelMargin - tierWidth - 4, y + 1, tierWidth, smallHeight), new Color(TierColor, 50));
+            DrawRectOutline(spriteBatch, new Rectangle(panel.Right - PanelMargin - tierWidth - 4, y + 1, tierWidth, smallHeight), TierColor, 1);
+            _font.DrawStringAligned(spriteBatch, tierLabel, new Vector2(panel.Right - PanelMargin - 5, y + 2), FontSize.Small, TextAlign.Right, TierColor);
+            y += headerHeight + 6;
+
+            _font.DrawString(spriteBatch, "Population", new Vector2(x, y), FontSize.Body, MutedColor);
+            _font.DrawStringAligned(spriteBatch, tribe.Population.ToString(), new Vector2(panel.Right - PanelMargin, y), FontSize.Body, TextAlign.Right, TextColor);
+            y += lineHeight;
+
+            var popRatio = MathHelper.Clamp(tribe.Population / 500f, 0f, 1f);
+            FillRect(spriteBatch, new Rectangle(x, y - 2, PanelWidth - PanelMargin * 2, 5), new Color(255, 255, 255, 20));
+            FillRect(spriteBatch, new Rectangle(x, y - 2, (int)((PanelWidth - PanelMargin * 2) * popRatio), 5), GoodColor);
+            y += 4;
+
+            _font.DrawString(spriteBatch, "Food", new Vector2(x, y), FontSize.Body, MutedColor);
+            var foodColor = tribe.FoodStores > 10 ? AccentColor : WarningColor;
+            _font.DrawStringAligned(spriteBatch, $"{tribe.FoodStores:F0}", new Vector2(panel.Right - PanelMargin, y), FontSize.Body, TextAlign.Right, foodColor);
+            y += lineHeight;
+
+            _font.DrawString(spriteBatch, "Territory", new Vector2(x, y), FontSize.Body, MutedColor);
+            _font.DrawStringAligned(spriteBatch, $"{tribe.TerritoryCount} tiles", new Vector2(panel.Right - PanelMargin, y), FontSize.Body, TextAlign.Right, TextColor);
+            y += lineHeight;
+
+            DrawSectionDivider(spriteBatch, x, ref y);
+            _font.DrawString(spriteBatch, "Artifacts", new Vector2(x, y), FontSize.Small, MutedColor);
+            y += lineHeight;
+            DrawArtifactRow(spriteBatch, x, y, lineHeight, panel.Right - PanelMargin, "Combat", tribe.Artifacts.Combat);
+            y += lineHeight;
+            DrawArtifactRow(spriteBatch, x, y, lineHeight, panel.Right - PanelMargin, "Resource", tribe.Artifacts.Resource);
+            y += lineHeight;
+            DrawArtifactRow(spriteBatch, x, y, lineHeight, panel.Right - PanelMargin, "Map Obj", tribe.Artifacts.MapObjective);
+            y += lineHeight;
+            DrawArtifactRow(spriteBatch, x, y, lineHeight, panel.Right - PanelMargin, "Risk", tribe.Artifacts.Risk);
+            y += lineHeight;
+            DrawArtifactRow(spriteBatch, x, y, lineHeight, panel.Right - PanelMargin, "Team", tribe.Artifacts.Team);
+            y += lineHeight;
+
+            DrawSectionDivider(spriteBatch, x, ref y);
+            _font.DrawString(spriteBatch, "Polity", new Vector2(x, y), FontSize.Small, MutedColor);
+            y += lineHeight;
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Behavior", TribeVisuals.RoleLabel(tribe.Artifacts), TextColor);
+            y += lineHeight;
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Focus", TribeVisuals.DominantStat(tribe.Artifacts), AccentColor);
+            y += lineHeight;
+        }
+
+        if (selectedTile is not null)
+        {
+            DrawSectionDivider(spriteBatch, x, ref y);
+            _font.DrawString(spriteBatch, "Tile", new Vector2(x, y), FontSize.Small, MutedColor);
+            y += lineHeight;
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Biome", selectedTile.Value.Biome.ToString(), TextColor);
+            y += lineHeight;
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Food", $"{selectedTile.Value.FoodAmount:F0}/{selectedTile.Value.MaxFoodAmount:F0}", AccentColor);
+            y += lineHeight;
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Dispute", selectedTile.Value.IsDisputed ? "contested" : "none",
+                selectedTile.Value.IsDisputed ? WarningColor : MutedColor);
+            y += lineHeight;
         }
 
         spriteBatch.End();

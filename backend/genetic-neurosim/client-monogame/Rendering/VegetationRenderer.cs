@@ -136,9 +136,13 @@ public sealed class VegetationRenderer : IDisposable
     /// Network-mode overload: collect instances from RenderableTile list (no PlayableSimulation).
     public void CollectInstances(IReadOnlyList<RenderableTile> tiles, IReadOnlyList<RenderableTribe> tribes, AssetRegistry registry, float cameraDistance = 200f)
     {
-        if (cameraDistance > 1500f)
+        // Skip vegetation entirely when camera is extremely far or the map is very large.
+        // This prevents planning/building hundreds of thousands of prop instances on large network maps.
+        const int LargeMapTileThreshold = 3000;
+        const float MaxVegetationDistance = 1500f;
+
+        if (cameraDistance > MaxVegetationDistance || tiles.Count > LargeMapTileThreshold)
         {
-            // No vegetation at max zoom — skip entirely for performance
             ClearInstances();
             return;
         }

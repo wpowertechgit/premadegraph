@@ -107,18 +107,21 @@ public sealed class SelectionSystem
 
         if (bestTileId < 0) return null;
 
-        var found = false;
-        var foundTribeId = -1;
-        foreach (var t in tribes)
+        // Find tribe by tile ownership (OwnerTribeId on the rendered tile), falling
+        // back to MainCampTileId for untracked tiles.
+        var ownerTribeId = tiles[bestTileId].OwnerTribeId;
+        if (ownerTribeId < 0)
         {
-            if (t.MainCampTileId == bestTileId)
+            foreach (var t in tribes)
             {
-                foundTribeId = t.Id;
-                found = true;
-                break;
+                if (t.MainCampTileId == bestTileId)
+                {
+                    ownerTribeId = t.Id;
+                    break;
+                }
             }
         }
-        return new SelectionResult(bestTileId, found ? foundTribeId : -1);
+        return new SelectionResult(bestTileId, ownerTribeId);
     }
 
     private static (int X, int Y) WorldToHex(Vector2 worldPos)

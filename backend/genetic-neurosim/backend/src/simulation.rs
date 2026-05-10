@@ -13,26 +13,31 @@ use crate::tribes::BehaviorState;
 
 pub type SharedSimulation = Arc<RwLock<TribeSimulation>>;
 
-pub const INPUT_COUNT: usize = 10;
-pub const OUTPUT_COUNT: usize = 3;
+pub const INPUT_COUNT: usize = 11;
+pub const OUTPUT_COUNT: usize = 7;
 
 pub const INPUT_LABELS: [&str; INPUT_COUNT] = [
-    "food_ratio",
-    "pop_ratio",
-    "territory",
-    "feed_risk",
-    "a_combat",
-    "a_resource",
-    "a_map_objective",
-    "a_team",
-    "nearest_enemy",
-    "nearest_ally",
+    "food_ratio",      // 0
+    "pop_ratio",       // 1
+    "territory",       // 2
+    "feed_risk",       // 3
+    "a_combat",        // 4
+    "a_resource",      // 5
+    "a_map_objective", // 6
+    "a_team",          // 7
+    "nearest_enemy",   // 8 — all non-allied alive tribes
+    "nearest_ally",    // 9
+    "a_risk",          // 10 — was in TribeStats but never wired
 ];
 
 pub const OUTPUT_LABELS: [&str; OUTPUT_COUNT] = [
-    "aggression",
-    "resource_drive",
-    "goal_drive",
+    "aggression",      // 0: war initiation
+    "resource_drive",  // 1: territory expansion
+    "goal_drive",      // 2: diplomacy / alliance
+    "migration_drive", // 3: relocation pressure
+    "raid_drive",      // 4: opportunistic attack
+    "isolation",       // 5: resistance to forming alliances
+    "expansion_speed", // 6: territory claim aggressiveness
 ];
 
 // ─── ClusterProfile ──────────────────────────────────────────────────────────
@@ -212,6 +217,7 @@ pub enum InterventionScope {
 /// Typed intervention request dispatched through POST /api/interventions.
 /// Variants `Drought` and `MutationPulse` exist as documented shapes but
 /// return HTTP 501 until implemented.
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InterventionRequest {
@@ -278,6 +284,7 @@ pub struct TribeSnapshotResponse {
     pub veterancy_xp: u32,
     pub main_camp_tile: u16,
     pub citizen_count: usize,
+    pub fitness_score: f32,
 }
 
 // ─── TileOwnershipResponse ────────────────────────────────────────────────────
@@ -387,12 +394,14 @@ pub struct TombstonesResponse {
 
 // ─── Vec2 ─────────────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Default)]
 struct Vec2 {
     x: f32,
     y: f32,
 }
 
+#[allow(dead_code)]
 impl Vec2 {
     fn new(x: f32, y: f32) -> Self {
         Self { x, y }
@@ -415,6 +424,7 @@ impl std::ops::Mul<f32> for Vec2 {
 
 // ─── SpatialHash ─────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 #[derive(Clone)]
 struct SpatialHash {
     cell_size: f32,
@@ -426,6 +436,7 @@ struct SpatialHash {
 const _WORLD_WIDTH: f32 = 800.0;
 const _WORLD_HEIGHT: f32 = 800.0;
 
+#[allow(dead_code)]
 impl SpatialHash {
     fn new(cell_size: f32) -> Self {
         let cols = (_WORLD_WIDTH / cell_size).ceil() as usize;
@@ -470,6 +481,7 @@ struct NodeGene {
     id: u32,
     kind: NodeKind,
     order: f32,
+    #[allow(dead_code)]
     slot: Option<usize>,
 }
 
@@ -483,17 +495,18 @@ struct ConnectionGene {
 }
 
 #[derive(Clone, Debug)]
-struct CompiledEdge {
+pub struct CompiledEdge {
     from_idx: usize,
     weight: f32,
 }
 
 #[derive(Clone, Default, Debug)]
-struct CompiledGenome {
-    ordered_indices: Vec<usize>,
-    incoming: Vec<Vec<CompiledEdge>>,
-    output_indices: Vec<usize>,
-    complexity: usize,
+pub struct CompiledGenome {
+    pub(crate) ordered_indices: Vec<usize>,
+    pub(crate) incoming: Vec<Vec<CompiledEdge>>,
+    pub(crate) output_indices: Vec<usize>,
+    #[allow(dead_code)]
+    pub(crate) complexity: usize,
 }
 
 impl CompiledGenome {
@@ -534,6 +547,7 @@ pub struct Genome {
 }
 
 impl Genome {
+    #[allow(dead_code)]
     fn minimal(tracker: &mut InnovationTracker, rng: &mut SmallRng) -> Self {
         let mut nodes = Vec::with_capacity(INPUT_COUNT + OUTPUT_COUNT + 1);
         for input in 0..INPUT_COUNT {
@@ -749,6 +763,33 @@ impl Genome {
         self.rebuild_compiled();
     }
 
+    /// Fitness-weighted crossover: for each shared connection gene, adopt the
+    /// other genome's weight with probability proportional to its relative fitness.
+    /// Rebuilds the compiled plan after blending.
+    pub fn inherit_from(
+        &mut self,
+        other: &Genome,
+        self_fitness: f32,
+        other_fitness: f32,
+        rng: &mut SmallRng,
+    ) {
+        let total = self_fitness + other_fitness + 1e-6;
+        let other_prob = (other_fitness / total).clamp(0.1, 0.9);
+        let other_map: HashMap<u64, f32> = other
+            .connections
+            .iter()
+            .map(|c| (c.innovation, c.weight))
+            .collect();
+        for conn in &mut self.connections {
+            if let Some(&other_w) = other_map.get(&conn.innovation) {
+                if rng.random::<f32>() < other_prob {
+                    conn.weight = other_w;
+                }
+            }
+        }
+        self.rebuild_compiled();
+    }
+
     pub fn rebuild_compiled(&mut self) {
         self.nodes.sort_by(|a, b| {
             a.order
@@ -799,7 +840,7 @@ impl Genome {
 
 // ─── InnovationTracker ───────────────────────────────────────────────────────
 
-struct InnovationTracker {
+pub struct InnovationTracker {
     next_node_id: u32,
     next_innovation: u64,
     connection_map: HashMap<(u32, u32), u64>,
@@ -807,6 +848,7 @@ struct InnovationTracker {
 }
 
 impl InnovationTracker {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             next_node_id: (INPUT_COUNT + 1 + OUTPUT_COUNT) as u32,
@@ -826,6 +868,7 @@ impl InnovationTracker {
         }
     }
 
+    #[allow(dead_code)]
     fn base_output_id(&self, output_slot: usize) -> u32 {
         (INPUT_COUNT + 1 + output_slot) as u32
     }
@@ -911,6 +954,7 @@ pub struct TribeSimulation {
     halted: bool,
     paused: bool,
     recordings: Vec<Recording>,
+    #[allow(dead_code)]
     active_replay: Option<Vec<u8>>,
     last_frame: Vec<u8>,
     last_frame_v1: Vec<u8>,
@@ -945,7 +989,7 @@ impl TribeSimulation {
             generation: 0,
             rng,
             halted: false,
-            paused: false,
+            paused: true,
             recordings: vec![],
             active_replay: None,
             last_frame: vec![],
@@ -967,7 +1011,7 @@ impl TribeSimulation {
         self.tribes = self.config.clusters.iter().enumerate().map(|(i, profile)| {
             let home_tile = spawn_tiles.get(i).copied().unwrap_or(i as u16);
             let mut tribe = crate::tribes::TribeState::from_cluster(i, profile, home_tile);
-            tribe.genome = Some(crate::simulation::Genome::new(8, 3));
+            tribe.genome = Some(crate::simulation::Genome::new(INPUT_COUNT, OUTPUT_COUNT));
             tribe
         }).collect();
         // K2: sync initial tile owners for each tribe's home tile
@@ -1124,7 +1168,7 @@ impl TribeSimulation {
 
         self.tribes = profiles.iter().enumerate().map(|(i, profile)| {
             let mut tribe = crate::tribes::TribeState::from_cluster(i, profile, homes[i]);
-            tribe.genome = Some(crate::simulation::Genome::new(8, 3));
+            tribe.genome = Some(crate::simulation::Genome::new(INPUT_COUNT, OUTPUT_COUNT));
             tribe
         }).collect();
 
@@ -1215,6 +1259,7 @@ impl TribeSimulation {
     }
 
     /// Return events for a specific tribe (most recent first).
+    #[allow(dead_code)]
     pub fn tribe_event_log(&self, tribe_id: usize) -> Vec<&crate::events::SimulationEvent> {
         match self.tribe_events.get(&tribe_id) {
             Some(journal) => journal.iter().rev().collect(),
@@ -1252,6 +1297,7 @@ impl TribeSimulation {
                         crate::world::Biome::Desert   => "desert",
                         crate::world::Biome::Mountain => "mountain",
                         crate::world::Biome::Swamp    => "swamp",
+                        crate::world::Biome::Cold     => "cold",
                         crate::world::Biome::River    => "river",
                     };
                     *map.entry(key.to_string()).or_insert(0) += 1;
@@ -1289,6 +1335,7 @@ impl TribeSimulation {
             veterancy_xp: t.veterancy_xp,
             main_camp_tile: t.main_camp_tile,
             citizen_count: t.citizens.len(),
+            fitness_score: t.fitness_score,
         })
     }
 
@@ -1413,7 +1460,13 @@ impl TribeSimulation {
                 0.0
             };
 
-            let delta = ((food_per_pop - 0.8) * 0.05 * tribe.population as f32) as i32;
+            // Enforce minimum starvation death when food=0
+            let delta = if food_per_pop <= 0.01 && tribe.population > 0 {
+                -((tribe.population / 30).max(1) as i32)
+            } else {
+                ((food_per_pop - 0.8) * 0.05 * tribe.population as f32).round() as i32
+            };
+
             let new_pop = (tribe.population as i32 + delta).max(0) as u32;
             tribe.population = new_pop.min(tribe.max_population);
 
@@ -1424,6 +1477,11 @@ impl TribeSimulation {
             }
 
             tribe.ticks_alive += 1;
+        }
+
+        // Stat decay: applies every 50 ticks when tribes are starving
+        if self.tick % 50 == 0 {
+            self.apply_stat_decay();
         }
 
         // Population-based polity tier promotion (never demote)
@@ -1440,6 +1498,17 @@ impl TribeSimulation {
             let gen = self.generation;
             for (i, new_tier) in promotions {
                 self.tribes[i].polity_tier = new_tier;
+                // Raise max_population so next tier can be reached
+                let required_max: u32 = match new_tier {
+                    crate::tribes::PolityTier::City    => 12_000,
+                    crate::tribes::PolityTier::Duchy   => 30_000,
+                    crate::tribes::PolityTier::Kingdom => 80_000,
+                    crate::tribes::PolityTier::Empire  => 200_000,
+                    _ => self.tribes[i].max_population,
+                };
+                if required_max > self.tribes[i].max_population {
+                    self.tribes[i].max_population = required_max;
+                }
                 let mut ev = crate::events::SimulationEvent::new(
                     0, tick, gen,
                     crate::events::EventType::PolityUpgraded,
@@ -1504,13 +1573,15 @@ impl TribeSimulation {
     fn apply_state_machine(&mut self) {
         use crate::tribes::BehaviorState;
 
-        // Compute nearest enemy/ally tile distances (immutable pass)
+        // ── Pass 1: spatial sensing — all non-allied alive tribes as enemies ──
         let max_dist = (self.world.grid_w + self.world.grid_h) as f32;
         let spatial: Vec<(f32, f32)> = (0..self.tribes.len()).map(|i| {
             if !self.tribes[i].alive { return (1.0, 1.0); }
             let my_home = self.tribes[i].home_tile as usize;
+            let my_ally = self.tribes[i].ally_tribe;
+            // Sense ALL alive non-allied tribes, not just AtWar ones.
             let enemy_min = self.tribes.iter().enumerate()
-                .filter(|(j, t)| *j != i && t.alive && matches!(t.behavior, BehaviorState::AtWar))
+                .filter(|(j, t)| *j != i && t.alive && my_ally.map_or(true, |a| *j != a))
                 .flat_map(|(_, t)| t.territory.iter().map(|&tile| self.world.hex_distance(my_home, tile as usize)))
                 .min();
             let ally_min = self.tribes[i].ally_tribe
@@ -1524,7 +1595,7 @@ impl TribeSimulation {
             (enemy_norm, ally_norm)
         }).collect();
 
-        // Update neural net inputs for each tribe
+        // ── Pass 2: wire all 11 inputs (including a_risk, nearest_enemy fix) ──
         for (i, tribe) in self.tribes.iter_mut().enumerate() {
             if !tribe.alive { continue; }
             let food_ratio = if tribe.population > 0 {
@@ -1532,46 +1603,56 @@ impl TribeSimulation {
             } else { 0.0 };
             let (enemy_dist, ally_dist) = spatial[i];
             tribe.last_inputs = [
-                food_ratio.min(1.0),
-                (tribe.population as f32 / tribe.max_population as f32).min(1.0),
-                (tribe.territory.len() as f32 / 100.0).min(1.0),
-                tribe.stats.feed_risk,
-                tribe.stats.a_combat,
-                tribe.stats.a_resource,
-                tribe.stats.a_map_objective,
-                tribe.stats.a_team,
-                enemy_dist,
-                ally_dist,
+                food_ratio.min(1.0),                                               // 0
+                (tribe.population as f32 / tribe.max_population as f32).min(1.0), // 1
+                (tribe.territory.len() as f32 / 100.0).min(1.0),                  // 2
+                tribe.stats.feed_risk,                                             // 3
+                tribe.stats.a_combat,                                              // 4
+                tribe.stats.a_resource,                                            // 5
+                tribe.stats.a_map_objective,                                       // 6
+                tribe.stats.a_team,                                                // 7
+                enemy_dist,                                                        // 8 all non-allied
+                ally_dist,                                                         // 9
+                tribe.stats.a_risk,                                                // 10 was unused
             ];
         }
 
-        // Collect drives per tribe (needs immutable borrow)
-        let drives: Vec<(f32, f32, f32)> = self.tribes.iter().map(|t| {
-            if !t.alive { return (0.0, 0.0, 0.0); }
+        // ── Pass 3: activate networks → 7 drives ─────────────────────────────
+        #[derive(Clone, Copy, Default)]
+        struct Drives {
+            aggression: f32, resource: f32, goal: f32,
+            migration: f32, raid: f32, isolation: f32, expansion: f32,
+        }
+        let drives: Vec<Drives> = self.tribes.iter().map(|t| {
+            if !t.alive { return Drives::default(); }
             let genome = match &t.genome {
                 Some(g) => g,
-                None => return (0.5, 0.5, 0.5),
+                None => return Drives { aggression: 0.5, resource: 0.5, goal: 0.5, ..Drives::default() },
             };
             let compiled = genome.compile();
             let outputs = compiled.activate(&t.last_inputs);
-            let aggression = (outputs[0].tanh() + 1.0) / 2.0;
-            let resource   = (outputs[1].tanh() + 1.0) / 2.0;
-            let goal       = (outputs[2].tanh() + 1.0) / 2.0;
-            (aggression, resource, goal)
+            let n = outputs.len();
+            let d = |idx: usize| if idx < n { (outputs[idx].tanh() + 1.0) / 2.0 } else { 0.5 };
+            Drives {
+                aggression: d(0), resource: d(1), goal: d(2),
+                migration:  d(3), raid: d(4), isolation: d(5), expansion: d(6),
+            }
         }).collect();
 
-        // Store last_outputs
-        for (tribe, &(agg, res, goal)) in self.tribes.iter_mut().zip(drives.iter()) {
-            tribe.last_outputs = [agg, res, goal];
+        // ── Pass 4: store all 7 outputs ───────────────────────────────────────
+        for (tribe, dr) in self.tribes.iter_mut().zip(drives.iter()) {
+            tribe.last_outputs = [
+                dr.aggression, dr.resource, dr.goal,
+                dr.migration, dr.raid, dr.isolation, dr.expansion,
+            ];
         }
 
-        // Transition logic — collect behavior changes for event emission after loop
-        // (tribe_id, old_behavior as u8, new_behavior as u8, dominant output drive)
+        // ── Pass 5: transition logic ──────────────────────────────────────────
         let mut behavior_changes: Vec<(u32, u8, u8, f32)> = Vec::new();
 
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
-            let (aggression, _resource, goal) = drives[i];
+            let dr = drives[i];
             let food_ratio = if self.tribes[i].population > 0 {
                 self.tribes[i].food_stores / self.tribes[i].population as f32
             } else { 0.0 };
@@ -1579,24 +1660,28 @@ impl TribeSimulation {
             let current = self.tribes[i].behavior;
             let next = match current {
                 BehaviorState::Settling => {
-                    if food_ratio < 0.3 { BehaviorState::Foraging }
-                    else if aggression > 0.7 && self.has_neighbor(i) { BehaviorState::AtWar }
-                    // Imperialistic conquest: attack weaker adjacent tribe at lower aggression threshold
-                    else if aggression > 0.45 && food_ratio > 0.6 && self.has_weaker_neighbor(i) { BehaviorState::AtWar }
-                    else { current }
+                    if food_ratio < 0.3 {
+                        BehaviorState::Foraging
+                    } else if (dr.aggression > 0.45 || dr.raid > 0.65) && self.has_neighbor(i) {
+                        BehaviorState::AtWar
+                    } else if dr.aggression > 0.25 && food_ratio > 0.5 && self.has_weaker_neighbor(i) {
+                        BehaviorState::AtWar
+                    } else {
+                        current
+                    }
                 }
                 BehaviorState::Foraging => {
                     if food_ratio > 0.8 { BehaviorState::Settling }
                     else if food_ratio < 0.1 { BehaviorState::Starving }
                     else { current }
                 }
-                BehaviorState::AtWar => current, // resolved in combat step
+                BehaviorState::AtWar => current,
                 BehaviorState::Occupying => {
-                    if self.tribes[i].ticks_in_state > 200 { BehaviorState::Settling }
+                    if self.tribes[i].ticks_in_state > 60 { BehaviorState::Settling }
                     else { current }
                 }
                 BehaviorState::Peace => {
-                    if self.tribes[i].ticks_in_state > 500 { BehaviorState::Settling }
+                    if self.tribes[i].ticks_in_state > 80 { BehaviorState::Settling }
                     else { current }
                 }
                 BehaviorState::Allied => {
@@ -1616,44 +1701,76 @@ impl TribeSimulation {
                 }
                 BehaviorState::Desperate => {
                     if self.tribes[i].ticks_in_state > 100 { BehaviorState::Imploding }
-                    else if aggression > 0.6 && self.has_neighbor(i) { BehaviorState::AtWar }
+                    else if (dr.aggression > 0.5 || dr.raid > 0.6) && self.has_neighbor(i) { BehaviorState::AtWar }
                     else { current }
                 }
                 BehaviorState::Imploding => {
-                    // Population shrinks rapidly each tick
-                    let decay = (self.tribes[i].population / 20).max(1);
+                    // Brutal collapse: lose 1/8 of pop per tick (was 1/20)
+                    let decay = (self.tribes[i].population / 8).max(1);
                     self.tribes[i].population = self.tribes[i].population.saturating_sub(decay);
                     if self.tribes[i].population == 0 { self.tribes[i].alive = false; }
                     current
                 }
-                BehaviorState::Migrating => current, // handled separately if needed
-                // V3: Consolidating — polity merger in progress
-                BehaviorState::Consolidating => {
-                    if self.tribes[i].ticks_in_state > 100 {
-                        BehaviorState::Administering
-                    } else { current }
+                BehaviorState::Migrating => {
+                    // Pick destination on entry
+                    if self.tribes[i].migration_target_tile == u16::MAX {
+                        let dest = self.pick_migration_dest(i);
+                        self.tribes[i].migration_target_tile = dest;
+                    }
+                    let dest = self.tribes[i].migration_target_tile as usize;
+                    let camp = self.tribes[i].main_camp_tile as usize;
+                    // Advance camp toward destination every 5 ticks
+                    if camp != dest && self.tribes[i].ticks_in_state % 5 == 0 {
+                        let neighbors = self.world.hex_adjacent_tiles(camp);
+                        if let Some(&next_step) = neighbors.iter()
+                            .min_by_key(|&&t| self.world.hex_distance(t, dest))
+                        {
+                            self.tribes[i].main_camp_tile = next_step as u16;
+                            if self.world.is_tile_neutral(next_step) {
+                                let tribe_id = self.tribes[i].id as u32;
+                                self.world.set_tile_owner(next_step, tribe_id);
+                                if !self.tribes[i].territory.contains(&(next_step as u16)) {
+                                    self.tribes[i].territory.push(next_step as u16);
+                                }
+                            }
+                        }
+                    }
+                    let dist = self.world.hex_distance(
+                        self.tribes[i].main_camp_tile as usize, dest,
+                    );
+                    if dist <= 2 || self.tribes[i].ticks_in_state > 150 {
+                        self.tribes[i].migration_target_tile = u16::MAX; // reset sentinel
+                        BehaviorState::Settling
+                    } else if food_ratio < 0.05 && self.tribes[i].ticks_in_state > 10 {
+                        BehaviorState::Desperate
+                    } else {
+                        current
+                    }
                 }
-                // V3: Rebellious — constituent seeking independence
+                BehaviorState::Consolidating => {
+                    if self.tribes[i].ticks_in_state > 100 { BehaviorState::Administering }
+                    else { current }
+                }
                 BehaviorState::Rebellious => {
-                    if self.tribes[i].ticks_in_state > 50 && aggression > 0.7 {
+                    if self.tribes[i].ticks_in_state > 50 && dr.aggression > 0.7 {
                         BehaviorState::AtWar
                     } else if self.tribes[i].ticks_in_state > 200 {
                         BehaviorState::Administering
                     } else { current }
                 }
-                // V3: Administering — part of larger merged polity
                 BehaviorState::Administering => {
-                    if self.tribes[i].stats.a_team < 0.25
-                        && self.tribes[i].ticks_in_state > 100
-                    {
+                    if self.tribes[i].stats.a_team < 0.25 && self.tribes[i].ticks_in_state > 100 {
                         BehaviorState::Rebellious
                     } else { current }
                 }
             };
 
-            // Consider migration: goal_drive > 0.6, not at war
-            let next = if !matches!(next, BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Desperate)
-                && goal > 0.6 && matches!(current, BehaviorState::Settling | BehaviorState::Foraging) {
+            // Migration override: dedicated migration_drive output (not goal_drive collision)
+            let next = if !matches!(next, BehaviorState::AtWar | BehaviorState::Imploding
+                | BehaviorState::Desperate | BehaviorState::Allied)
+                && dr.migration > 0.55 && dr.aggression < 0.55
+                && matches!(current, BehaviorState::Settling | BehaviorState::Foraging)
+            {
                 BehaviorState::Migrating
             } else { next };
 
@@ -1669,11 +1786,9 @@ impl TribeSimulation {
                 self.tribes[i].ticks_in_state += 1;
             }
 
-            // V3: Veterancy XP — per-tick role fulfillment
             self.apply_veterancy_xp(i);
         }
 
-        // Emit BehaviorChanged events (outside the loop to avoid borrow conflict)
         let tick = self.tick;
         let gen = self.generation;
         for (tribe_id, old_b, new_b, max_drive) in behavior_changes {
@@ -1683,23 +1798,51 @@ impl TribeSimulation {
                 crate::events::EventSeverity::Info,
                 tribe_id,
             );
-            ev.value_a = old_b as f32; // previous behavior state id
-            ev.value_b = max_drive;    // dominant output drive that triggered transition
-            ev.flags = new_b as u32;   // new behavior state id
+            ev.value_a = old_b as f32;
+            ev.value_b = max_drive;
+            ev.flags = new_b as u32;
             self.push_event(ev);
         }
+    }
+
+    /// Score all tiles and return the best migration destination for a tribe.
+    /// Prefers high-food neutral tiles within a reasonable distance.
+    fn pick_migration_dest(&self, tribe_idx: usize) -> u16 {
+        let t = &self.tribes[tribe_idx];
+        let my_id = t.id as u32;
+        let camp = t.main_camp_tile as usize;
+        let mut best_tile = t.home_tile;
+        let mut best_score = f32::NEG_INFINITY;
+        for (tile_idx, tile) in self.world.tiles.iter().enumerate() {
+            let occupants = self.world.get_tile_occupants(tile_idx);
+            let owned_by_other = !occupants.is_empty()
+                && !occupants.iter().any(|c| c.tribe_id == my_id);
+            if owned_by_other { continue; }
+            let dist = self.world.hex_distance(camp, tile_idx);
+            if dist < 4 || dist > 15 { continue; }
+            let food_score = tile.max_food / 100.0;
+            let dist_score = 1.0 - (dist as f32 / 15.0);
+            let score = food_score * 0.7 + dist_score * 0.3;
+            if score > best_score {
+                best_score = score;
+                best_tile = tile_idx as u16;
+            }
+        }
+        best_tile
     }
 
     // ─── R8: Territory Expansion with Claim Cost & Cooldown ─────────────────────
 
     /// Claim cost constants.
-    const CLAIM_BASE_COST: f32 = 40.0;
-    const CLAIM_TERRITORY_COST_PER_TILE: f32 = 12.0;
-    const CLAIM_DISTANCE_COST_PER_STEP: f32 = 8.0;
-    const CLAIM_PRESSURE_COST: f32 = 25.0;
-    const CLAIM_FOOD_FLOOR: f32 = 15.0;
-    const CLAIM_POP_BASE: u32 = 30;
-    const CLAIM_POP_PER_TILE: u32 = 8;
+    /// Tuned 2026-05-10: reduced base + territory + floor so 1-tile tribes can
+    /// actually expand from initial food without starving first.
+    const CLAIM_BASE_COST: f32 = 8.0;
+    const CLAIM_TERRITORY_COST_PER_TILE: f32 = 3.0;
+    const CLAIM_DISTANCE_COST_PER_STEP: f32 = 2.0;
+    const CLAIM_PRESSURE_COST: f32 = 8.0;
+    const CLAIM_FOOD_FLOOR: f32 = 4.0;
+    const CLAIM_POP_BASE: u32 = 10;
+    const CLAIM_POP_PER_TILE: u32 = 3;
     const INTEGRATION_TICKS: u64 = 75;
     const INTEGRATION_START_YIELD: f32 = 0.25;
     const INTEGRATION_END_YIELD: f32 = 1.0;
@@ -1785,10 +1928,10 @@ impl TribeSimulation {
                 continue;
             }
 
-            // Territory cap per polity tier: Tribe≤7, City≤30, Duchy/Kingdom/Empire=∞
+            // Territory cap per polity tier: Tribe≤25, City≤80, Duchy/Kingdom/Empire=∞
             let tier_cap: u32 = match tribe.polity_tier {
-                crate::tribes::PolityTier::Tribe => 7,
-                crate::tribes::PolityTier::City  => 30,
+                crate::tribes::PolityTier::Tribe => 25,
+                crate::tribes::PolityTier::City  => 80,
                 _                                => u32::MAX,
             };
             if tile_count >= tier_cap {
@@ -1833,7 +1976,12 @@ impl TribeSimulation {
             tribe.tile_integration.insert(tile_idx as u16, tick);
 
             let tribe_id = tribe.id as u32;
-            self.world.set_tile_owner(tile_idx, tribe_id);
+            if self.world.is_tile_neutral(tile_idx) {
+                self.world.set_tile_owner(tile_idx, tribe_id);
+            } else {
+                // Tile already owned — create dispute (add as co-occupant)
+                self.world.add_tile_occupant(tile_idx, tribe_id, 0.4);
+            }
 
             let mut ev = crate::events::SimulationEvent::new(
                 0, tick, gen,
@@ -1921,6 +2069,7 @@ impl TribeSimulation {
         let tick = self.tick;
         let gen = self.generation;
         for (atk_id, def_id, battle_tile) in new_war_pairs {
+            println!("[WAR tick={}] tribe_{} declares war on tribe_{}", tick, atk_id, def_id);
             let war_id = self.next_war_id;
             self.next_war_id += 1;
             self.active_wars.push(crate::war::WarState {
@@ -2020,6 +2169,7 @@ impl TribeSimulation {
             // Check extinction
             if self.tribes[attacker_idx].population == 0 {
                 self.tribes[attacker_idx].alive = false;
+                println!("[WAR tick={}] tribe_{} defeated by tribe_{} (defender won)", self.tick, atk_id, def_id);
                 // L1: defender won — attacker wiped out
                 if let Some(war) = self.active_wars.iter_mut().find(|w| {
                     w.status == crate::war::WarStatus::Active
@@ -2031,6 +2181,7 @@ impl TribeSimulation {
             }
             if self.tribes[defender_idx].population == 0 {
                 self.tribes[defender_idx].alive = false;
+                println!("[WAR tick={}] tribe_{} defeated tribe_{} (attacker won)", self.tick, atk_id, def_id);
                 // Absorb territory and founders
                 let absorbed_territory: Vec<u16> = self.tribes[defender_idx].territory.clone();
                 let absorbed_founders: Vec<crate::tribes::FounderTag> =
@@ -2076,6 +2227,22 @@ impl TribeSimulation {
         }
     }
 
+    fn apply_stat_decay(&mut self) {
+        for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
+            if tribe.population == 0 { continue; }
+            let food_ratio = tribe.food_stores / tribe.population as f32;
+            // Only decay stats when starving AND small population
+            if food_ratio < 0.2 {
+                let decay = 0.008 * (0.2 - food_ratio).min(0.2);
+                tribe.stats.a_combat        = (tribe.stats.a_combat - decay).max(0.05);
+                tribe.stats.a_resource      = (tribe.stats.a_resource - decay).max(0.05);
+                tribe.stats.a_map_objective = (tribe.stats.a_map_objective - decay).max(0.05);
+                tribe.stats.a_team          = (tribe.stats.a_team - decay).max(0.05);
+                tribe.stats.a_risk          = (tribe.stats.a_risk - decay).max(0.05);
+            }
+        }
+    }
+
     fn knuth_poisson(&mut self, lambda: f32) -> u32 {
         let l = (-lambda).exp();
         let mut k = 0u32;
@@ -2099,16 +2266,20 @@ impl TribeSimulation {
 
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
-            if !matches!(self.tribes[i].behavior, BehaviorState::Settling) { continue; }
-            if self.tribes[i].ticks_in_state < 100 { continue; }
+            // Allow Foraging tribes to ally too — lower bar for coalition building
+            if !matches!(self.tribes[i].behavior, BehaviorState::Settling | BehaviorState::Foraging) { continue; }
+            if self.tribes[i].ticks_in_state < 30 { continue; } // was 100
             let goal_i = self.tribes[i].last_outputs[2];
-            if goal_i <= 0.7 { continue; }
+            if goal_i <= 0.55 { continue; } // was 0.7
+            let isolation_i = self.tribes[i].last_outputs[5]; // isolation drive
+            if isolation_i > 0.75 { continue; } // NN chose isolation
 
             let ally = (0..self.tribes.len()).find(|&j| {
                 j != i
                 && self.tribes[j].alive
-                && matches!(self.tribes[j].behavior, BehaviorState::Settling)
-                && self.tribes[j].last_outputs[2] > 0.6
+                && matches!(self.tribes[j].behavior, BehaviorState::Settling | BehaviorState::Foraging)
+                && self.tribes[j].last_outputs[2] > 0.50   // was 0.6
+                && self.tribes[j].last_outputs[5] < 0.75   // partner not isolated
                 && self.tribes[j].ally_tribe.is_none()
                 && self.tribes[j].target_tribe.is_none()
             });
@@ -2230,12 +2401,12 @@ impl TribeSimulation {
     }
 
     /// Map population to the tier it organically warrants.
-    /// Thresholds: 1000=City, 5000=Duchy, 10000=Kingdom, 20000=Empire.
+    /// Thresholds: 1000=City, 3000=Duchy, 7000=Kingdom, 15000=Empire.
     fn polity_tier_for_population(pop: u32) -> crate::tribes::PolityTier {
         use crate::tribes::PolityTier;
-        if pop >= 20_000 { PolityTier::Empire }
-        else if pop >= 10_000 { PolityTier::Kingdom }
-        else if pop >= 5_000 { PolityTier::Duchy }
+        if pop >= 15_000 { PolityTier::Empire }
+        else if pop >= 7_000 { PolityTier::Kingdom }
+        else if pop >= 3_000 { PolityTier::Duchy }
         else if pop >= 1_000 { PolityTier::City }
         else { PolityTier::Tribe }
     }
@@ -2267,8 +2438,33 @@ impl TribeSimulation {
         }
     }
 
+    /// Fitness-weighted genome crossover: absorber inherits genes from absorbed
+    /// with probability proportional to absorbed's relative fitness.
+    fn compute_fitness_of(&self, tribe_idx: usize) -> f32 {
+        let t = &self.tribes[tribe_idx];
+        if !t.alive { return 0.0; }
+        let territory_score = (t.territory.len() as f32 / 50.0).min(1.0);
+        let pop_score = (t.population as f32 / t.max_population.max(1) as f32).min(1.0);
+        let survival_score = (t.ticks_alive as f32 / 2000.0).min(1.0);
+        let merger_score = (t.constituent_tribe_ids.len() as f32 / 5.0).min(1.0);
+        let tribe_id = t.id as u32;
+        let wars_won = self.active_wars.iter()
+            .filter(|w| w.attacker_id == tribe_id && w.status == crate::war::WarStatus::AttackerWon)
+            .count();
+        let war_score = (wars_won as f32 / 3.0).min(1.0);
+        territory_score * 0.30
+            + pop_score * 0.25
+            + survival_score * 0.20
+            + merger_score * 0.15
+            + war_score * 0.10
+    }
+
     /// Merge two allied tribes. Absorber gains territory, population, constituents.
     fn try_merge_allies(&mut self, absorber: usize, absorbed: usize) -> bool {
+        // Compute fitness and clone genome before any state mutations
+        let absorber_fitness = self.compute_fitness_of(absorber);
+        let absorbed_fitness = self.compute_fitness_of(absorbed);
+        let absorbed_genome_clone = self.tribes[absorbed].genome.clone();
 
         if !self.tribes[absorber].alive || !self.tribes[absorbed].alive { return false; }
 
@@ -2338,6 +2534,16 @@ impl TribeSimulation {
         self.tribes[absorber].ticks_in_state = 0;
 
         self.assign_roles(absorber);
+
+        // Genome crossover: absorber inherits genes from absorbed weighted by fitness
+        if let Some(mut absorber_genome) = self.tribes[absorber].genome.take() {
+            if let Some(ref absorbed_genome) = absorbed_genome_clone {
+                absorber_genome.inherit_from(
+                    absorbed_genome, absorber_fitness, absorbed_fitness, &mut self.rng,
+                );
+            }
+            self.tribes[absorber].genome = Some(absorber_genome);
+        }
 
         let mut ev2 = crate::events::SimulationEvent::new(
             0, tick, gen,
@@ -2453,22 +2659,41 @@ impl TribeSimulation {
         let mutation_rate = self.config.mutation_rate;
         let nudge = 0.02f32;
 
-        // Collect (tribe_id, new_a_combat) for mutation events after the loop
+        // Fitness-based selection: compute fitness for all alive tribes, then
+        // scale mutation rate inversely — best tribes mutate least, worst most.
+        let fitnesses: Vec<(usize, f32)> = (0..self.tribes.len())
+            .filter(|&i| self.tribes[i].alive)
+            .map(|i| (i, self.compute_fitness_of(i)))
+            .collect();
+        let max_fit = fitnesses.iter().map(|(_, f)| *f).fold(0.0f32, f32::max);
+        let min_fit = fitnesses.iter().map(|(_, f)| *f).fold(f32::MAX, f32::min);
+        let fit_range = (max_fit - min_fit).max(0.01);
+
         let mut gen_advanced: Vec<u32> = Vec::new();
-        let mut mutation_records: Vec<(u32, f32)> = Vec::new(); // (tribe_id, new_a_combat)
+        let mut mutation_records: Vec<(u32, f32)> = Vec::new();
 
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
             gen_advanced.push(i as u32);
             self.tribes[i].generation += 1;
 
-            // Genome mutation — extract genome, mutate, put back to avoid split borrow
+            // Rank: 0.0 = worst fitness, 1.0 = best fitness
+            let tribe_fitness = fitnesses.iter()
+                .find(|&&(idx, _)| idx == i)
+                .map(|(_, f)| *f)
+                .unwrap_or(0.0);
+            let rank = (tribe_fitness - min_fit) / fit_range;
+            // Best tribes: 0.3× base rate. Worst: 2.0× base rate.
+            let tribe_mutation_rate = (mutation_rate * (2.0 - 1.7 * rank)).max(mutation_rate * 0.3);
+
+            // Update stored fitness
+            self.tribes[i].fitness_score = tribe_fitness;
+
             if let Some(mut genome) = self.tribes[i].genome.take() {
-                genome.mutate(&mut self.rng, mutation_rate);
+                genome.mutate(&mut self.rng, tribe_mutation_rate);
                 self.tribes[i].genome = Some(genome);
             }
 
-            // Stat nudge: small random walk on primary artifacts
             let dc = self.rng.random_range(-nudge..nudge);
             self.tribes[i].stats.a_combat = (self.tribes[i].stats.a_combat + dc).clamp(0.0, 1.0);
             let dr = self.rng.random_range(-nudge..nudge);
@@ -2480,20 +2705,16 @@ impl TribeSimulation {
             let dt = self.rng.random_range(-nudge..nudge);
             self.tribes[i].stats.a_team = (self.tribes[i].stats.a_team + dt).clamp(0.0, 1.0);
 
-            // High feed_risk bias: struggling tribes improve foraging
             if self.tribes[i].stats.feed_risk > 0.6 {
                 self.tribes[i].stats.a_resource = (self.tribes[i].stats.a_resource + 0.03).min(1.0);
             }
 
-            // Collect mutation summary (new a_combat after nudge)
             mutation_records.push((self.tribes[i].id as u32, self.tribes[i].stats.a_combat));
 
-            // Lineage log
             let gen = self.tribes[i].generation;
-            self.tribes[i].lineage.push(format!("gen-{}-survived", gen));
+            self.tribes[i].lineage.push(format!("gen-{}-fitness-{:.2}", gen, tribe_fitness));
         }
 
-        // Emit GenerationAdvanced and GenomeMutated events
         let tick = self.tick;
         let gen = self.generation;
         for tribe_id in gen_advanced {
@@ -2505,7 +2726,6 @@ impl TribeSimulation {
             );
             self.push_event(ev);
         }
-        // I5: mutation event — value_a = mutation_rate, value_b = new a_combat summary stat
         for (tribe_id, new_a_combat) in mutation_records {
             let mut ev = crate::events::SimulationEvent::new(
                 0, tick, gen,
@@ -2540,6 +2760,16 @@ impl TribeSimulation {
                 && tribe.ticks_near_river > 50 {
                 tribe.river_crossing_tech = RiverCrossing::Bridges;
                 tribe.lineage.push(format!("gen-{}-bridges-unlocked", tribe.generation));
+            }
+
+            // Bridges in use → increment crossings counter every 50 near-river ticks.
+            // (proxy for actual river usage; was never incremented before → Boats locked)
+            if matches!(tribe.river_crossing_tech, RiverCrossing::Bridges)
+                && tribe.territory.len() > 3
+                && tribe.ticks_near_river > 0
+                && tribe.ticks_near_river % 50 == 0
+            {
+                tribe.river_crossings = tribe.river_crossings.saturating_add(1);
             }
 
             // Bridges → Boats
@@ -2630,9 +2860,15 @@ impl TribeSimulation {
         let alive_tribes: Vec<&TribeState> =
             self.tribes.iter().filter(|t| t.alive).collect();
 
-        // Collect tiles with occupants or dispute
+        // Collect tiles with occupants, dispute, OR owned territory (for food visibility)
+        let territory_tile_set: std::collections::HashSet<usize> = self.tribes.iter()
+            .filter(|t| t.alive)
+            .flat_map(|t| t.territory.iter().map(|&ti| ti as usize))
+            .collect();
         let interesting_tiles: Vec<usize> = (0..self.world.total_tiles)
-            .filter(|&i| !self.world.tile_occupants[i].is_empty() || self.world.tile_is_disputed[i])
+            .filter(|&i| !self.world.tile_occupants[i].is_empty()
+                || self.world.tile_is_disputed[i]
+                || territory_tile_set.contains(&i))
             .collect();
 
         let active_wars: &[WarState] = &self.active_wars;
@@ -2672,6 +2908,10 @@ impl TribeSimulation {
         if !interesting_tiles.is_empty() { flags |= FLAG_TILE_DATA; }
         if !active_wars.is_empty() { flags |= FLAG_WAR_DATA; }
         if !events.is_empty() { flags |= FLAG_EVENT_DATA; }
+        let tribes_with_territory: Vec<&&TribeState> = alive_tribes.iter()
+            .filter(|t| !t.territory.is_empty())
+            .collect();
+        if !tribes_with_territory.is_empty() { flags |= FLAG_TERRITORY_DATA; }
         buf.push(flags);
 
         // ── Tile records (9 bytes each) ──
@@ -2711,6 +2951,18 @@ impl TribeSimulation {
                 buf.push(ev.event_type as u8);             // 1
                 push_u32(&mut buf, ev.tribe_id);           // 4
                 // total: 1+4 = 5
+            }
+        }
+
+        // ── Territory section: tribe_count, then per tribe: id(u32) + count(u16) + tile_ids(u16 each) ──
+        if flags & FLAG_TERRITORY_DATA != 0 {
+            push_u16(&mut buf, tribes_with_territory.len() as u16);
+            for tribe in &tribes_with_territory {
+                push_u32(&mut buf, tribe.id as u32);
+                push_u16(&mut buf, tribe.territory.len() as u16);
+                for &tile in &tribe.territory {
+                    push_u16(&mut buf, tile);
+                }
             }
         }
 
@@ -2990,6 +3242,7 @@ impl TribeSimulation {
     }
 
     /// Tombstone record for a specific tribe.
+    #[allow(dead_code)]
     pub fn tombstone_record(&self, tribe_id: u32) -> Option<crate::tombstone::TombstoneRecord> {
         self.tombstone.all_records().iter().find(|r| r.tribe_id == tribe_id).cloned()
     }

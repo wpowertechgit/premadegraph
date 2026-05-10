@@ -49,7 +49,11 @@ public sealed record TribeFrameV1Record(
     uint EntityCount,
     ushort VeterancyXp,
     byte BehaviorState,
-    bool IsAlive);
+    bool IsAlive)
+{
+    /// Territory tile IDs decoded from the FLAG_TERRITORY_DATA section. Null when section absent.
+    public ushort[]? TerritoryTiles { get; init; }
+}
 
 public sealed record TileFrameV1Record(
     ushort TileId,

@@ -159,6 +159,15 @@ async fn simulation_loop(state: Arc<AppState>) {
     let mut final_frame_sent = false;
 
     loop {
+        // Gate: do not advance simulation when no clients are subscribed.
+        // Prevents tick from running up to ~600 before first connect.
+        let no_subscribers = state.frame_tx.receiver_count() == 0
+            && state.frame_v1_tx.receiver_count() == 0;
+        if no_subscribers {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            continue;
+        }
+
         let (packet, packet_v1, tick_rate, idle) = {
             let mut simulation = state.simulation.write();
             let (frame, frame_v1) = if simulation.is_halted() || simulation.is_paused() {

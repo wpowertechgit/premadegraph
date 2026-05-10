@@ -8,6 +8,10 @@ public sealed class TerritoryRenderer : IDisposable
     private Texture2D? _pixel;
     private GraphicsDevice? _graphicsDevice;
 
+    // Cached flat tile lookup [y * gridWidth + x] — avoids per-frame Dictionary alloc
+    private RenderableTile?[]? _tileFlatCache;
+    private int _tileFlatCacheLength = -1;
+
     public void Initialize(GraphicsDevice graphicsDevice)
     {
         if (_pixel is not null && ReferenceEquals(_graphicsDevice, graphicsDevice))
@@ -31,9 +35,21 @@ public sealed class TerritoryRenderer : IDisposable
         if (_pixel is null || tiles.Count == 0)
             return;
 
-        var tileLookup = new Dictionary<(int X, int Y), RenderableTile>();
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = WorldRenderer.ComputeVisibleAabbStatic(camera, viewport, tiles[0].Size * 3f);
+
+        // Reuse a flat tile array to avoid per-frame Dictionary allocation
+        var flatLen = gridWidth * gridHeight;
+        if (_tileFlatCache is null || _tileFlatCacheLength != flatLen)
+        {
+            _tileFlatCache = new RenderableTile?[flatLen];
+            _tileFlatCacheLength = flatLen;
+        }
         foreach (var tile in tiles)
-            tileLookup[(tile.X, tile.Y)] = tile;
+        {
+            var idx = tile.Y * gridWidth + tile.X;
+            if ((uint)idx < (uint)flatLen)
+                _tileFlatCache[idx] = tile;
+        }
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
@@ -44,15 +60,22 @@ public sealed class TerritoryRenderer : IDisposable
         {
             if (tile.OwnerTribeId < 0)
                 continue;
+            if (tile.Center.X < aabbMinX || tile.Center.X > aabbMaxX ||
+                tile.Center.Y < aabbMinY || tile.Center.Y > aabbMaxY)
+                continue;
 
             var borderColor = TribeColor(tile.OwnerTribeId);
             var neighbors = GetNeighborEdges(tile);
 
             foreach (var neighborEdge in neighbors)
             {
-                if (tileLookup.TryGetValue((neighborEdge.NeighborX, neighborEdge.NeighborY), out var neighbor) &&
-                    neighbor.OwnerTribeId == tile.OwnerTribeId)
-                    continue;
+                var ni = neighborEdge.NeighborY * gridWidth + neighborEdge.NeighborX;
+                if ((uint)ni < (uint)flatLen)
+                {
+                    var neighbor = _tileFlatCache[ni];
+                    if (neighbor.HasValue && neighbor.Value.OwnerTribeId == tile.OwnerTribeId)
+                        continue;
+                }
 
                 DrawBorderEdge(spriteBatch, tile, neighborEdge.StartCornerIndex, neighborEdge.EndCornerIndex, borderColor, camera, viewport, cameraDistance);
             }
@@ -71,6 +94,8 @@ public sealed class TerritoryRenderer : IDisposable
         if (_pixel is null || tiles.Count == 0)
             return;
 
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = WorldRenderer.ComputeVisibleAabbStatic(camera, viewport, tiles[0].Size * 2f);
+
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
             blendState: BlendState.AlphaBlend,
@@ -79,6 +104,9 @@ public sealed class TerritoryRenderer : IDisposable
         foreach (var tile in tiles)
         {
             if (!tile.IsDisputed)
+                continue;
+            if (tile.Center.X < aabbMinX || tile.Center.X > aabbMaxX ||
+                tile.Center.Y < aabbMinY || tile.Center.Y > aabbMaxY)
                 continue;
 
             DrawCrosshatch(spriteBatch, tile, camera, viewport, cameraDistance);
@@ -93,6 +121,8 @@ public sealed class TerritoryRenderer : IDisposable
         _pixel?.Dispose();
         _pixel = null;
         _graphicsDevice = null;
+        _tileFlatCache = null;
+        _tileFlatCacheLength = -1;
     }
 
     // ── Zoom-aware scaling ──

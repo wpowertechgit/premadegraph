@@ -179,6 +179,9 @@ public sealed class GameRoot : Game
         _runtimeAssets = new RuntimeAssetLoader(GraphicsDevice);
         _vegetationRenderer = new VegetationRenderer(GraphicsDevice);
         _settlementRenderer = new SettlementRenderer(GraphicsDevice);
+        // Network maps are large; scale LOD thresholds up so 3D models render closer in.
+        if (_launchOptions.ConnectMode)
+            _settlementRenderer.SetLodDistanceScale(8f);
         _blobShadowRenderer = new BlobShadowRenderer();
         _blobShadowRenderer.Initialize(GraphicsDevice);
         _postProcessRenderer = new PostProcessRenderer();
@@ -415,11 +418,34 @@ public sealed class GameRoot : Game
             if (_selectionPanel is not null && _panelFontRenderer is not null)
             {
                 var defaultSelectionOrigin = new Point(GraphicsDevice.Viewport.Width - SelectionPanel.PanelWidth - 12, 12);
-                _selectionPanel.Draw(
-                    _spriteBatch,
-                    _playableSimulation,
-                    _panelFontRenderer,
-                    _panelDragController.ResolveOrigin(DraggablePanelId.Selection, defaultSelectionOrigin));
+                var panelOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.Selection, defaultSelectionOrigin);
+
+                if (_useNetworkRender && _viewModel.HasV1Data)
+                {
+                    Protocol.TribeFrameV1Record? selectedV1 = null;
+                    if (_playableSimulation.SelectedTribeId >= 0)
+                        _viewModel.V1Tribes.TryGetValue((uint)_playableSimulation.SelectedTribeId, out selectedV1);
+
+                    Rendering.RenderableTile? selectedTileRenderable = null;
+                    if (_playableSimulation.SelectedTileId >= 0 && _lastRenderTiles is not null
+                        && _playableSimulation.SelectedTileId < _lastRenderTiles.Length)
+                        selectedTileRenderable = _lastRenderTiles[_playableSimulation.SelectedTileId];
+
+                    _selectionPanel.DrawNetwork(
+                        _spriteBatch,
+                        selectedV1,
+                        selectedTileRenderable,
+                        _panelFontRenderer,
+                        panelOrigin);
+                }
+                else
+                {
+                    _selectionPanel.Draw(
+                        _spriteBatch,
+                        _playableSimulation,
+                        _panelFontRenderer,
+                        panelOrigin);
+                }
             }
 
             // M9: Lineage inspector (toggled with L)
@@ -622,8 +648,31 @@ public sealed class GameRoot : Game
                     _mapWidth = totalCells / _mapHeight;
                 }
             }
+
+            // 2026-05-10: Fit camera to map bounds on first usable network frame
+            // so large grids (e.g. 122x123 with 425 tribes) frame the whole world
+            // instead of leaving the playfield piled into the bottom-right corner.
+            if (_isNetworkMode && !_didFitNetworkCamera && _mapWidth > 0 && _mapHeight > 0)
+            {
+                var topLeft = _renderAdapter.TileCenter(0, 0);
+                var bottomRight = _renderAdapter.TileCenter(_mapWidth - 1, _mapHeight - 1);
+                var worldW = bottomRight.X - topLeft.X;
+                var worldH = bottomRight.Y - topLeft.Y;
+                _camera.MaxDistance = MathF.Max(_camera.MaxDistance, MathF.Max(worldW, worldH) * 1.4f);
+                _camera.FocalPoint = new Vector3(
+                    (topLeft.X + bottomRight.X) * 0.5f,
+                    0f,
+                    (topLeft.Y + bottomRight.Y) * 0.5f);
+                _camera.Distance = MathHelper.Clamp(
+                    MathF.Max(worldW, worldH) * 0.85f,
+                    _camera.MinDistance,
+                    _camera.MaxDistance);
+                _didFitNetworkCamera = true;
+            }
         }
     }
+
+    private bool _didFitNetworkCamera;
 
     private void HandlePlayableInput(PlayableCommandSet commands)
     {

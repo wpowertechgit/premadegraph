@@ -21,6 +21,8 @@ public sealed class SettlementRenderer : IDisposable
     private float _lodDistanceScale = 1f;
     private int _lastNetworkTribesCount = -1;
     private int _lastNetworkDrawCount = -1;
+    private int _lastNetworkMaxTier = -1;
+    private int _lastNetworkTierSum = -1;
 
     /// <summary>Render stats from the most recent Render() call.</summary>
     public SettlementRenderStats LastStats { get; private set; }
@@ -132,8 +134,12 @@ public sealed class SettlementRenderer : IDisposable
     /// Network-mode overload: collect settlement instances from RenderableTribe/RenderableTile lists.
     public void CollectInstances(IReadOnlyList<RenderableTribe> tribes, IReadOnlyList<RenderableTile> tiles, AssetRegistry registry)
     {
-        // Cache hit: skip rebuild if tribe count and draw count are unchanged.
-        if (tribes.Count == _lastNetworkTribesCount && _drawList.Count == _lastNetworkDrawCount && _drawList.Count > 0)
+        // Cache hit: skip rebuild when nothing that affects settlement models changed.
+        // Track sum of polity tiers so any tier promotion (Tribe→City→Duchy) invalidates the cache.
+        var maxTier = tribes.Count > 0 ? tribes.Max(t => (int)t.Tier) : 0;
+        var tierSum = tribes.Aggregate(0, (acc, t) => acc + (int)t.Tier);
+        if (tribes.Count == _lastNetworkTribesCount && tierSum == _lastNetworkTierSum
+            && _drawList.Count > 0)
             return;
 
         _drawList.Clear();
@@ -172,11 +178,17 @@ public sealed class SettlementRenderer : IDisposable
 
         _lastNetworkTribesCount = tribes.Count;
         _lastNetworkDrawCount = _drawList.Count;
+        _lastNetworkMaxTier = maxTier;
+        _lastNetworkTierSum = tierSum;
     }
 
     public void SetLodDistanceScale(float scale) { _lodDistanceScale = scale; }
 
-    public void InvalidateSettlementCache() { _lastNetworkTribesCount = -1; }
+    public void InvalidateSettlementCache()
+    {
+        _lastNetworkTribesCount = -1;
+        _lastNetworkTierSum = -1;
+    }
 
     // ─────────────────────────────────────────────────────────────
     //  Render with LOD
@@ -198,12 +210,20 @@ public sealed class SettlementRenderer : IDisposable
         graphicsDevice.RasterizerState = RasterizerState.CullNone;
         graphicsDevice.SamplerStates[0] = SamplerState.LinearWrap;
 
-        // Sort draws: selected first, then by LOD level (close before far), then by tier
+        // Viewport AABB: cull settlements not visible on screen before sorting.
+        var viewport = graphicsDevice.Viewport;
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = WorldRenderer.ComputeVisibleAabbStatic(camera, viewport, 200f);
+
+        // Assign LOD; Far = no 3D model. Filter Far + off-screen BEFORE sorting
+        // so the sort + Take operate on a small set regardless of total tribe count.
         var allWithLod = _drawList
             .Select(draw => (Draw: draw, Lod: SelectLod(draw, cameraDistance, selectedTribeId)))
             .ToArray();
 
         var drawn = allWithLod
+            .Where(x => x.Lod != SettlementLodLevel.Far)
+            .Where(x => x.Draw.Position.X >= aabbMinX && x.Draw.Position.X <= aabbMaxX
+                     && x.Draw.Position.Z >= aabbMinY && x.Draw.Position.Z <= aabbMaxY)
             .OrderByDescending(x => x.Draw.TribeId == selectedTribeId)
             .ThenBy(x => x.Lod)
             .ThenByDescending(x => (int)x.Draw.Tier)

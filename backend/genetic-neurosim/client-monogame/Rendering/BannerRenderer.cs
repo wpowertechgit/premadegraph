@@ -35,6 +35,10 @@ public sealed class BannerRenderer : IDisposable
     private const float RibbonWidth = 132f;
     private const float RibbonHeight = 28f;
     private const float MinDistanceForBanners = 0f;
+    // Banners are 2D sprites — cheap at any distance. Show them across all zoom
+    // levels (capped per-frame) so tribes are identifiable when terrain is hidden.
+    private const float MaxDistanceForBanners = 6000f;
+    private const int   MaxBannersPerFrame = 80;
     private const float MinBannerScale = 0.48f;
     private const float MaxBannerScale = 1.06f;
     private const float BannerDistanceScale = 360f;
@@ -65,14 +69,19 @@ public sealed class BannerRenderer : IDisposable
 
         if (camera.Distance < MinDistanceForBanners)
             return;
+        // Skip banner draw entirely when zoomed too far out.
+        if (camera.Distance > MaxDistanceForBanners)
+            return;
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
             blendState: BlendState.AlphaBlend,
             samplerState: SamplerState.LinearClamp);
 
+        var drawnCount = 0;
         foreach (var tribe in tribes)
         {
+            if (drawnCount >= MaxBannersPerFrame) break;
             var screenPos = camera.HexToScreen(tribe.Position, viewport) - new Vector2(0f, ScreenLiftPixels);
             var cullMargin = MathF.Max(BannerWidth * MaxBannerScale, MinRibbonWidth) + ScreenLiftPixels;
             if (screenPos.X < -cullMargin || screenPos.X > viewport.Width + cullMargin ||
@@ -83,6 +92,7 @@ public sealed class BannerRenderer : IDisposable
 
             var bannerScale = MathHelper.Clamp(BannerDistanceScale / camera.Distance, MinBannerScale, MaxBannerScale);
             DrawSingleBanner(spriteBatch, screenPos, insignia, tribe, bannerScale);
+            drawnCount++;
         }
 
         spriteBatch.End();
@@ -111,7 +121,9 @@ public sealed class BannerRenderer : IDisposable
         var emblemTex = GetOrCreateTintedEmblem(insignia.IconKey, insignia.PrimaryColor);
         if (emblemTex is not null && _greenScreenData.TryGetValue(insignia.PolityFrameKey, out var gs))
         {
-            var emblemSize = Math.Min(gs.Radius * 2f * frameDrawScale.X, frameWidth * 0.62f);
+            // Emblem is a square texture; inscribed square of circle = diameter / sqrt(2).
+            // Use 0.9 * that to leave a small margin inside the circle.
+            var emblemSize = Math.Min(gs.Radius * 1.55f * frameDrawScale.X, frameWidth * 0.58f);
             var emblemCenter = frameTopLeft + new Vector2(gs.Center.X * frameDrawScale.X, gs.Center.Y * frameDrawScale.Y);
             var emblemTopLeft = emblemCenter - new Vector2(emblemSize * 0.5f, emblemSize * 0.5f);
 
@@ -240,8 +252,8 @@ public sealed class BannerRenderer : IDisposable
                 var srcIdx = srcY * texture.Width + srcX;
                 var pixel = data[srcIdx];
 
-                // Replace green with transparent
-                if (pixel.R == 0 && pixel.G == 255 && pixel.B == 0)
+                // Replace green with transparent (threshold for JPEG/anti-aliased images)
+                if (pixel.G > 180 && pixel.R < 80 && pixel.B < 80)
                     pixel = Color.Transparent;
 
                 scaledData[y * scaledW + x] = pixel;
@@ -266,7 +278,8 @@ public sealed class BannerRenderer : IDisposable
             for (var x = 0; x < width; x++)
             {
                 var pixel = data[y * width + x];
-                if (pixel.R == 0 && pixel.G == 255 && pixel.B == 0)
+                // Threshold: strong green, low red and blue
+                if (pixel.G > 180 && pixel.R < 80 && pixel.B < 80)
                     greenPixels.Add(new Point(x, y));
             }
         }
