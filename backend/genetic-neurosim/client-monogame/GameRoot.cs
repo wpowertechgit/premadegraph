@@ -847,12 +847,16 @@ public sealed class GameRoot : Game
 
     private void UpdatePlayableSimulation(GameTime gameTime)
     {
-        // M6: In network mode, simulation is driven by the Rust backend.
-        // No local stepping.
+        // Network mode (--connect): Rust is the simulation authority.
+        // PlayableSimulation does not step — all tribe state comes from FrameV1 frames.
+        // This is the production path. Do not add behavior logic here for network results.
         if (_isNetworkMode)
         {
             return;
         }
+
+        // Local demo mode: PlayableSimulation steps here.
+        // This is a visual harness only — see the HARNESS-ONLY banner in PlayableSimulation.cs.
 
         if (_playableSimulation.IsPaused)
         {

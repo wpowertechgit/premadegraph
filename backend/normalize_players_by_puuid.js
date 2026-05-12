@@ -66,17 +66,7 @@ function resolveDbFile(explicitPath) {
     return envPath;
   }
 
-  const candidates = [
-    path.resolve(__dirname, "playersrefined.db"),
-    path.resolve(__dirname, "../playersrefined.db"),
-    path.resolve(__dirname, "players.db"),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  return candidates[0];
+  throw new Error("No database path resolved. Set GRAPH_DB_PATH, DB_PATH, or PLAYERS_REFINED_DB_PATH to the dataset playersrefined.db path, e.g. backend/data/databases/<dataset-id>/playersrefined.db");
 }
 
 function resolveMatchDir(explicitPath) {

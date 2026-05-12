@@ -1,3 +1,27 @@
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  HARNESS-ONLY — NOT THE PRODUCTION SIMULATION AUTHORITY                    ║
+// ║                                                                              ║
+// ║  PlayableSimulation is a self-contained local demo harness used by:         ║
+// ║    dotnet run          (normal local demo)                                  ║
+// ║    dotnet run --empire-stress                                                ║
+// ║    dotnet run --dispute-stress                                               ║
+// ║                                                                              ║
+// ║  The REAL simulation runs in Rust (backend/src/simulation.rs).              ║
+// ║  Network mode (dotnet run --connect) is the production path — Rust drives   ║
+// ║  every tribe decision, migration, war, merger, fitness, and evolution step. ║
+// ║                                                                              ║
+// ║  DO NOT:                                                                     ║
+// ║  - tune behavior here and treat it as a fix                                 ║
+// ║  - mirror changes from here into simulation.rs (or vice versa)              ║
+// ║  - add new behavior mechanics here for thesis-facing results                ║
+// ║                                                                              ║
+// ║  This file intentionally diverges from Rust in food economy constants,      ║
+// ║  war triggers, and merger triggers. That divergence is accepted and          ║
+// ║  documented in docs/tribe-behavior-diff.md §7.                              ║
+// ║                                                                              ║
+// ║  Authority contract: docs/neural-authority-contract-2026-05-11.md           ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Protocol;
 using TribalNeuroSim.Client.Rendering;

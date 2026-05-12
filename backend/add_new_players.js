@@ -8,17 +8,7 @@ function resolveDbFile() {
       ? process.env.DB_PATH
       : path.resolve(__dirname, process.env.DB_PATH);
   }
-
-  const candidates = [
-    path.resolve(__dirname, "players.db"),
-    path.resolve(__dirname, "../playersrefined.db"),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  return candidates[0];
+  throw new Error("DB_PATH env var is required. Pass the dataset players.db path, e.g. DB_PATH=backend/data/databases/<dataset-id>/players.db");
 }
 
 const dbFile = resolveDbFile();

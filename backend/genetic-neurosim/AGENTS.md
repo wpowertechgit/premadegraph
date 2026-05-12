@@ -2,29 +2,45 @@
 
 ## Purpose
 
-This subtree now serves Tribal NeuroSim v3.
+This subtree serves Tribal NeuroSim — currently executing the v4 Neural Sync scope.
 
 The active direction is:
 
-- Rust backend for simulation execution and protocol support
-- C# MonoGame desktop client for the main application
-- Node as the required middleman between the desktop client and Rust
-- asset and concept-art collection under `client-monogame/Content/`
+- Rust backend as the **only** authoritative simulation engine
+- C# MonoGame desktop client as visualization and inspection layer only
+- Node as the required thin bridge between MonoGame and Rust
+- Assets stored externally (Google Drive); `client-monogame/Content/` is gitignored
 
-## Current Scope
+## Authority Contract (v4 — binding)
 
-Work in this subtree should support:
+Read `docs/neural-authority-contract-2026-05-11.md` before making any behavior changes.
 
-1. Tribal NeuroSim v3 desktop migration
-2. C# domain modeling for polity tiers and artifacts
-3. Rust-side simulation, event, and transport work
-4. Node-mediated desktop integration
-5. biome-aware and polity-tier-aware asset preparation
+The short version:
+
+- **Rust owns:** tribe decisions, migration, war/alliance/merger, fitness, selection, crossover, lineage, tombstones, world state.
+- **C# owns:** rendering, inspection UI, debug HUD, local visual harnesses.
+- **Node owns:** bridge and bootstrap only. No game logic.
+- `PlayableSimulation.cs` is a local harness, not a production simulation. Do not treat behavior tuned there as done.
+- Network mode (`dotnet run -- --connect`) is the real product path.
+- Do not reopen architecture debates about runtime ownership. This is settled.
+
+## Current Scope (v4 Neural Sync)
+
+Active task list: `docs/taskrun/MASTER-TASK-LIST-v4-neurosim-neural-sync.md`  
+Implementation plan: `docs/superpowers/plans/2026-05-11-neurosim-neural-sync.md`
+
+Work in this scope must:
+
+1. Fix Rust behavior mechanics (dispute escalation, migration, aggression, consolidation tempo)
+2. Keep MonoGame in semantic sync with what Rust produces
+3. Leave lineage and tombstone infrastructure queryable and accurate
+4. Produce at least one convincing, inspectable, aggressive run before the scope closes
 
 ## Architecture Rules
 - Keep Rust focused on simulation execution, compact data handling, protocol output, and analytics support.
-- Keep C# focused on the desktop client, domain structure, rendering preparation, and asset-facing registries.
+- Keep C# focused on the desktop client, rendering, inspection UI, and asset-facing registries.
 - Keep Node thin as the required middleman and bootstrap layer.
+- Any behavior tuning goes into `backend/src/simulation.rs` first. Do not mirror changes manually into C# and call it done.
 
 ## Domain Direction
 
@@ -45,9 +61,7 @@ It should also be prepared to define:
 
 ## Assets
 
-Asset collection belongs under:
-
-- `backend/genetic-neurosim/client-monogame/Content/`
+`client-monogame/Content/` is **gitignored** — store assets on Google Drive and download locally when needed.
 
 Code belongs under:
 
@@ -60,27 +74,27 @@ Do not mix raw downloaded assets into code folders.
 
 ## Source Of Truth
 
-When making decisions here, follow these docs first:
+For v4 Neural Sync work, follow these docs first:
 
-- `docs/tribal-neurosim-v3-monogame-migration-plan.md`
-- `docs/tribal-neurosim-v3-asset-plan.md`
-- `docs/Tribal Neurosim v3_ Architecture & Mechanics Redesign.md`
-- `docs/Tribal NeuroSim V3_ Territory & Expansion Mechanics.md`
-- `docs/Tribal NeuroSim v3_ Offspring Mechanics & Evolutionary Lineage.md`
-- `docs/Tribal NeuroSim v3 _ Information Theory Lineage Compression.md`
+- `docs/neural-authority-contract-2026-05-11.md` — authority ownership (binding)
+- `docs/taskrun/MASTER-TASK-LIST-v4-neurosim-neural-sync.md` — active task list
+- `docs/superpowers/plans/2026-05-11-neurosim-neural-sync.md` — implementation plan
+- `docs/neural_network_05-10_state.md` — current NN state and gap analysis
 
-These V3 docs are not optional flavor notes. They define the direction.
+V3 design docs are background reference only. Do not fan out into them unless a code path is genuinely ambiguous.
 
 ## What Not To Do
 
-- Do not add random AI-life mechanics unrelated to the V3 documents.
-- Do not collect giant asset packs blindly without curating them into the `Content/` tree.
+- Do not add mechanics outside the v4 scope (neural behavior, migration, evolution, MonoGame sync, verification).
+- Do not tune behavior in C# and treat it as the canonical fix.
+- Do not reopen architecture debates about which runtime owns simulation.
+- Do not spend time on UI beauty passes — semantic correctness first.
 
 ## Practical Priority
 
 When in doubt, favor:
 
-1. protocol clarity
-2. asset organization
-3. simulation observability
-4. visual fidelity later
+1. Rust simulation correctness
+2. MonoGame semantic sync with Rust state
+3. inspectability of tribe decisions
+4. visual fidelity last

@@ -973,6 +973,9 @@ pub struct TribeSimulation {
     pub active_wars: Vec<crate::war::WarState>,
     /// L1: Monotonic war id counter.
     next_war_id: u32,
+    /// C2: Dispute registry — tracks when each (i,j) tribe pair first began disputing.
+    /// Key is (min_idx, max_idx). Removed when no shared disputed tile remains.
+    dispute_registry: HashMap<(usize, usize), u64>,
 }
 
 impl TribeSimulation {
@@ -1001,6 +1004,7 @@ impl TribeSimulation {
             next_war_id: 0,
             lineage_registry: LineageRegistry::new(),
             tombstone: TombstoneLedger::new(),
+            dispute_registry: HashMap::new(),
         };
         sim.initialize_tribes();
         Arc::new(RwLock::new(sim))
@@ -1433,6 +1437,14 @@ impl TribeSimulation {
         // R8: Territory expansion — per-tribe cooldown + claim cost model
     self.apply_territory_expansion();
 
+        // C2: Refresh dispute registry after expansion creates new shared tiles
+        self.update_dispute_registry();
+
+        // C3: Proactive conquest pressure — tribes with high raid/aggression pick targeted rivals
+        if self.tick % 20 == 0 {
+            self.apply_opportunity_war();
+        }
+
         // 4. Combat resolution (Task 8)
         self.apply_combat();
 
@@ -1443,8 +1455,12 @@ impl TribeSimulation {
         self.apply_merger();
 
         // R5: Rebellion check — administering tribes with low A_team may secede
+        // C2: Resolve disputes that have exceeded the grace period
+        // C3: Surrounded tribe escalation — boxed tribes fight, ally, or enter Desperate
         if self.tick % 30 == 0 {
             self.apply_rebellion_check();
+            self.apply_dispute_resolution();
+            self.apply_surrounded_escalation();
         }
 
         // R6: Reproduction — every 50 ticks for eligible tribes
@@ -2027,26 +2043,306 @@ impl TribeSimulation {
         false
     }
 
+    // ─── C3: Spatial helpers and aggression mechanics ────────────────────────
+
+    /// True if every tile adjacent to this tribe's territory is controlled by rival tribes —
+    /// meaning no neutral expansion room remains.
+    fn is_surrounded(&self, tribe_idx: usize) -> bool {
+        if !self.tribes[tribe_idx].alive { return false; }
+        let tribe_id = self.tribes[tribe_idx].id as u32;
+        let ally_id: Option<u32> = self.tribes[tribe_idx].ally_tribe
+            .filter(|&a| a < self.tribes.len() && self.tribes[a].alive)
+            .map(|a| self.tribes[a].id as u32);
+
+        for &tile in &self.tribes[tribe_idx].territory {
+            for adj in self.world.adjacent_tiles(tile as usize) {
+                let occupants = self.world.get_tile_occupants(adj);
+                let is_free = occupants.is_empty()
+                    || occupants.iter().all(|o| {
+                        o.tribe_id == tribe_id
+                            || ally_id.map_or(false, |a| o.tribe_id == a)
+                    });
+                if is_free {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// Returns the index of the weakest (pop × a_combat) adjacent rival tribe, if any.
+    fn find_weakest_adjacent_target(&self, tribe_idx: usize) -> Option<usize> {
+        let my_tiles: std::collections::HashSet<u16> =
+            self.tribes[tribe_idx].territory.iter().cloned().collect();
+        let my_ally = self.tribes[tribe_idx].ally_tribe;
+
+        let mut best: Option<(usize, f32)> = None;
+        for (j, other) in self.tribes.iter().enumerate() {
+            if j == tribe_idx || !other.alive { continue; }
+            if my_ally == Some(j) { continue; }
+            let adjacent = other.territory.iter().any(|&tile| {
+                self.world.adjacent_tiles(tile as usize)
+                    .iter().any(|&a| my_tiles.contains(&(a as u16)))
+            });
+            if !adjacent { continue; }
+            let strength = other.population as f32 * other.stats.a_combat;
+            if best.map_or(true, |(_, s)| strength < s) {
+                best = Some((j, strength));
+            }
+        }
+        best.map(|(j, _)| j)
+    }
+
+    /// Returns the index of the least-aggressive adjacent unallied rival, if any.
+    /// Used by surrounded tribes seeking a desperate alliance.
+    fn find_least_aggressive_adjacent(&self, tribe_idx: usize) -> Option<usize> {
+        use crate::tribes::BehaviorState;
+        let my_tiles: std::collections::HashSet<u16> =
+            self.tribes[tribe_idx].territory.iter().cloned().collect();
+        let my_ally = self.tribes[tribe_idx].ally_tribe;
+
+        let mut best: Option<(usize, f32)> = None;
+        for (j, other) in self.tribes.iter().enumerate() {
+            if j == tribe_idx || !other.alive { continue; }
+            if my_ally == Some(j) { continue; }
+            if other.ally_tribe.is_some() { continue; }
+            match other.behavior {
+                BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Allied => continue,
+                _ => {}
+            }
+            let adjacent = other.territory.iter().any(|&tile| {
+                self.world.adjacent_tiles(tile as usize)
+                    .iter().any(|&a| my_tiles.contains(&(a as u16)))
+            });
+            if !adjacent { continue; }
+            let aggr = other.last_outputs[0];
+            if best.map_or(true, |(_, a)| aggr < a) {
+                best = Some((j, aggr));
+            }
+        }
+        best.map(|(j, _)| j)
+    }
+
+    /// Proactive conquest: tribes with high raid/aggression drives and a weaker adjacent rival
+    /// declare war and immediately target that specific rival (not a random nearest).
+    /// Called every 20 ticks.
+    fn apply_opportunity_war(&mut self) {
+        use crate::tribes::BehaviorState;
+        let tick = self.tick;
+        let gen = self.generation;
+
+        // Collect (attacker, target) before any mutation
+        let mut declarations: Vec<(usize, usize)> = Vec::new();
+        for i in 0..self.tribes.len() {
+            if !self.tribes[i].alive { continue; }
+            match self.tribes[i].behavior {
+                BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Migrating => continue,
+                _ => {}
+            }
+            let raid = self.tribes[i].last_outputs[4];
+            let aggr = self.tribes[i].last_outputs[0];
+            let trigger = raid > 0.58 || (aggr > 0.48 && self.has_weaker_neighbor(i));
+            if !trigger { continue; }
+            if let Some(target_idx) = self.find_weakest_adjacent_target(i) {
+                declarations.push((i, target_idx));
+            }
+        }
+
+        for (atk_idx, def_idx) in declarations {
+            if !self.tribes[atk_idx].alive || !self.tribes[def_idx].alive { continue; }
+            if matches!(self.tribes[atk_idx].behavior, BehaviorState::AtWar)
+                && self.tribes[atk_idx].target_tribe == Some(def_idx) { continue; }
+
+            let atk_id = self.tribes[atk_idx].id as u32;
+            let def_id = self.tribes[def_idx].id as u32;
+
+            self.tribes[atk_idx].behavior = BehaviorState::AtWar;
+            self.tribes[atk_idx].target_tribe = Some(def_idx);
+            self.tribes[atk_idx].ticks_in_state = 0;
+
+            let already = self.active_wars.iter().any(|w| {
+                w.status == crate::war::WarStatus::Active
+                    && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                        || (w.attacker_id == def_id && w.defender_id == atk_id))
+            });
+            if !already {
+                let war_id = self.next_war_id;
+                self.next_war_id += 1;
+                let battle_tile = self.tribes[def_idx].home_tile as u32;
+                self.active_wars.push(crate::war::WarState {
+                    war_id,
+                    attacker_id: atk_id,
+                    defender_id: def_id,
+                    start_tick: tick,
+                    status: crate::war::WarStatus::Active,
+                    attacker_casualties: 0,
+                    defender_casualties: 0,
+                    battle_tile: Some(battle_tile),
+                });
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, tick, gen,
+                    crate::events::EventType::WarDeclared,
+                    crate::events::EventSeverity::Important,
+                    atk_id,
+                );
+                ev.other_tribe_id = def_id;
+                ev.war_id = war_id;
+                self.push_event(ev);
+                println!("[OPPORTUNITY WAR tick={}] tribe_{} → tribe_{} (raid={:.2} aggr={:.2})",
+                    tick, atk_id, def_id,
+                    self.tribes[atk_idx].last_outputs[4],
+                    self.tribes[atk_idx].last_outputs[0]);
+            }
+        }
+    }
+
+    /// Boxed-in tribes that cannot expand must escalate: fight, negotiate, or enter Desperate.
+    /// - aggression > 0.42 or already Desperate/Starving → war against weakest adjacent rival
+    /// - goal > 0.52 and isolation < 0.55 and unallied → desperate alliance with least-aggressive neighbor
+    /// - otherwise → Desperate (final warning before Imploding)
+    /// Called every 30 ticks.
+    fn apply_surrounded_escalation(&mut self) {
+        use crate::tribes::BehaviorState;
+        let tick = self.tick;
+        let gen = self.generation;
+
+        let mut war_decls: Vec<(usize, usize)>  = Vec::new();
+        let mut desp_allies: Vec<(usize, usize)> = Vec::new();
+        let mut desp_trans: Vec<usize>           = Vec::new();
+
+        for i in 0..self.tribes.len() {
+            if !self.tribes[i].alive { continue; }
+            match self.tribes[i].behavior {
+                BehaviorState::AtWar | BehaviorState::Imploding => continue,
+                _ => {}
+            }
+            if !self.is_surrounded(i) { continue; }
+
+            let aggr      = self.tribes[i].last_outputs[0];
+            let goal      = self.tribes[i].last_outputs[2];
+            let isolation = self.tribes[i].last_outputs[5];
+            let is_desp   = matches!(self.tribes[i].behavior,
+                BehaviorState::Desperate | BehaviorState::Starving);
+
+            if aggr > 0.42 || is_desp {
+                match self.find_weakest_adjacent_target(i) {
+                    Some(t) => war_decls.push((i, t)),
+                    None    => { if !is_desp { desp_trans.push(i); } }
+                }
+            } else if goal > 0.52 && isolation < 0.55 && self.tribes[i].ally_tribe.is_none() {
+                match self.find_least_aggressive_adjacent(i) {
+                    Some(t) => desp_allies.push((i, t)),
+                    None    => desp_trans.push(i),
+                }
+            } else if !is_desp {
+                desp_trans.push(i);
+            }
+        }
+
+        for (atk_idx, def_idx) in war_decls {
+            if !self.tribes[atk_idx].alive || !self.tribes[def_idx].alive { continue; }
+            let atk_id = self.tribes[atk_idx].id as u32;
+            let def_id = self.tribes[def_idx].id as u32;
+
+            self.tribes[atk_idx].behavior = BehaviorState::AtWar;
+            self.tribes[atk_idx].target_tribe = Some(def_idx);
+            self.tribes[atk_idx].ticks_in_state = 0;
+
+            let already = self.active_wars.iter().any(|w| {
+                w.status == crate::war::WarStatus::Active
+                    && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                        || (w.attacker_id == def_id && w.defender_id == atk_id))
+            });
+            if !already {
+                let war_id = self.next_war_id;
+                self.next_war_id += 1;
+                let battle_tile = self.tribes[def_idx].home_tile as u32;
+                self.active_wars.push(crate::war::WarState {
+                    war_id,
+                    attacker_id: atk_id,
+                    defender_id: def_id,
+                    start_tick: tick,
+                    status: crate::war::WarStatus::Active,
+                    attacker_casualties: 0,
+                    defender_casualties: 0,
+                    battle_tile: Some(battle_tile),
+                });
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, tick, gen,
+                    crate::events::EventType::WarDeclared,
+                    crate::events::EventSeverity::Important,
+                    atk_id,
+                );
+                ev.other_tribe_id = def_id;
+                ev.war_id = war_id;
+                self.push_event(ev);
+                println!("[SURROUNDED tick={}] tribe_{} breaks out → war on tribe_{}", tick, atk_id, def_id);
+            }
+        }
+
+        for (req_idx, tgt_idx) in desp_allies {
+            if !self.tribes[req_idx].alive || !self.tribes[tgt_idx].alive { continue; }
+            if self.tribes[req_idx].ally_tribe.is_some() || self.tribes[tgt_idx].ally_tribe.is_some() { continue; }
+            match self.tribes[tgt_idx].behavior {
+                BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Allied => continue,
+                _ => {}
+            }
+            let req_id = self.tribes[req_idx].id as u32;
+            let tgt_id = self.tribes[tgt_idx].id as u32;
+
+            self.tribes[req_idx].behavior = BehaviorState::Allied;
+            self.tribes[req_idx].ally_tribe = Some(tgt_idx);
+            self.tribes[req_idx].ticks_in_state = 0;
+            self.tribes[tgt_idx].behavior = BehaviorState::Allied;
+            self.tribes[tgt_idx].ally_tribe = Some(req_idx);
+            self.tribes[tgt_idx].ticks_in_state = 0;
+
+            let mut ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::AllianceFormed,
+                crate::events::EventSeverity::Important,
+                req_id,
+            );
+            ev.other_tribe_id = tgt_id;
+            ev.flags = 4; // desperate_alliance
+            self.push_event(ev);
+            println!("[SURROUNDED tick={}] tribe_{} desperate alliance → tribe_{}", tick, req_id, tgt_id);
+        }
+
+        for i in desp_trans {
+            if !self.tribes[i].alive { continue; }
+            if matches!(self.tribes[i].behavior, BehaviorState::Desperate) { continue; }
+            self.tribes[i].behavior = BehaviorState::Desperate;
+            self.tribes[i].ticks_in_state = 0;
+            println!("[SURROUNDED tick={}] tribe_{} boxed in → Desperate", tick, self.tribes[i].id);
+        }
+    }
+
     // ─── Task 8: Combat Resolution ────────────────────────────────────────────
 
     fn apply_combat(&mut self) {
         use crate::tribes::BehaviorState;
 
-        // War declaration: AtWar tribes pick a target if they don't have one
+        // War declaration: AtWar tribes pick a target if they don't have one.
+        // C3: prefer the weakest adjacent rival; fall back to nearest by hex distance.
         // L1: collect new (atk_id, def_id, battle_tile) pairs before mutating
-        let mut new_war_pairs: Vec<(u32, u32, u32)> = Vec::new();
-        for i in 0..self.tribes.len() {
-            if !self.tribes[i].alive { continue; }
-            if !matches!(self.tribes[i].behavior, BehaviorState::AtWar) { continue; }
-            if self.tribes[i].target_tribe.is_some() { continue; }
+        let untargeted: Vec<usize> = (0..self.tribes.len())
+            .filter(|&i| self.tribes[i].alive
+                && matches!(self.tribes[i].behavior, BehaviorState::AtWar)
+                && self.tribes[i].target_tribe.is_none())
+            .collect();
+        let target_assignments: Vec<(usize, Option<usize>)> = untargeted.iter().map(|&i| {
+            let target = self.find_weakest_adjacent_target(i).or_else(|| {
+                let my_home = self.tribes[i].home_tile as usize;
+                (0..self.tribes.len())
+                    .filter(|&j| j != i && self.tribes[j].alive)
+                    .min_by_key(|&j| self.world.hex_distance(my_home, self.tribes[j].home_tile as usize))
+            });
+            (i, target)
+        }).collect();
 
-            let target = (0..self.tribes.len())
-                .filter(|&j| j != i && self.tribes[j].alive)
-                .min_by_key(|&j| {
-                    let my_home = self.tribes[i].home_tile as i32;
-                    let their_home = self.tribes[j].home_tile as i32;
-                    (my_home - their_home).unsigned_abs()
-                });
+        let mut new_war_pairs: Vec<(u32, u32, u32)> = Vec::new();
+        for (i, target) in target_assignments {
             self.tribes[i].target_tribe = target;
 
             // L1: record new war pair if not already tracked
@@ -2313,6 +2609,214 @@ impl TribeSimulation {
             } else {
                 self.tribes[j].food_stores -= transfer;
                 self.tribes[i].food_stores += transfer;
+            }
+        }
+    }
+
+    // ─── C2: Dispute Escalation ───────────────────────────────────────────────
+
+    /// Ticks a dispute must exist before forced resolution.
+    const DISPUTE_GRACE_TICKS: u64 = 120;
+
+    /// Scan all disputed tiles and update the dispute registry with first-seen ticks.
+    /// Evict pairs where no shared disputed tile remains (resolved by war/death/etc).
+    fn update_dispute_registry(&mut self) {
+        // Build current set of active disputing pairs from world tile data
+        let mut active_pairs: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+
+        for tile_idx in 0..self.world.total_tiles {
+            if !self.world.tile_is_disputed[tile_idx] { continue; }
+            let occupants = self.world.get_tile_occupants(tile_idx);
+            if occupants.len() < 2 { continue; }
+
+            // Resolve occupant tribe_id → tribe index
+            let indices: Vec<usize> = occupants.iter()
+                .filter_map(|occ| self.tribes.iter().position(|t| t.alive && t.id as u32 == occ.tribe_id))
+                .collect();
+
+            for a in 0..indices.len() {
+                for b in (a + 1)..indices.len() {
+                    let key = (indices[a].min(indices[b]), indices[a].max(indices[b]));
+                    active_pairs.insert(key);
+                }
+            }
+        }
+
+        let tick = self.tick;
+
+        // Register newly seen pairs
+        for &pair in &active_pairs {
+            self.dispute_registry.entry(pair).or_insert(tick);
+        }
+
+        // Evict pairs no longer disputing
+        self.dispute_registry.retain(|pair, _| active_pairs.contains(pair));
+    }
+
+    /// For each dispute pair older than DISPUTE_GRACE_TICKS, force a resolution:
+    ///   - Alliance  : both want alliance (goal_drive high, a_team high, no existing ally)
+    ///   - War       : the more aggressive tribe declares war on the other
+    ///   - Retreat   : weaker side abandons the shared contested tiles
+    fn apply_dispute_resolution(&mut self) {
+        let tick = self.tick;
+
+        // Collect pairs that have exceeded the grace period
+        let expired: Vec<(usize, usize)> = self.dispute_registry.iter()
+            .filter(|(_, &start)| tick.saturating_sub(start) >= Self::DISPUTE_GRACE_TICKS)
+            .map(|(&pair, _)| pair)
+            .collect();
+
+        for (i, j) in expired {
+            // Safety: both must still be alive and neither already at war with each other
+            if !self.tribes[i].alive || !self.tribes[j].alive { continue; }
+            if matches!(self.tribes[i].behavior, BehaviorState::AtWar)
+                && self.tribes[i].target_tribe == Some(j) { continue; }
+            if matches!(self.tribes[j].behavior, BehaviorState::AtWar)
+                && self.tribes[j].target_tribe == Some(i) { continue; }
+
+            let goal_i    = self.tribes[i].last_outputs[2]; // goal_drive
+            let goal_j    = self.tribes[j].last_outputs[2];
+            let aggr_i    = self.tribes[i].last_outputs[0]; // aggression
+            let aggr_j    = self.tribes[j].last_outputs[0];
+            let a_team_i  = self.tribes[i].stats.a_team;
+            let a_team_j  = self.tribes[j].stats.a_team;
+            let state_i   = self.tribes[i].behavior;
+            let state_j   = self.tribes[j].behavior;
+
+            let both_alliance_willing =
+                goal_i > 0.55 && goal_j > 0.55
+                && a_team_i > 0.45 && a_team_j > 0.45
+                && self.tribes[i].ally_tribe.is_none()
+                && self.tribes[j].ally_tribe.is_none()
+                && !matches!(state_i, BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Migrating)
+                && !matches!(state_j, BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Migrating);
+
+            if both_alliance_willing {
+                // ── Alliance path ─────────────────────────────────────────
+                self.tribes[i].behavior = BehaviorState::Allied;
+                self.tribes[i].ally_tribe = Some(j);
+                self.tribes[i].ticks_in_state = 0;
+                self.tribes[j].behavior = BehaviorState::Allied;
+                self.tribes[j].ally_tribe = Some(i);
+                self.tribes[j].ticks_in_state = 0;
+                self.dispute_registry.remove(&(i, j));
+
+                let id_i = self.tribes[i].id as u32;
+                let id_j = self.tribes[j].id as u32;
+                let gen = self.generation;
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, tick, gen,
+                    crate::events::EventType::DisputeResolved,
+                    crate::events::EventSeverity::Important,
+                    id_i,
+                );
+                ev.other_tribe_id = id_j;
+                ev.flags = 1; // resolution_kind = alliance
+                self.push_event(ev);
+                println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via alliance", tick, id_i, id_j);
+                continue;
+            }
+
+            // ── War or retreat path ───────────────────────────────────────
+            // Relative strength determines who retreats vs who attacks
+            let str_i = self.tribes[i].population as f32 * self.tribes[i].stats.a_combat;
+            let str_j = self.tribes[j].population as f32 * self.tribes[j].stats.a_combat;
+
+            // The more aggressive or stronger tribe declares war; the other retreats if clearly weaker
+            let (aggressor, defender) = if aggr_i >= aggr_j { (i, j) } else { (j, i) };
+            let aggressor_aggr = self.tribes[aggressor].last_outputs[0];
+            let (str_atk, str_def) = if aggressor == i { (str_i, str_j) } else { (str_j, str_i) };
+
+            let defender_clearly_weaker = str_def < str_atk * 0.6;
+            let aggressor_wants_war = aggressor_aggr > 0.40;
+
+            if aggressor_wants_war && !defender_clearly_weaker {
+                // ── War path ──────────────────────────────────────────────
+                if !matches!(self.tribes[aggressor].behavior, BehaviorState::AtWar | BehaviorState::Imploding) {
+                    self.tribes[aggressor].behavior = BehaviorState::AtWar;
+                    self.tribes[aggressor].target_tribe = Some(defender);
+                    self.tribes[aggressor].ticks_in_state = 0;
+
+                    let atk_id = self.tribes[aggressor].id as u32;
+                    let def_id = self.tribes[defender].id as u32;
+                    let battle_tile = self.tribes[defender].home_tile as u32;
+                    let gen = self.generation;
+
+                    let already = self.active_wars.iter().any(|w| {
+                        w.status == crate::war::WarStatus::Active
+                            && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                                || (w.attacker_id == def_id && w.defender_id == atk_id))
+                    });
+                    if !already {
+                        let war_id = self.next_war_id;
+                        self.next_war_id += 1;
+                        self.active_wars.push(crate::war::WarState {
+                            war_id,
+                            attacker_id: atk_id,
+                            defender_id: def_id,
+                            start_tick: tick,
+                            status: crate::war::WarStatus::Active,
+                            attacker_casualties: 0,
+                            defender_casualties: 0,
+                            battle_tile: Some(battle_tile),
+                        });
+                        let mut ev = crate::events::SimulationEvent::new(
+                            0, tick, gen,
+                            crate::events::EventType::WarDeclared,
+                            crate::events::EventSeverity::Important,
+                            atk_id,
+                        );
+                        ev.other_tribe_id = def_id;
+                        ev.war_id = war_id;
+                        self.push_event(ev);
+                    }
+
+                    let mut ev2 = crate::events::SimulationEvent::new(
+                        0, tick, gen,
+                        crate::events::EventType::DisputeResolved,
+                        crate::events::EventSeverity::Important,
+                        atk_id,
+                    );
+                    ev2.other_tribe_id = def_id;
+                    ev2.flags = 2; // resolution_kind = war
+                    self.push_event(ev2);
+                    println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via war declaration", tick, atk_id, def_id);
+                }
+            } else {
+                // ── Retreat path ──────────────────────────────────────────
+                // Weaker tribe (defender) yields all tiles disputed with the aggressor
+                let def_id = self.tribes[defender].id as u32;
+                let atk_id = self.tribes[aggressor].id as u32;
+
+                // Collect tiles to yield: disputed tiles where defender is a co-occupant with aggressor
+                let tiles_to_yield: Vec<usize> = self.tribes[defender].territory.iter()
+                    .map(|&t| t as usize)
+                    .filter(|&t| {
+                        self.world.tile_is_disputed[t]
+                            && self.world.get_tile_occupants(t).iter().any(|o| o.tribe_id == atk_id)
+                            && self.world.get_tile_occupants(t).iter().any(|o| o.tribe_id == def_id)
+                    })
+                    .collect();
+
+                for tile in &tiles_to_yield {
+                    self.world.remove_tile_occupant(*tile, def_id);
+                }
+                // Purge yielded tiles from the defender's territory vec
+                self.tribes[defender].territory.retain(|&t| !tiles_to_yield.contains(&(t as usize)));
+
+                self.dispute_registry.remove(&(i, j));
+
+                let gen = self.generation;
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, tick, gen,
+                    crate::events::EventType::DisputeResolved,
+                    crate::events::EventSeverity::Important,
+                    def_id,
+                );
+                ev.other_tribe_id = atk_id;
+                ev.flags = 3; // resolution_kind = retreat
+                self.push_event(ev);
+                println!("[DISPUTE tick={}] tribe_{} retreats from tribe_{} ({} tiles yielded)", tick, def_id, atk_id, tiles_to_yield.len());
             }
         }
     }

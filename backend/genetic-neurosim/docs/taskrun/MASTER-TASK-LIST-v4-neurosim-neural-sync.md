@@ -44,17 +44,29 @@ Do **not** send workers through the old markdown set unless blocked by code ambi
 - War/alliance/merger scaffolding exists.
 - The current UI is acceptable as a base.
 
-### Still Broken / Incomplete
+### Fixed This Session (as of 2026-05-12)
 
-- `Genome::new(8, 3)` style hardcoding still breaks neural input authority.
-- migration is still effectively fake
-- the NN is still too weak and too indirect
-- artifact normalization is wrong for thesis-facing use
-- generation boundaries are still mostly drift, not selection
-- disputes do not resolve hard enough
-- surrounded tribes do not escalate properly
-- C# still has a parallel local simulation path that confuses authority
-- brain/migration/fitness state is not fully inspectable in MonoGame
+- `Genome::new(8, 3)` hardcoding replaced with `Genome::new(INPUT_COUNT, OUTPUT_COUNT)` = (11, 7)
+- artifact normalization corrected to linear `v / 10.0`
+- neural outputs expanded from 3 mood drives to 7 semantic action drives
+- migration is real: destination scoring + hex-step camp movement
+- fitness function defined (5-component weighted score)
+- fitness-ranked mutation pressure at generation boundary
+- genome crossover on polity merger
+- C# `PlayableSimulation` marked harness-only with authority contract banner
+- `GameRoot` network mode path clarified as production path
+- dispute registry with 120-tick grace period; resolves to war / alliance / retreat
+- opportunity war: tribes with high raid/aggression target weakest adjacent rival
+- surrounded tribe escalation: boxed-in tribes fight, ally desperately, or enter Desperate
+- target selection in combat fixed from tile-index distance to weakest-adjacent-first
+
+### Still Incomplete
+
+- C4: early consolidation cadence tuning (pending)
+- D4: lineage and tombstone integration with simulation events (pending)
+- E1: FrameV1 extension for brain/migration/fitness visibility (pending)
+- E2: MonoGame HUD/selection/lineage/tombstone semantic sync (pending)
+- F1–F3: verification, full run validation, and final doc pass (pending)
 
 ---
 
@@ -78,7 +90,7 @@ By the end of this task list:
 
 ### Task A1 — Freeze Rust Authority
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Make it explicit in docs and execution flow that Rust is the only production simulation authority.
 
@@ -93,7 +105,7 @@ By the end of this task list:
 
 ### Task A2 — Kill Rule Drift Between Rust And C#
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Ensure no production behavior logic remains split across Rust and C#.
 
@@ -113,7 +125,7 @@ By the end of this task list:
 
 ### Task B1 — Fix Artifact Normalization
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Replace tanh-based tribe artifact loading with database-faithful scale mapping.
 
@@ -131,7 +143,7 @@ By the end of this task list:
 
 ### Task B2 — Fix Neural Input Count And Sensor Authority
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Ensure the compiled network consumes the full intended input vector.
 
@@ -150,7 +162,7 @@ By the end of this task list:
 
 ### Task B3 — Upgrade The Brain From 3 Drives To Action Scoring
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Move from weak mood outputs to a richer action-level decision surface.
 
@@ -172,7 +184,7 @@ By the end of this task list:
 
 ### Task C1 — Real Migration
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Turn migration into actual territorial relocation.
 
@@ -194,7 +206,7 @@ By the end of this task list:
 
 ### Task C2 — Dispute Escalation And Casus Belli
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Make disputes resolve instead of lingering passively.
 
@@ -214,7 +226,7 @@ By the end of this task list:
 
 ### Task C3 — Aggressive Opportunity War And Surrounded-Tribe Escalation
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Make nearby weakness and entrapment produce real conflict pressure.
 
@@ -257,7 +269,7 @@ By the end of this task list:
 
 ### Task D1 — Fitness Evaluation
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Define a real tribe fitness score.
 
@@ -278,7 +290,7 @@ By the end of this task list:
 
 ### Task D2 — Population-Level Selection
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Replace equal mutation drift with ranked or elite-biased selection.
 
@@ -291,7 +303,7 @@ By the end of this task list:
 
 ### Task D3 — Crossover For Union / Merger
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Implement governing-genome inheritance during long unions or full mergers.
 

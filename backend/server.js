@@ -29,9 +29,6 @@ const DATASET_DATABASES_ROOT = path.join(DATA_ROOT, "databases");
 const DATASET_MATCHES_ROOT = path.join(DATA_ROOT, "matches");
 const DATASET_CACHE_ROOT = path.join(DATA_ROOT, "cache");
 const LEGACY_MATCHES_DIR = DATA_ROOT;
-const LEGACY_RAW_DB_PATH = path.resolve(__dirname, "players.db");
-const LEGACY_REFINED_DB_PATH = path.resolve(__dirname, "..", "playersrefined.db");
-const LEGACY_CACHE_ROOT = path.resolve(__dirname, "pathfinder-rust", "cache");
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const DOCUMENTATION_ROOT = path.join(PROJECT_ROOT, "docs");
 const DOCUMENTATION_TMP_ROOT = path.join(PROJECT_ROOT, "tmp", "documentation-viewer");
@@ -532,30 +529,6 @@ function toPortablePath(value) {
   return value.split(path.sep).join("/");
 }
 
-function safeCopyFile(sourcePath, destinationPath) {
-  if (!fs.existsSync(sourcePath) || fs.existsSync(destinationPath)) {
-    return;
-  }
-  ensureDirectory(path.dirname(destinationPath));
-  fs.copyFileSync(sourcePath, destinationPath);
-}
-
-function safeCopyJsonMatches(sourceDir, destinationDir) {
-  if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
-    return;
-  }
-  ensureDirectory(destinationDir);
-  for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) {
-      continue;
-    }
-    const sourcePath = path.join(sourceDir, entry.name);
-    const destinationPath = path.join(destinationDir, entry.name);
-    if (!fs.existsSync(destinationPath)) {
-      fs.copyFileSync(sourcePath, destinationPath);
-    }
-  }
-}
 
 function resolveRegistryPath(relativePath, rootPath) {
   const normalized = path.resolve(__dirname, relativePath);
@@ -695,14 +668,6 @@ async function buildDatasetInfo(dataset) {
   };
 }
 
-function migrateLegacyDataIntoDataset(dataset) {
-  const config = materializeDatasetConfig(dataset);
-  ensureDatasetStorage(dataset);
-  safeCopyFile(LEGACY_RAW_DB_PATH, config.rawDbAbsolutePath);
-  safeCopyFile(LEGACY_REFINED_DB_PATH, config.refinedDbAbsolutePath);
-  safeCopyJsonMatches(LEGACY_MATCHES_DIR, config.matchesAbsolutePath);
-}
-
 function ensureDefaultDatasetExists() {
   ensureDirectory(DATA_ROOT);
   ensureDirectory(DATASET_DATABASES_ROOT);
@@ -711,7 +676,7 @@ function ensureDefaultDatasetExists() {
 
   if (!fs.existsSync(DATASET_REGISTRY_PATH)) {
     const defaultDataset = createDatasetRecord("default");
-    migrateLegacyDataIntoDataset(defaultDataset);
+    ensureDatasetStorage(defaultDataset);
     writeJsonFile(DATASET_REGISTRY_PATH, {
       datasets: [defaultDataset],
       currentDatasetId: defaultDataset.id,
@@ -722,7 +687,7 @@ function ensureDefaultDatasetExists() {
   const registry = readJsonFile(DATASET_REGISTRY_PATH);
   if (!Array.isArray(registry.datasets) || registry.datasets.length === 0) {
     const defaultDataset = createDatasetRecord("default");
-    migrateLegacyDataIntoDataset(defaultDataset);
+    ensureDatasetStorage(defaultDataset);
     registry.datasets = [defaultDataset];
     registry.currentDatasetId = defaultDataset.id;
     writeJsonFile(DATASET_REGISTRY_PATH, registry);

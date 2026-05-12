@@ -1,6 +1,6 @@
-# Neural Network State (updated 2026-05-11)
+# Neural Network State (updated 2026-05-12)
 
-> Last audit: 2026-05-10. Fixes applied: 2026-05-11. Verified at tick 1100, generation 1.
+> Last audit: 2026-05-10. Fixes applied: 2026-05-11 (B-series, C1, D-series, A-series). Additional fixes: 2026-05-12 (C2 dispute escalation, C3 opportunity war + surrounded escalation, C3 combat targeting). Verified at tick 1100, generation 1.
 
 ---
 
@@ -21,6 +21,11 @@
 | `river_crossings` counter never incremented — Boats locked | **FIXED** → proxy increment every 50 Bridges ticks |
 | Stat normalization `tanh(v/3.0)` → all stats near 0.95–0.97 | **FIXED** → linear `v / 10.0`; observed range now 0.025–0.10 |
 | Alliance threshold too high; Foraging tribes excluded | **FIXED** → thresholds lowered, Foraging now eligible |
+| Disputed tiles linger indefinitely | **FIXED (C2)** → 120-tick grace period; resolves to war / alliance / retreat |
+| Combat target = nearest by tile index (not geographic) | **FIXED (C3)** → weakest adjacent rival first, hex-distance fallback |
+| Surrounded tribes drift passively into Imploding | **FIXED (C3)** → escalation: fight / desperate ally / Desperate |
+| Opportunity war had no proactive target selection | **FIXED (C3)** → `apply_opportunity_war()` every 20 ticks, targets weakest adjacent |
+| C# `PlayableSimulation` had no authority disclaimer | **FIXED (A2)** → harness-only banner + authority contract doc |
 
 ### Open Gaps (not yet fixed)
 
@@ -144,11 +149,30 @@ Network output stored raw (no double-tanh). Drives are in [−1, 1] from `tanh` 
 ## Section 4: Major Subsystems
 
 **Combat** (`apply_combat`)
-- Picks nearest alive target (all non-allied)
+- Target selection: weakest adjacent rival first (`pop × a_combat`); falls back to nearest by hex distance
 - Strength = `population * a_combat * gaussian_noise`
 - Casualties via Poisson: `lambda = enemy_a_combat * pop * 0.02`
 - Defender: biome defense + homeland bonus (`+0.3`)
 - Winner absorbs territory; `WarState` records both sides
+
+**Dispute Escalation** (`update_dispute_registry` + `apply_dispute_resolution`) — C2
+- Tracks (tribe_i, tribe_j) pairs sharing a disputed tile; records first-seen tick
+- After 120-tick grace period, forces one of three outcomes:
+  - **Alliance**: both `goal_drive > 0.55`, both `a_team > 0.45`, both unallied → Allied
+  - **War**: aggressor `aggression > 0.40`, defender not clearly weaker → WarDeclared + AtWar
+  - **Retreat**: weaker side abandons shared contested tiles → DisputeResolved flags=3
+- Evicts resolved pairs from registry automatically
+
+**Opportunity War** (`apply_opportunity_war`) — C3, every 20 ticks
+- For each non-AtWar tribe: if `raid_drive > 0.58` or (`aggression > 0.48` and weaker neighbor exists)
+- Declares war and immediately sets `target_tribe` to the weakest adjacent rival
+- Creates WarState + WarDeclared event; not a duplicate of state machine AtWar transitions
+
+**Surrounded Escalation** (`apply_surrounded_escalation`) — C3, every 30 ticks
+- Detects tribes with no neutral expansion tiles adjacent to their territory
+- `aggression > 0.42` or already Desperate → war against weakest adjacent rival
+- `goal_drive > 0.52` and `isolation < 0.55` and unallied → desperate alliance with least-aggressive neighbor
+- Otherwise → transitions to Desperate rather than drifting
 
 **Alliances** (`apply_alliances`)
 - Evaluated every 50 ticks
@@ -210,9 +234,15 @@ territory_score * 0.30
 | **Stat normalization** | Linear `v/10.0` (fixed) | — |
 | **Alliance frequency** | Thresholds lowered; Foraging allowed (fixed) | — |
 | **a_risk input** | Wired as input[10] (fixed) | No mechanism for a_risk to actually gate risk behavior yet |
+| **Dispute resolution** | Grace period + 3 resolution paths (C2 fixed) | — |
+| **Combat targeting** | Weakest adjacent first, hex-distance fallback (C3 fixed) | Was tile-index distance |
+| **Opportunity war** | Proactive raid/aggression-driven targeting (C3 fixed) | — |
+| **Surrounded escalation** | Boxed tribes fight, ally, or go Desperate (C3 fixed) | — |
 | **Territory sensing** | `territory.len() / 100.0` (absolute) | Saturation / border pressure still not represented |
 | **Genome topology** | NEAT-like add-node/add-connection | No speciation; no population crossover |
 | **Event log** | Ring buffer with drive values | No full snapshot (inputs+outputs) per behavior transition |
+| **FrameV1 / MonoGame sync** | Basic tribe state visible | Brain/migration/fitness not yet exposed (E1/E2 pending) |
+| **Lineage/tombstone wiring** | Infrastructure exists | Not yet connected to dispute/war/merger events (D4 pending) |
 
 ---
 

@@ -382,7 +382,7 @@ fn resolve_db_path() -> PathBuf {
     if let Ok(value) = env::var("DB_PATH") {
         return PathBuf::from(value);
     }
-    PathBuf::from("../../playersrefined.db")
+    panic!("GRAPH_DB_PATH or DB_PATH env var is required — no legacy fallback db exists anymore. Set it to the dataset playersrefined.db path.");
 }
 
 fn latest_name(raw_names: &str) -> String {
