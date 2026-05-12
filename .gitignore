@@ -39,3 +39,6 @@ backend/genetic-neurosim/client-monogame-tests/logs/
 backend/genetic-neurosim/client-monogame-tests/reports/
 backend/genetic-neurosim/client-monogame/bin/
 backend/genetic-neurosim/client-monogame/obj/
+
+# 3D assets, textures, models — store on Google Drive instead
+backend/genetic-neurosim/client-monogame/Content/
