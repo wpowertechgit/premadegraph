@@ -44,7 +44,15 @@ public sealed class FontRenderer : IDisposable
     // If GC collects the collection, GDI+ crashes with AccessViolationException.
     private readonly List<PrivateFontCollection> _fontCollections = [];
 
-    private const string FallbackFamily = "Consolas";
+    // Ordered preference: modern Windows system sans-serifs, then monospace last resort.
+    private static readonly string[] FallbackFamilies =
+    [
+        "Segoe UI Variable Display",
+        "Segoe UI",
+        "Calibri",
+        "Arial",
+        "Consolas",
+    ];
 
     public FontRenderer(GraphicsDevice graphicsDevice, FontRole role = FontRole.Display)
     {
@@ -55,17 +63,17 @@ public sealed class FontRenderer : IDisposable
             var headerFamily = LoadFontFamily("Cinzel/static/Cinzel-Bold.ttf");
             var bodyFamily = LoadFontFamily("Noto_Serif/static/NotoSerif-Regular.ttf");
 
-            _headerFont = CreateFont(headerFamily, FallbackFamily, 18f, System.Drawing.FontStyle.Bold);
-            _bodyFont = CreateFont(bodyFamily, FallbackFamily, 16f, System.Drawing.FontStyle.Regular);
-            _smallFont = CreateFont(bodyFamily, FallbackFamily, 13f, System.Drawing.FontStyle.Regular);
+            _headerFont = CreateFont(headerFamily, 18f, System.Drawing.FontStyle.Bold);
+            _bodyFont = CreateFont(bodyFamily, 16f, System.Drawing.FontStyle.Regular);
+            _smallFont = CreateFont(bodyFamily, 13f, System.Drawing.FontStyle.Regular);
         }
         else // FontRole.Debug
         {
             var debugFamily = LoadFontFamily("Trykker/Trykker-Regular.ttf");
 
-            _headerFont = CreateFont(debugFamily, FallbackFamily, 15f, System.Drawing.FontStyle.Bold);
-            _bodyFont = CreateFont(debugFamily, FallbackFamily, 15f, System.Drawing.FontStyle.Regular);
-            _smallFont = CreateFont(debugFamily, FallbackFamily, 12f, System.Drawing.FontStyle.Regular);
+            _headerFont = CreateFont(debugFamily, 15f, System.Drawing.FontStyle.Bold);
+            _bodyFont = CreateFont(debugFamily, 15f, System.Drawing.FontStyle.Regular);
+            _smallFont = CreateFont(debugFamily, 12f, System.Drawing.FontStyle.Regular);
         }
 
         _textBrush = new SolidBrush(System.Drawing.Color.White);
@@ -240,17 +248,20 @@ public sealed class FontRenderer : IDisposable
         return null;
     }
 
-    private static Font CreateFont(FontFamily? family, string fallbackFamily, float size, System.Drawing.FontStyle style)
+    private static Font CreateFont(FontFamily? family, float size, System.Drawing.FontStyle style)
     {
         if (family is not null)
         {
-            try
-            {
-                return new Font(family, size, style, GraphicsUnit.Pixel);
-            }
+            try { return new Font(family, size, style, GraphicsUnit.Pixel); }
             catch { }
         }
 
-        return new Font(fallbackFamily, size, style, GraphicsUnit.Pixel);
+        foreach (var name in FallbackFamilies)
+        {
+            try { return new Font(name, size, style, GraphicsUnit.Pixel); }
+            catch { }
+        }
+
+        return new Font(FontFamily.GenericSansSerif, size, style, GraphicsUnit.Pixel);
     }
 }

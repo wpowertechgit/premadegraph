@@ -246,7 +246,10 @@ public sealed class SelectionPanel
                 + 1 + 6            // separator
                 + smallHeight + 4  // artifacts header
                 + lineHeight * 5   // artifact rows
-                + 1 + 6 + smallHeight + 2 + lineHeight * 2; // polity section
+                + 1 + 6 + smallHeight + 2 + lineHeight * 2  // polity section
+                // E2: brain / fitness / migration
+                + 1 + 6 + smallHeight + 2 + lineHeight * 3  // status section
+                + 1 + 6 + smallHeight + 2 + lineHeight * 7; // neural outputs
         }
         if (selectedTile is not null)
         {
@@ -321,6 +324,31 @@ public sealed class SelectionPanel
             y += lineHeight;
             DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Focus", TribeVisuals.DominantStat(tribe.Artifacts), AccentColor);
             y += lineHeight;
+
+            // E2: brain / migration / fitness status
+            DrawSectionDivider(spriteBatch, x, ref y);
+            _font.DrawString(spriteBatch, "Status", new Vector2(x, y), FontSize.Small, MutedColor);
+            y += lineHeight;
+            var fitnessColor = tribe.FitnessScore >= 0.6f ? GoodColor : tribe.FitnessScore >= 0.3f ? AccentColor : WarningColor;
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Fitness", $"{tribe.FitnessScore:F3}", fitnessColor);
+            y += lineHeight;
+            var migrationLabel = tribe.IsMigrating ? $"→ tile {tribe.MigrationTargetTile}" : "settled";
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Migration", migrationLabel, tribe.IsMigrating ? WarningColor : MutedColor);
+            y += lineHeight;
+            var allyLabel = tribe.HasAlly ? $"tribe {tribe.AllyTribeId}" : "none";
+            DrawCompactRow(spriteBatch, x, y, panel.Right - PanelMargin, "Ally", allyLabel, tribe.HasAlly ? GoodColor : MutedColor);
+            y += lineHeight;
+
+            // E2: neural outputs (7 drives)
+            DrawSectionDivider(spriteBatch, x, ref y);
+            _font.DrawString(spriteBatch, "Neural Drives", new Vector2(x, y), FontSize.Small, MutedColor);
+            y += lineHeight;
+            string[] driveLabels = ["Aggression", "Resource", "Goal", "Migration", "Raid", "Isolation", "Expansion"];
+            for (var i = 0; i < Math.Min(tribe.NeuralOutputs.Length, driveLabels.Length); i++)
+            {
+                DrawNeuralBar(spriteBatch, x, y, panel.Right - PanelMargin, driveLabels[i], tribe.NeuralOutputs[i]);
+                y += lineHeight;
+            }
         }
 
         if (selectedTile is not null)
@@ -427,6 +455,20 @@ public sealed class SelectionPanel
         var x = Math.Clamp(origin.X, ViewportMargin, Math.Max(ViewportMargin, viewport.Width - PanelWidth - ViewportMargin));
         var y = Math.Clamp(origin.Y, ViewportMargin, Math.Max(ViewportMargin, viewport.Height - height - ViewportMargin));
         return new Rectangle(x, y, PanelWidth, height);
+    }
+
+    private void DrawNeuralBar(SpriteBatch spriteBatch, int x, int y, int rightEdge,
+        string label, float value)
+    {
+        _font!.DrawString(spriteBatch, label, new Vector2(x + 8, y), FontSize.Small, MutedColor);
+        var barWidth = 90;
+        var barX = rightEdge - barWidth - 36;
+        var clamped = MathHelper.Clamp(value, 0f, 1f);
+        FillRect(spriteBatch, new Rectangle(barX, y + 4, barWidth, 4), new Color(255, 255, 255, 18));
+        var barColor = value >= 0.7f ? WarningColor : value >= 0.4f ? AccentColor : GoodColor;
+        FillRect(spriteBatch, new Rectangle(barX, y + 4, (int)(barWidth * clamped), 4), barColor);
+        _font.DrawStringAligned(spriteBatch, $"{value:F2}",
+            new Vector2(rightEdge, y), FontSize.Small, TextAlign.Right, TextColor);
     }
 
     private void DrawArtifactRow(SpriteBatch spriteBatch, int x, int y, int lineHeight, int rightEdge,

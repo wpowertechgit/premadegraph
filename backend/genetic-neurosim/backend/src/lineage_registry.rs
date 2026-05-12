@@ -180,4 +180,32 @@ mod tests {
         let x_count = clusters.iter().find(|(k, _)| *k == "cluster-x").map(|(_, v)| v.len()).unwrap();
         assert_eq!(x_count, 2);
     }
+
+    #[test]
+    fn merger_cross_link_is_resolvable() {
+        // Simulate D4: absorber merges with absorbed.
+        // A synthetic merger entity (absorber_head, absorbed_head) links the two DAG branches.
+        let mut reg = LineageRegistry::new();
+
+        let absorber_seed = reg.register_seed("cluster-absorber");
+        let absorbed_seed = reg.register_seed("cluster-absorbed");
+
+        // Reproduce one generation in each tribe
+        let absorber_child = reg.register(absorber_seed, absorber_seed);
+        let absorbed_child = reg.register(absorbed_seed, absorbed_seed);
+
+        // Merger cross-link: synthetic node linking the two head entities
+        let merger_entity = reg.register(absorber_child, absorbed_child);
+
+        // The merger entity's parents should be the two head citizens
+        assert_eq!(reg.parents(merger_entity), Some((absorber_child, absorbed_child)));
+
+        // resolve_lineage from merger_entity should reach absorber's branch
+        let chain = reg.resolve_lineage(merger_entity);
+        assert!(!chain.is_empty(), "merger entity must have resolvable lineage");
+
+        // Both seed clusters still intact
+        assert_eq!(reg.seed_from_entity(absorber_seed), Some("cluster-absorber".to_string()));
+        assert_eq!(reg.seed_from_entity(absorbed_seed), Some("cluster-absorbed".to_string()));
+    }
 }

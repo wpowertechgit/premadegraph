@@ -46,7 +46,11 @@ public sealed record DebugHudState(
     int TombstoneCount = 0,
     int LineageDepth = 0,
     string PolityTierCounts = "",
-    string AssetDiagSummary = "")
+    string AssetDiagSummary = "",
+    // E2: E1 brain / fitness / migration data for selected tribe
+    float SelectedFitnessScore = 0f,
+    bool SelectedIsMigrating = false,
+    string SelectedTopDrive = "")
 {
     public static DebugHudState Empty { get; } = new(
         "LOCAL",
@@ -118,7 +122,10 @@ public sealed class DebugHud : IDisposable
         // M5: V3 stats section (3 compact rows when visible)
         var showV3Stats = ShowV3Stats && !string.IsNullOrWhiteSpace(state.PolityTierCounts);
         var v3RowCount = showV3Stats ? 3 : 0;
-        var rowCount = 6 + (hasSelection ? 2 : 0) + (hasError ? 2 : 0) + extraLineCount + tierRowCount + v3RowCount;
+        // E2: brain / fitness rows when selection has E1 data
+        var hasBrainData = hasSelection && (!string.IsNullOrEmpty(state.SelectedTopDrive) || state.SelectedFitnessScore > 0f);
+        var brainRowCount = hasBrainData ? 2 : 0;
+        var rowCount = 6 + (hasSelection ? 2 : 0) + brainRowCount + (hasError ? 2 : 0) + extraLineCount + tierRowCount + v3RowCount;
         var panelHeight = PanelMargin * 2 + rowCount * lineHeight + 4;
         var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
         LastBounds = panel;
@@ -183,6 +190,20 @@ public sealed class DebugHud : IDisposable
         DrawRow(spriteBatch, x + 164, y, lineHeight, "FOOD", ((int)MathF.Round(Math.Max(0f, state.SelectedFood))).ToString(),
             state.SelectedFood > 10 ? AccentColor : WarningColor);
         y += lineHeight + 2;
+
+        // E2: brain / fitness rows (network mode only when E1 data present)
+        if (hasBrainData)
+        {
+            var fitColor = state.SelectedFitnessScore >= 0.6f ? GoodColor : state.SelectedFitnessScore >= 0.3f ? AccentColor : WarningColor;
+            DrawRow(spriteBatch, x, y, lineHeight, "FIT", $"{state.SelectedFitnessScore:F2}", fitColor);
+            DrawRow(spriteBatch, x + 164, y, lineHeight, "DRIVE",
+                string.IsNullOrEmpty(state.SelectedTopDrive) ? "N/A" : state.SelectedTopDrive, AccentColor);
+            y += lineHeight;
+            DrawRow(spriteBatch, x, y, lineHeight, "MIGR",
+                state.SelectedIsMigrating ? "MOVING" : "settled",
+                state.SelectedIsMigrating ? WarningColor : MutedColor);
+            y += lineHeight + 2;
+        }
 
         // Connection + controls
         var indicator = state.IsConnected ? "●" : "○";

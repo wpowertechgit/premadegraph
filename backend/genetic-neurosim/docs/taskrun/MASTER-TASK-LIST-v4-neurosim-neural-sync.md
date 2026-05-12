@@ -59,14 +59,13 @@ Do **not** send workers through the old markdown set unless blocked by code ambi
 - opportunity war: tribes with high raid/aggression target weakest adjacent rival
 - surrounded tribe escalation: boxed-in tribes fight, ally desperately, or enter Desperate
 - target selection in combat fixed from tile-index distance to weakest-adjacent-first
+- C4: cadence tuned for tick-200 consolidation (alliance check 50→15 ticks, MERGE_TICK_THRESHOLD 300→80, MERGE_CHECK_INTERVAL 100→20, DISPUTE_GRACE 120→60, war timeout 300→120, occupying dwell 60→25, peace dwell 80→35, expansion cooldown 25→8, alliance goal thresholds lowered)
+
+- dispute war-path now removes pair from registry (bug fix found during F1 harness)
+- 5 controlled harness tests added to `simulation.rs::harness_tests`: migration, dispute, opportunity war, alliance/merger, generation boundary
 
 ### Still Incomplete
-
-- C4: early consolidation cadence tuning (pending)
-- D4: lineage and tombstone integration with simulation events (pending)
-- E1: FrameV1 extension for brain/migration/fitness visibility (pending)
-- E2: MonoGame HUD/selection/lineage/tombstone semantic sync (pending)
-- F1–F3: verification, full run validation, and final doc pass (pending)
+- F2–F3: full run validation and final doc pass (pending)
 
 ---
 
@@ -245,7 +244,7 @@ By the end of this task list:
 
 ### Task C4 — Faster Early Consolidation
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Make major alliance/war/merger structure emerge earlier.
 
@@ -318,7 +317,7 @@ By the end of this task list:
 
 ### Task D4 — Lineage And Tombstone Integration
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Use the existing lineage/tombstone infrastructure instead of inventing another ancestry system.
 
@@ -336,7 +335,7 @@ By the end of this task list:
 
 ### Task E1 — Extend FrameV1 For Brain / Migration / Fitness Visibility
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Expose enough state for MonoGame to explain tribe behavior.
 
@@ -358,7 +357,7 @@ By the end of this task list:
 
 ### Task E2 — HUD / Selection / Lineage / Tombstone Sync
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Make the existing UI semantically useful for the new backend.
 
@@ -379,7 +378,7 @@ By the end of this task list:
 
 ### Task F1 — Controlled Harness Verification
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Verify core mechanics in small deterministic scenarios before full-run tuning.
 

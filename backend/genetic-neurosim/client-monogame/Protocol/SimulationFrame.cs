@@ -49,10 +49,21 @@ public sealed record TribeFrameV1Record(
     uint EntityCount,
     ushort VeterancyXp,
     byte BehaviorState,
-    bool IsAlive)
+    bool IsAlive,
+    // E1: brain / migration / fitness visibility
+    float FitnessScore,
+    ushort MigrationTargetTile,
+    uint AllyTribeId,
+    float[] NeuralOutputs)
 {
     /// Territory tile IDs decoded from the FLAG_TERRITORY_DATA section. Null when section absent.
     public ushort[]? TerritoryTiles { get; init; }
+
+    /// True when MigrationTargetTile is a real destination (not the sentinel 0xFFFF).
+    public bool IsMigrating => MigrationTargetTile != ushort.MaxValue;
+
+    /// True when allied with another tribe (AllyTribeId is not sentinel 0xFFFFFFFF).
+    public bool HasAlly => AllyTribeId != uint.MaxValue;
 }
 
 public sealed record TileFrameV1Record(

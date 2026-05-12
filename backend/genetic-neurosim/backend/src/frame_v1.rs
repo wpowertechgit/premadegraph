@@ -1,6 +1,7 @@
 // ─── FrameV1 constants ───────────────────────────────────────────────────────
 
-pub const FRAME_V1_TRIBE_RECORD_BYTES: usize = 50;
+// E1: extended from 50 → 88 to carry fitness, migration target, ally id, and 7 NN outputs.
+pub const FRAME_V1_TRIBE_RECORD_BYTES: usize = 88;
 pub const FRAME_V1_TILE_RECORD_BYTES: usize = 9;
 pub const FRAME_V1_WAR_RECORD_BYTES: usize = 21;
 pub const FRAME_V1_EVENT_RECORD_BYTES: usize = 5;

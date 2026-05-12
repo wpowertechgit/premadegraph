@@ -246,7 +246,7 @@ impl TribeState {
             main_camp_tile: home_tile,
             citizens: vec![],
             last_expansion_tick: 0,
-            expansion_cooldown_ticks: 25,
+            expansion_cooldown_ticks: 8,
             tile_integration: std::collections::HashMap::new(),
             migration_target_tile: u16::MAX, // sentinel: no target
             fitness_score: 0.0,

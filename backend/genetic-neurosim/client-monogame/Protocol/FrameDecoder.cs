@@ -188,6 +188,11 @@ public sealed class FrameDecoder
 
     private static TribeFrameV1Record ReadTribeFrameV1Record(ReadOnlySpan<byte> payload, int offset)
     {
+        // E1: NN outputs — 7 floats starting at byte 60
+        var nnOutputs = new float[7];
+        for (var i = 0; i < 7; i++)
+            nnOutputs[i] = ReadSingle(payload, offset + 60 + i * 4);
+
         return new TribeFrameV1Record(
             Id: ReadUInt32(payload, offset),
             PolityTier: payload[offset + 4],
@@ -206,7 +211,12 @@ public sealed class FrameDecoder
             EntityCount: ReadUInt32(payload, offset + 42),
             VeterancyXp: ReadUInt16(payload, offset + 46),
             BehaviorState: payload[offset + 48],
-            IsAlive: payload[offset + 49] != 0);
+            IsAlive: payload[offset + 49] != 0,
+            // E1 extension
+            FitnessScore: ReadSingle(payload, offset + 50),
+            MigrationTargetTile: ReadUInt16(payload, offset + 54),
+            AllyTribeId: ReadUInt32(payload, offset + 56),
+            NeuralOutputs: nnOutputs);
     }
 
     private static TileFrameV1Record ReadTileFrameV1Record(ReadOnlySpan<byte> payload, int offset)

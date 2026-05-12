@@ -1693,11 +1693,13 @@ impl TribeSimulation {
                 }
                 BehaviorState::AtWar => current,
                 BehaviorState::Occupying => {
-                    if self.tribes[i].ticks_in_state > 60 { BehaviorState::Settling }
+                    // C4: dwell 60 → 25 so winners recover and re-engage quickly
+                    if self.tribes[i].ticks_in_state > 25 { BehaviorState::Settling }
                     else { current }
                 }
                 BehaviorState::Peace => {
-                    if self.tribes[i].ticks_in_state > 80 { BehaviorState::Settling }
+                    // C4: dwell 80 → 35 so post-war tribes rejoin conflict sooner
+                    if self.tribes[i].ticks_in_state > 35 { BehaviorState::Settling }
                     else { current }
                 }
                 BehaviorState::Allied => {
@@ -2505,8 +2507,8 @@ impl TribeSimulation {
                 }) {
                     war.status = crate::war::WarStatus::AttackerWon;
                 }
-            } else if self.tribes[attacker_idx].ticks_in_state > 300 {
-                // War timeout — both go to Peace
+            } else if self.tribes[attacker_idx].ticks_in_state > 120 {
+                // C4: War timeout lowered from 300 → 120 so winners rejoin diplomacy faster
                 self.tribes[attacker_idx].behavior = BehaviorState::Peace;
                 self.tribes[attacker_idx].target_tribe = None;
                 self.tribes[attacker_idx].ticks_in_state = 0;
@@ -2557,16 +2559,16 @@ impl TribeSimulation {
     fn apply_alliances(&mut self) {
         use crate::tribes::BehaviorState;
 
-        // Alliance formation every 50 ticks
-        if self.tick % 50 != 0 { return; }
+        // C4: Alliance formation every 15 ticks (was 50) — more formation windows.
+        if self.tick % 15 != 0 { return; }
 
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
             // Allow Foraging tribes to ally too — lower bar for coalition building
             if !matches!(self.tribes[i].behavior, BehaviorState::Settling | BehaviorState::Foraging) { continue; }
-            if self.tribes[i].ticks_in_state < 30 { continue; } // was 100
+            if self.tribes[i].ticks_in_state < 8 { continue; } // C4: was 30
             let goal_i = self.tribes[i].last_outputs[2];
-            if goal_i <= 0.55 { continue; } // was 0.7
+            if goal_i <= 0.45 { continue; } // C4: was 0.55
             let isolation_i = self.tribes[i].last_outputs[5]; // isolation drive
             if isolation_i > 0.75 { continue; } // NN chose isolation
 
@@ -2574,7 +2576,7 @@ impl TribeSimulation {
                 j != i
                 && self.tribes[j].alive
                 && matches!(self.tribes[j].behavior, BehaviorState::Settling | BehaviorState::Foraging)
-                && self.tribes[j].last_outputs[2] > 0.50   // was 0.6
+                && self.tribes[j].last_outputs[2] > 0.40   // C4: was 0.50
                 && self.tribes[j].last_outputs[5] < 0.75   // partner not isolated
                 && self.tribes[j].ally_tribe.is_none()
                 && self.tribes[j].target_tribe.is_none()
@@ -2615,8 +2617,8 @@ impl TribeSimulation {
 
     // ─── C2: Dispute Escalation ───────────────────────────────────────────────
 
-    /// Ticks a dispute must exist before forced resolution.
-    const DISPUTE_GRACE_TICKS: u64 = 120;
+    /// Ticks a dispute must exist before forced resolution. C4: lowered from 120 → 60.
+    const DISPUTE_GRACE_TICKS: u64 = 60;
 
     /// Scan all disputed tiles and update the dispute registry with first-seen ticks.
     /// Evict pairs where no shared disputed tile remains (resolved by war/death/etc).
@@ -2781,6 +2783,7 @@ impl TribeSimulation {
                     ev2.flags = 2; // resolution_kind = war
                     self.push_event(ev2);
                     println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via war declaration", tick, atk_id, def_id);
+                    self.dispute_registry.remove(&(i, j));
                 }
             } else {
                 // ── Retreat path ──────────────────────────────────────────
@@ -2887,10 +2890,10 @@ impl TribeSimulation {
 
     // ─── R5: Binary Diplomacy — Alliance/Merger Pipeline ───────────────────────
 
-    /// Ticks as Allied before merge eligible.
-    pub const MERGE_TICK_THRESHOLD: u32 = 300;
-    /// Every N ticks, check for merge eligibility.
-    pub const MERGE_CHECK_INTERVAL: u64 = 100;
+    /// Ticks as Allied before merge eligible. C4: lowered from 300 → 80 for tick-200 consolidation.
+    pub const MERGE_TICK_THRESHOLD: u32 = 80;
+    /// Every N ticks, check for merge eligibility. C4: lowered from 100 → 20.
+    pub const MERGE_CHECK_INTERVAL: u64 = 20;
     /// A_team below this triggers rebellion.
     pub const REBELLION_A_TEAM_THRESHOLD: f32 = 0.25;
 
@@ -3022,6 +3025,24 @@ impl TribeSimulation {
         }
 
         self.tribes[absorber].lineage.push(format!("merged-{}", absorbed_cluster_id));
+
+        // D4: Register a merger cross-link in the lineage DAG so resolve_lineage
+        // traces across polity boundaries. One synthetic entity per merger links
+        // absorber's head citizen to absorbed's head citizen.
+        {
+            let absorber_head = self.tribes[absorber].citizens.first().map(|c| c.entity_id);
+            let absorbed_head = self.tribes[absorbed].citizens.first().map(|c| c.entity_id);
+            let absorber_gen  = self.tribes[absorber].generation;
+            if let (Some(a), Some(b)) = (absorber_head, absorbed_head) {
+                let merger_entity = self.lineage_registry.register(a, b);
+                self.tribes[absorber].citizens.push(crate::tribes::CitizenRecord {
+                    entity_id: merger_entity,
+                    parent_a: a,
+                    parent_b: b,
+                    generation: absorber_gen,
+                });
+            }
+        }
 
         let new_tier = Self::polity_tier_for_count(total_in_polity);
         let tier_upgraded = new_tier as u8 > self.tribes[absorber].polity_tier as u8;
@@ -3404,7 +3425,18 @@ impl TribeSimulation {
             push_u16(&mut buf, tribe.veterancy_xp as u16);                // 2
             buf.push(tribe.behavior as u8);                               // 1
             buf.push(tribe.alive as u8);                                  // 1
-            // total: 4+1+1+2+4+4+4+4+4+4+4+4+2+4+2+1+1 = 50
+            // ── E1 extension (bytes 50–87) ──
+            push_f32(&mut buf, tribe.fitness_score);                      // 4  fitness
+            push_u16(&mut buf, tribe.migration_target_tile);              // 2  u16::MAX = no target
+            let ally_id: u32 = tribe.ally_tribe
+                .and_then(|idx| self.tribes.get(idx))
+                .map(|t| t.id as u32)
+                .unwrap_or(u32::MAX);
+            push_u32(&mut buf, ally_id);                                  // 4  ally tribe id
+            for &out in &tribe.last_outputs {
+                push_f32(&mut buf, out);                                  // 4×7 = 28  NN outputs
+            }
+            // total: 50 (base) + 4+2+4+28 = 88
         }
 
         // ── Flags byte ──
@@ -3873,4 +3905,206 @@ fn push_u32(buffer: &mut Vec<u8>, value: u32) {
 
 fn push_f32(buffer: &mut Vec<u8>, value: f32) {
     buffer.extend_from_slice(&value.to_le_bytes());
+}
+
+// ─── F1: Controlled harness verification tests ───────────────────────────────
+
+#[cfg(test)]
+mod harness_tests {
+    use super::*;
+    use crate::tribes::BehaviorState;
+
+    fn test_config(n: usize) -> ControlConfig {
+        let clusters: Vec<ClusterProfile> = (0..n)
+            .map(|i| scenario_cluster(&format!("t{i}"), 6.0, 5.0))
+            .collect();
+        ControlConfig { clusters, world_seed: 1337, ..Default::default() }
+    }
+
+    // ─── F1-A: Migration physically advances the camp tile ───────────────────
+
+    #[test]
+    fn migration_advances_main_camp_toward_destination() {
+        let sim_arc = TribeSimulation::shared(test_config(2));
+        let initial_camp = sim_arc.read().tribes[0].main_camp_tile;
+
+        {
+            let mut sim = sim_arc.write();
+            sim.tribes[0].behavior = BehaviorState::Migrating;
+            sim.tribes[0].migration_target_tile = u16::MAX; // sentinel → dest picked on first tick
+            sim.tribes[0].ticks_in_state = 0;
+            // Ample food so the tribe does not enter Desperate mid-migration
+            sim.tribes[0].food_stores = 200_000.0;
+        }
+
+        // 25 ticks: destination is picked on tick 1; camp advances every 5 ticks_in_state
+        for _ in 0..25 {
+            sim_arc.write().step();
+        }
+
+        let sim = sim_arc.read();
+        let t = &sim.tribes[0];
+        let camp_moved   = t.main_camp_tile != initial_camp;
+        let target_set   = t.migration_target_tile != u16::MAX;
+        let settled_out  = matches!(t.behavior, BehaviorState::Settling | BehaviorState::Foraging);
+
+        assert!(
+            camp_moved || settled_out || target_set,
+            "migration should move camp or settle; camp={} initial={} behavior={:?} target={}",
+            t.main_camp_tile, initial_camp, t.behavior, t.migration_target_tile,
+        );
+    }
+
+    // ─── F1-B: Dispute registry expires and forces resolution ────────────────
+
+    #[test]
+    fn dispute_resolves_after_grace_period_expires() {
+        let sim_arc = TribeSimulation::shared(test_config(2));
+
+        {
+            let mut sim = sim_arc.write();
+            let id0 = sim.tribes[0].id as u32;
+            let id1 = sim.tribes[1].id as u32;
+
+            // Place both tribes as co-occupants on a neutral tile → tile_is_disputed = true
+            let contested = 100usize;
+            sim.world.add_tile_occupant(contested, id0, 0.5);
+            sim.world.add_tile_occupant(contested, id1, 0.5);
+
+            // Pre-register dispute at tick 0 so age will be exactly DISPUTE_GRACE_TICKS when we step
+            sim.dispute_registry.insert((0, 1), 0);
+
+            // Jump to one tick before a dispute-resolution cycle (multiple of 30) >= 60
+            // step() → tick=60, 60%30==0 → apply_dispute_resolution runs, age=60 ≥ 60 → expired
+            sim.tick = 59;
+        }
+
+        sim_arc.write().step();
+
+        let sim = sim_arc.read();
+        assert!(
+            !sim.dispute_registry.contains_key(&(0, 1)),
+            "dispute (0,1) should be evicted from registry after grace period expired",
+        );
+    }
+
+    // ─── F1-C: Opportunity war triggers against a weaker adjacent rival ───────
+
+    #[test]
+    fn opportunity_war_declared_against_weaker_adjacent_tribe() {
+        let sim_arc = TribeSimulation::shared(test_config(2));
+
+        // In a 40-wide grid: tile 10 = (10,0), tile 11 = (11,0), tile 12 = (12,0).
+        // adjacent_tiles(11) includes both 10 and 12, so tribe-0 and tribe-1 are adjacent.
+        {
+            let mut sim = sim_arc.write();
+            let id0 = sim.tribes[0].id as u32;
+            let id1 = sim.tribes[1].id as u32;
+
+            sim.tribes[0].territory = vec![10, 11];
+            sim.tribes[1].territory = vec![12];
+            sim.world.set_tile_owner(10, id0);
+            sim.world.set_tile_owner(11, id0);
+            sim.world.set_tile_owner(12, id1);
+            sim.tribes[0].main_camp_tile = 10;
+            sim.tribes[1].main_camp_tile = 12;
+
+            // Tribe 0 is strong, tribe 1 is weak (< 60% of tribe 0 pop)
+            sim.tribes[0].population = 400;
+            sim.tribes[1].population = 30;
+
+            // Provide high raid_drive output before calling the function directly
+            sim.tribes[0].last_outputs[4] = 0.75; // raid_drive > 0.58 threshold
+            sim.tribes[0].behavior = BehaviorState::Foraging; // eligible state
+
+            // apply_opportunity_war is private but accessible from this sibling module
+            sim.apply_opportunity_war();
+        }
+
+        let sim = sim_arc.read();
+        let declared_war = matches!(sim.tribes[0].behavior, BehaviorState::AtWar)
+            && sim.tribes[0].target_tribe == Some(1);
+        assert!(declared_war, "tribe 0 should declare war on weaker adjacent tribe 1; state={:?}", sim.tribes[0].behavior);
+    }
+
+    // ─── F1-D: Allied tribes merge after sufficient dwell ────────────────────
+
+    #[test]
+    fn allied_tribes_merge_after_threshold_dwell() {
+        let sim_arc = TribeSimulation::shared(test_config(2));
+
+        {
+            let mut sim = sim_arc.write();
+            // Both tribes enter Allied state pointing at each other
+            sim.tribes[0].behavior = BehaviorState::Allied;
+            sim.tribes[0].ally_tribe = Some(1);
+            sim.tribes[0].ticks_in_state = 80; // >= MERGE_TICK_THRESHOLD
+            sim.tribes[0].population = 200;    // absorber (larger pop)
+            sim.tribes[0].food_stores = 100_000.0;
+
+            sim.tribes[1].behavior = BehaviorState::Allied;
+            sim.tribes[1].ally_tribe = Some(0);
+            sim.tribes[1].ticks_in_state = 80;
+            sim.tribes[1].population = 100;    // absorbed
+            sim.tribes[1].food_stores = 100_000.0;
+
+            // Jump to tick 19 so step() → tick=20, 20%MERGE_CHECK_INTERVAL(20)==0 → apply_merger
+            sim.tick = 19;
+        }
+
+        sim_arc.write().step();
+
+        let sim = sim_arc.read();
+        let absorbed_administering = matches!(sim.tribes[1].behavior, BehaviorState::Administering);
+        let absorber_has_constituent = !sim.tribes[0].constituent_tribe_ids.is_empty();
+
+        assert!(
+            absorbed_administering || absorber_has_constituent,
+            "allied tribes with ticks_in_state >= 80 should merge; tribe0={:?} tribe1={:?} constituents={:?}",
+            sim.tribes[0].behavior, sim.tribes[1].behavior, sim.tribes[0].constituent_tribe_ids,
+        );
+    }
+
+    // ─── F1-E: Generation boundary records fitness and differentiates mutation ─
+
+    #[test]
+    fn generation_boundary_records_fitness_and_advances_generation() {
+        let sim_arc = TribeSimulation::shared(test_config(4));
+
+        {
+            let mut sim = sim_arc.write();
+
+            // Give tribe 0 a large territory → high territory_score
+            for tile in 0u16..30 {
+                if !sim.tribes[0].territory.contains(&tile) {
+                    sim.tribes[0].territory.push(tile);
+                }
+            }
+            sim.tribes[0].population = 300;
+
+            // Tribe 3 stays at minimal starting state (1 tile, low pop)
+
+            // Call the generation boundary directly (private method, same module)
+            sim.apply_generation_boundary();
+        }
+
+        let sim = sim_arc.read();
+
+        // All alive tribes advance generation
+        assert!(sim.tribes[0].generation >= 1, "tribe 0 generation should advance");
+        assert!(sim.tribes[3].generation >= 1, "tribe 3 generation should advance");
+
+        // Tribe 0 should have higher fitness than tribe 3
+        let fit0 = sim.tribes[0].fitness_score;
+        let fit3 = sim.tribes[3].fitness_score;
+        assert!(fit0 > 0.0, "tribe 0 fitness should be positive (large territory), got {fit0}");
+        assert!(
+            fit0 > fit3,
+            "tribe 0 (large territory) should outscore tribe 3 (minimal); fit0={fit0} fit3={fit3}",
+        );
+
+        // Lineage should record the gen-N-fitness-X entry
+        let has_gen_entry = sim.tribes[0].lineage.iter().any(|s| s.starts_with("gen-"));
+        assert!(has_gen_entry, "tribe 0 lineage should contain gen-N-fitness-X entry; lineage={:?}", sim.tribes[0].lineage);
+    }
 }

@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Protocol;
 using TribalNeuroSim.Client.Rendering;
 
 namespace TribalNeuroSim.Client.UI;
@@ -57,6 +58,102 @@ public sealed class LineageInspectorPanel
 
         // Local demo has no entity-level lineage — show placeholder
         DrawLineageUnavailable(spriteBatch, origin, selected);
+    }
+
+    /// Network-mode overload: shows V1 polity / constituent / fitness lineage summary.
+    public void DrawNetwork(
+        SpriteBatch spriteBatch,
+        TribeFrameV1Record? tribe,
+        FontRenderer fontRenderer,
+        Point origin,
+        bool isVisible)
+    {
+        if (!isVisible)
+        {
+            LastBounds = Rectangle.Empty;
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(spriteBatch);
+
+        if (_font is null || !ReferenceEquals(_graphicsDevice, spriteBatch.GraphicsDevice))
+        {
+            _pixel?.Dispose();
+            _graphicsDevice = spriteBatch.GraphicsDevice;
+            _pixel = new Texture2D(_graphicsDevice, 1, 1);
+            _pixel.SetData(new[] { Microsoft.Xna.Framework.Color.White });
+            _font = fontRenderer;
+        }
+
+        if (tribe is null)
+        {
+            DrawEmptyState(spriteBatch, origin, "Select a living tribe first");
+            return;
+        }
+
+        var lineHeight = _font.LineHeight(FontSize.Body);
+        var smallHeight = _font.LineHeight(FontSize.Small);
+        var headerHeight = _font.LineHeight(FontSize.Header);
+
+        var panelHeight = PanelMargin * 2 + headerHeight + 4
+            + lineHeight * 5  // id, tier, constituents, veterancy, fitness
+            + 1 + 8            // separator
+            + smallHeight * 2  // note
+            + smallHeight + 4; // hint
+        var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
+        LastBounds = panel;
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend,
+            samplerState: SamplerState.LinearClamp);
+
+        FillRect(spriteBatch, panel, PanelColor);
+        DrawRectOutline(spriteBatch, panel, PanelBorderColor, 1);
+
+        var x = panel.X + PanelMargin;
+        var y = panel.Y + PanelMargin;
+
+        _font.DrawString(spriteBatch, "LINEAGE INSPECTOR", new Vector2(x, y), FontSize.Header, AccentColor);
+        y += headerHeight + 4;
+
+        DrawKV(spriteBatch, x, y, panel.Right - PanelMargin, lineHeight, "Tribe ID", tribe.Id.ToString(), TextColor);
+        y += lineHeight;
+
+        var tierName = tribe.PolityTier switch { 0 => "Tribe", 1 => "City", 2 => "Duchy", 3 => "Kingdom", 4 => "Empire", _ => $"T{tribe.PolityTier}" };
+        DrawKV(spriteBatch, x, y, panel.Right - PanelMargin, lineHeight, "Polity Tier", tierName, TierColor);
+        y += lineHeight;
+
+        DrawKV(spriteBatch, x, y, panel.Right - PanelMargin, lineHeight, "Constituents",
+            tribe.ConstituentCount > 0 ? $"{tribe.ConstituentCount} absorbed" : "independent",
+            tribe.ConstituentCount > 0 ? AccentColor : MutedColor);
+        y += lineHeight;
+
+        DrawKV(spriteBatch, x, y, panel.Right - PanelMargin, lineHeight, "Veterancy XP", tribe.VeterancyXp.ToString(), TextColor);
+        y += lineHeight;
+
+        var fitColor = tribe.FitnessScore >= 0.6f ? SeedColor : tribe.FitnessScore >= 0.3f ? AccentColor : BranchColor;
+        DrawKV(spriteBatch, x, y, panel.Right - PanelMargin, lineHeight, "Fitness", $"{tribe.FitnessScore:F3}", fitColor);
+        y += lineHeight;
+
+        FillRect(spriteBatch, new Rectangle(x, y, PanelWidth - PanelMargin * 2, 1), new Color(255, 255, 255, 18));
+        y += 8;
+
+        _font.DrawString(spriteBatch, "Full entity DAG requires Rust", new Vector2(x, y), FontSize.Small, MutedColor);
+        y += smallHeight;
+        _font.DrawString(spriteBatch, "REST lineage endpoint (pending).", new Vector2(x, y), FontSize.Small, MutedColor);
+        y += smallHeight + 4;
+
+        _font.DrawString(spriteBatch, "Press L to toggle panel", new Vector2(x, y), FontSize.Small, MutedColor);
+
+        spriteBatch.End();
+    }
+
+    private void DrawKV(SpriteBatch spriteBatch, int x, int y, int rightEdge, int lineHeight,
+        string key, string value, Color valueColor)
+    {
+        _font!.DrawString(spriteBatch, key, new Vector2(x, y), FontSize.Body, MutedColor);
+        _font.DrawStringAligned(spriteBatch, value, new Vector2(rightEdge, y), FontSize.Body, TextAlign.Right, valueColor);
     }
 
     private void DrawEmptyState(SpriteBatch spriteBatch, Point origin, string message)

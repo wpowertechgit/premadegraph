@@ -449,15 +449,33 @@ public sealed class GameRoot : Game
             }
 
             // M9: Lineage inspector (toggled with L)
-            if (_panelFontRenderer is not null && !_useNetworkRender)
+            if (_panelFontRenderer is not null)
             {
                 var defaultLineageOrigin = new Point(GraphicsDevice.Viewport.Width - 660, 12);
-                _lineageInspector.Draw(
-                    _spriteBatch,
-                    _playableSimulation,
-                    _panelFontRenderer,
-                    _panelDragController.ResolveOrigin(DraggablePanelId.Lineage, defaultLineageOrigin),
-                    _lineagePanelVisible);
+                var lineageOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.Lineage, defaultLineageOrigin);
+
+                if (_useNetworkRender && _viewModel.HasV1Data)
+                {
+                    Protocol.TribeFrameV1Record? selectedV1ForLineage = null;
+                    if (_playableSimulation.SelectedTribeId >= 0)
+                        _viewModel.V1Tribes.TryGetValue((uint)_playableSimulation.SelectedTribeId, out selectedV1ForLineage);
+
+                    _lineageInspector.DrawNetwork(
+                        _spriteBatch,
+                        selectedV1ForLineage,
+                        _panelFontRenderer,
+                        lineageOrigin,
+                        _lineagePanelVisible);
+                }
+                else
+                {
+                    _lineageInspector.Draw(
+                        _spriteBatch,
+                        _playableSimulation,
+                        _panelFontRenderer,
+                        lineageOrigin,
+                        _lineagePanelVisible);
+                }
             }
 
             // M9: Tombstone ledger (toggled with K) — positioned below debug HUD
@@ -1212,7 +1230,13 @@ public sealed class GameRoot : Game
                 TotalEntityCount: entityCount,
                 TombstoneCount: 0, // not yet available from ViewModel
                 LineageDepth: 0,
-                AssetDiagSummary: _diagnostics.LastDecodeError is not null ? "decode err" : "ok");
+                AssetDiagSummary: _diagnostics.LastDecodeError is not null ? "decode err" : "ok",
+                // E2: brain / fitness / migration for selected tribe
+                SelectedFitnessScore: selectedV1Tribe?.FitnessScore ?? 0f,
+                SelectedIsMigrating: selectedV1Tribe?.IsMigrating ?? false,
+                SelectedTopDrive: selectedV1Tribe is not null && selectedV1Tribe.NeuralOutputs.Length > 0
+                    ? GetTopDriveLabel(selectedV1Tribe.NeuralOutputs)
+                    : "");
         }
 
         var selected = _playableSimulation.Tribes.FirstOrDefault(tribe => tribe.Id == _playableSimulation.SelectedTribeId);
@@ -1284,4 +1308,19 @@ public sealed class GameRoot : Game
         4 => "Empire",
         _ => $"?{tier}",
     };
+
+    /// E2: Pick the highest neural output label for the HUD compact drive display.
+    private static readonly string[] DriveLabels =
+        ["Aggr", "Res", "Goal", "Migr", "Raid", "Isol", "Expn"];
+
+    private static string GetTopDriveLabel(float[] outputs)
+    {
+        if (outputs.Length == 0) return "";
+        var maxIdx = 0;
+        for (var i = 1; i < Math.Min(outputs.Length, DriveLabels.Length); i++)
+        {
+            if (outputs[i] > outputs[maxIdx]) maxIdx = i;
+        }
+        return maxIdx < DriveLabels.Length ? DriveLabels[maxIdx] : "";
+    }
 }
