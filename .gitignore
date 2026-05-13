@@ -21,6 +21,7 @@ __pycache__
 backend/pathfinder-rust/cache
 *.db
 *cwd
+*.jsonl
 .tectonic-cache/
 .tools/
 tmp-tectonic-test/

@@ -328,6 +328,7 @@ pub struct TribeSummaryRecord {
     pub cluster_id: String,
     pub alive: bool,
     pub population: u32,
+    pub behavior: crate::tribes::BehaviorState,
     pub territory_count: usize,
     pub generation: u32,
     pub ticks_alive: u64,
@@ -341,6 +342,11 @@ pub struct TribeSummaryRecord {
     pub a_combat: f32,
     pub a_resource: f32,
     pub feed_risk: f32,
+    pub last_inputs: [f32; INPUT_COUNT],
+    pub last_outputs: [f32; OUTPUT_COUNT],
+    pub fitness_score: f32,
+    pub main_camp_tile: u16,
+    pub migration_target_tile: u16,
 }
 
 #[derive(serde::Serialize)]
@@ -390,6 +396,22 @@ pub struct LineageStatsResponse {
 pub struct TombstonesResponse {
     pub count: usize,
     pub records: Vec<crate::tombstone::TombstoneRecord>,
+}
+
+// ─── ValidationMetrics ───────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct ValidationMetrics {
+    pub behavior_counts: std::collections::BTreeMap<String, usize>,
+    pub dominant_output_counts: std::collections::BTreeMap<String, usize>,
+    pub active_war_count: usize,
+    pub disputed_tile_count: usize,
+    pub alliance_link_count: usize,
+    pub tombstone_count: usize,
+    pub lineage_entity_count: usize,
+    pub average_fitness: f32,
+    pub max_fitness: f32,
+    pub migrating_count: usize,
 }
 
 // ─── Vec2 ─────────────────────────────────────────────────────────────────────
@@ -603,7 +625,11 @@ impl Genome {
     /// that tribe brains are reproducible without exposing the simulation's
     /// shared tracker.
     pub fn new(input_count: usize, output_count: usize) -> Self {
-        let mut rng = SmallRng::seed_from_u64(42);
+        Self::new_seeded(input_count, output_count, 42)
+    }
+
+    pub fn new_seeded(input_count: usize, output_count: usize, seed: u64) -> Self {
+        let mut rng = SmallRng::seed_from_u64(seed);
         let mut tracker = InnovationTracker::new_with_counts(input_count, output_count);
 
         let mut nodes = Vec::with_capacity(input_count + output_count + 1);
@@ -1015,7 +1041,13 @@ impl TribeSimulation {
         self.tribes = self.config.clusters.iter().enumerate().map(|(i, profile)| {
             let home_tile = spawn_tiles.get(i).copied().unwrap_or(i as u16);
             let mut tribe = crate::tribes::TribeState::from_cluster(i, profile, home_tile);
-            tribe.genome = Some(crate::simulation::Genome::new(INPUT_COUNT, OUTPUT_COUNT));
+            let genome_seed = self.config.world_seed
+                ^ ((i as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            tribe.genome = Some(crate::simulation::Genome::new_seeded(
+                INPUT_COUNT,
+                OUTPUT_COUNT,
+                genome_seed,
+            ));
             tribe
         }).collect();
         // K2: sync initial tile owners for each tribe's home tile
@@ -1172,7 +1204,13 @@ impl TribeSimulation {
 
         self.tribes = profiles.iter().enumerate().map(|(i, profile)| {
             let mut tribe = crate::tribes::TribeState::from_cluster(i, profile, homes[i]);
-            tribe.genome = Some(crate::simulation::Genome::new(INPUT_COUNT, OUTPUT_COUNT));
+            let genome_seed = SCENARIO_SEED
+                ^ ((i as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            tribe.genome = Some(crate::simulation::Genome::new_seeded(
+                INPUT_COUNT,
+                OUTPUT_COUNT,
+                genome_seed,
+            ));
             tribe
         }).collect();
 
@@ -1260,6 +1298,17 @@ impl TribeSimulation {
     /// Return the most recent global events (up to `limit`).
     pub fn recent_events(&self, limit: usize) -> Vec<&crate::events::SimulationEvent> {
         self.global_events.iter().rev().take(limit).collect()
+    }
+
+    pub fn events_after(
+        &self,
+        last_seen_event_id: Option<u64>,
+    ) -> Vec<crate::events::SimulationEvent> {
+        self.global_events
+            .iter()
+            .filter(|event| last_seen_event_id.map_or(true, |id| event.event_id > id))
+            .cloned()
+            .collect()
     }
 
     /// Return events for a specific tribe (most recent first).
@@ -1580,8 +1629,20 @@ impl TribeSimulation {
             self.push_event(ev);
         }
 
+        self.refresh_fitness_scores();
+
         // 10. Pack and return current frame
         self.pack_current_frame()
+    }
+
+    fn refresh_fitness_scores(&mut self) {
+        let scores: Vec<(usize, f32)> = (0..self.tribes.len())
+            .filter(|&i| self.tribes[i].alive)
+            .map(|i| (i, self.compute_fitness_of(i)))
+            .collect();
+        for (idx, score) in scores {
+            self.tribes[idx].fitness_score = score;
+        }
     }
 
     // ─── Task 7: State Machine ────────────────────────────────────────────────
@@ -1664,7 +1725,7 @@ impl TribeSimulation {
         }
 
         // ── Pass 5: transition logic ──────────────────────────────────────────
-        let mut behavior_changes: Vec<(u32, u8, u8, f32)> = Vec::new();
+        let mut behavior_changes: Vec<(u32, u8, u8, u8, f32)> = Vec::new();
 
         for i in 0..self.tribes.len() {
             if !self.tribes[i].alive { continue; }
@@ -1793,11 +1854,21 @@ impl TribeSimulation {
             } else { next };
 
             if next != current {
-                let max_drive = self.tribes[i].last_outputs
+                let (dominant_output_index, max_drive) = self.tribes[i].last_outputs
                     .iter()
-                    .cloned()
-                    .fold(f32::NEG_INFINITY, f32::max);
-                behavior_changes.push((self.tribes[i].id as u32, current as u8, next as u8, max_drive));
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| {
+                        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(idx, &value)| (idx as u8, value))
+                    .unwrap_or((0, 0.0));
+                behavior_changes.push((
+                    self.tribes[i].id as u32,
+                    current as u8,
+                    next as u8,
+                    dominant_output_index,
+                    max_drive,
+                ));
                 self.tribes[i].behavior = next;
                 self.tribes[i].ticks_in_state = 0;
             } else {
@@ -1809,7 +1880,7 @@ impl TribeSimulation {
 
         let tick = self.tick;
         let gen = self.generation;
-        for (tribe_id, old_b, new_b, max_drive) in behavior_changes {
+        for (tribe_id, old_b, new_b, output_idx, max_drive) in behavior_changes {
             let mut ev = crate::events::SimulationEvent::new(
                 0, tick, gen,
                 crate::events::EventType::BehaviorChanged,
@@ -1818,7 +1889,7 @@ impl TribeSimulation {
             );
             ev.value_a = old_b as f32;
             ev.value_b = max_drive;
-            ev.flags = new_b as u32;
+            ev.flags = new_b as u32 | ((output_idx as u32) << 8);
             self.push_event(ev);
         }
     }
@@ -2455,13 +2526,31 @@ impl TribeSimulation {
                 self.tribes[defender_idx].population.saturating_sub(d_casualties);
 
             // L1: accumulate casualties in war record
-            if let Some(war) = self.active_wars.iter_mut().find(|w| {
+            let active_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
                 w.status == crate::war::WarStatus::Active
                     && w.attacker_id == atk_id
                     && w.defender_id == def_id
             }) {
                 war.attacker_casualties += a_casualties;
                 war.defender_casualties += d_casualties;
+                Some(war.war_id)
+            } else {
+                None
+            };
+
+            if let Some(war_id) = active_war_id {
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, self.tick, self.generation,
+                    crate::events::EventType::CombatRound,
+                    crate::events::EventSeverity::Debug,
+                    atk_id,
+                );
+                ev.other_tribe_id = def_id;
+                ev.war_id = war_id;
+                ev.value_a = a_casualties as f32;
+                ev.value_b = d_casualties as f32;
+                ev.flags = (ratio * 1000.0).round() as u32;
+                self.push_event(ev);
             }
 
             // Check extinction
@@ -2469,12 +2558,29 @@ impl TribeSimulation {
                 self.tribes[attacker_idx].alive = false;
                 println!("[WAR tick={}] tribe_{} defeated by tribe_{} (defender won)", self.tick, atk_id, def_id);
                 // L1: defender won — attacker wiped out
-                if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                let ended_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
                     w.status == crate::war::WarStatus::Active
                         && w.attacker_id == atk_id
                         && w.defender_id == def_id
                 }) {
                     war.status = crate::war::WarStatus::DefenderWon;
+                    Some(war.war_id)
+                } else {
+                    None
+                };
+                if let Some(war_id) = ended_war_id {
+                    let mut ev = crate::events::SimulationEvent::new(
+                        0, self.tick, self.generation,
+                        crate::events::EventType::WarEnded,
+                        crate::events::EventSeverity::Important,
+                        atk_id,
+                    );
+                    ev.other_tribe_id = def_id;
+                    ev.war_id = war_id;
+                    ev.value_a = self.tribes[attacker_idx].population as f32;
+                    ev.value_b = self.tribes[defender_idx].population as f32;
+                    ev.flags = crate::war::WarStatus::DefenderWon as u32;
+                    self.push_event(ev);
                 }
             }
             if self.tribes[defender_idx].population == 0 {
@@ -2500,12 +2606,29 @@ impl TribeSimulation {
                 self.tribes[attacker_idx].behavior = BehaviorState::Occupying;
                 self.tribes[attacker_idx].ticks_in_state = 0;
                 // L1: attacker won — defender absorbed
-                if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                let ended_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
                     w.status == crate::war::WarStatus::Active
                         && w.attacker_id == atk_id
                         && w.defender_id == def_id
                 }) {
                     war.status = crate::war::WarStatus::AttackerWon;
+                    Some(war.war_id)
+                } else {
+                    None
+                };
+                if let Some(war_id) = ended_war_id {
+                    let mut ev = crate::events::SimulationEvent::new(
+                        0, self.tick, self.generation,
+                        crate::events::EventType::WarEnded,
+                        crate::events::EventSeverity::Important,
+                        atk_id,
+                    );
+                    ev.other_tribe_id = def_id;
+                    ev.war_id = war_id;
+                    ev.value_a = self.tribes[attacker_idx].population as f32;
+                    ev.value_b = self.tribes[defender_idx].population as f32;
+                    ev.flags = crate::war::WarStatus::AttackerWon as u32;
+                    self.push_event(ev);
                 }
             } else if self.tribes[attacker_idx].ticks_in_state > 120 {
                 // C4: War timeout lowered from 300 → 120 so winners rejoin diplomacy faster
@@ -2515,11 +2638,28 @@ impl TribeSimulation {
                 self.tribes[defender_idx].behavior = BehaviorState::Peace;
                 self.tribes[defender_idx].ticks_in_state = 0;
                 // L1: war ended in timeout peace
-                if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                let ended_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
                     w.status == crate::war::WarStatus::Active
                         && (w.attacker_id == atk_id || w.defender_id == atk_id)
                 }) {
                     war.status = crate::war::WarStatus::Peace;
+                    Some(war.war_id)
+                } else {
+                    None
+                };
+                if let Some(war_id) = ended_war_id {
+                    let mut ev = crate::events::SimulationEvent::new(
+                        0, self.tick, self.generation,
+                        crate::events::EventType::WarEnded,
+                        crate::events::EventSeverity::Info,
+                        atk_id,
+                    );
+                    ev.other_tribe_id = def_id;
+                    ev.war_id = war_id;
+                    ev.value_a = self.tribes[attacker_idx].population as f32;
+                    ev.value_b = self.tribes[defender_idx].population as f32;
+                    ev.flags = crate::war::WarStatus::Peace as u32;
+                    self.push_event(ev);
                 }
             }
         }
@@ -3663,6 +3803,7 @@ impl TribeSimulation {
                 cluster_id: t.cluster_id.clone(),
                 alive: t.alive,
                 population: t.population,
+                behavior: t.behavior,
                 territory_count: t.territory.len(),
                 generation: t.generation,
                 ticks_alive: t.ticks_alive,
@@ -3676,6 +3817,11 @@ impl TribeSimulation {
                 a_combat: t.stats.a_combat,
                 a_resource: t.stats.a_resource,
                 feed_risk: t.stats.feed_risk,
+                last_inputs: t.last_inputs,
+                last_outputs: t.last_outputs,
+                fitness_score: t.fitness_score,
+                main_camp_tile: t.main_camp_tile,
+                migration_target_tile: t.migration_target_tile,
             }
         }).collect();
 
@@ -3774,6 +3920,64 @@ impl TribeSimulation {
         TombstonesResponse {
             count: self.tombstone.count(),
             records: self.tombstone.all_records().to_vec(),
+        }
+    }
+
+    pub fn validation_metrics(&self) -> ValidationMetrics {
+        let mut behavior_counts = std::collections::BTreeMap::new();
+        let mut dominant_output_counts = std::collections::BTreeMap::new();
+        let mut fitness_sum = 0.0f32;
+        let mut fitness_count = 0usize;
+        let mut max_fitness = 0.0f32;
+
+        for tribe in self.tribes.iter().filter(|t| t.alive) {
+            let label = format!("{:?}", tribe.behavior);
+            *behavior_counts.entry(label).or_insert(0) += 1;
+            let dominant_output = t_last_output_label(tribe.last_outputs);
+            *dominant_output_counts
+                .entry(dominant_output.to_string())
+                .or_insert(0) += 1;
+            fitness_sum += tribe.fitness_score;
+            fitness_count += 1;
+            max_fitness = max_fitness.max(tribe.fitness_score);
+        }
+
+        let alliance_link_count = self
+            .tribes
+            .iter()
+            .filter(|t| t.alive && t.ally_tribe.is_some())
+            .count();
+        let migrating_count = self
+            .tribes
+            .iter()
+            .filter(|t| t.alive && matches!(t.behavior, crate::tribes::BehaviorState::Migrating))
+            .count();
+        let disputed_tile_count = self
+            .world
+            .tile_is_disputed
+            .iter()
+            .filter(|&&is_disputed| is_disputed)
+            .count();
+
+        ValidationMetrics {
+            behavior_counts,
+            dominant_output_counts,
+            active_war_count: self
+                .active_wars
+                .iter()
+                .filter(|w| w.status == crate::war::WarStatus::Active)
+                .count(),
+            disputed_tile_count,
+            alliance_link_count,
+            tombstone_count: self.tombstone.count(),
+            lineage_entity_count: self.lineage_registry.total_entity_count(),
+            average_fitness: if fitness_count == 0 {
+                0.0
+            } else {
+                fitness_sum / fitness_count as f32
+            },
+            max_fitness,
+            migrating_count,
         }
     }
 
@@ -3891,6 +4095,15 @@ impl TribeSimulation {
         ev.value_b = self.tribes[tribe_idx].citizens.len() as f32;
         self.push_event(ev);
     }
+}
+
+fn t_last_output_label(outputs: [f32; OUTPUT_COUNT]) -> &'static str {
+    outputs
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .and_then(|(idx, _)| OUTPUT_LABELS.get(idx).copied())
+        .unwrap_or("unknown")
 }
 
 // ─── binary packing helpers ───────────────────────────────────────────────────
@@ -4106,5 +4319,57 @@ mod harness_tests {
         // Lineage should record the gen-N-fitness-X entry
         let has_gen_entry = sim.tribes[0].lineage.iter().any(|s| s.starts_with("gen-"));
         assert!(has_gen_entry, "tribe 0 lineage should contain gen-N-fitness-X entry; lineage={:?}", sim.tribes[0].lineage);
+    }
+
+    #[test]
+    fn fitness_scores_are_current_before_generation_boundary() {
+        let sim_arc = TribeSimulation::shared(test_config(3));
+        {
+            let mut sim = sim_arc.write();
+            for tile in 0u16..20 {
+                if !sim.tribes[0].territory.contains(&tile) {
+                    sim.tribes[0].territory.push(tile);
+                }
+            }
+            sim.tribes[0].population = 250;
+            sim.step();
+        }
+
+        let sim = sim_arc.read();
+        assert_eq!(sim.generation, 0, "test should stay before generation boundary");
+        assert!(
+            sim.tribes[0].fitness_score > 0.0,
+            "fitness should be refreshed before generation boundary; got {}",
+            sim.tribes[0].fitness_score,
+        );
+        assert!(
+            sim.validation_metrics().average_fitness > 0.0,
+            "validation metrics should expose current fitness before generation boundary",
+        );
+    }
+
+    #[test]
+    fn initialized_tribes_start_with_diverse_neural_genomes() {
+        let sim_arc = TribeSimulation::shared(test_config(4));
+        let sim = sim_arc.read();
+        let first = sim.tribes[0]
+            .genome
+            .as_ref()
+            .expect("tribe 0 should have genome");
+        let second = sim.tribes[1]
+            .genome
+            .as_ref()
+            .expect("tribe 1 should have genome");
+
+        let any_weight_differs = first
+            .connections
+            .iter()
+            .zip(second.connections.iter())
+            .any(|(a, b)| (a.weight - b.weight).abs() > 0.0001);
+
+        assert!(
+            any_weight_differs,
+            "tribes should not all start with identical neural connection weights",
+        );
     }
 }

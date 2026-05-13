@@ -1,163 +1,89 @@
 @startuml
-title Tribal NeuroSim V3 — Neural Decision Architecture
+title Genetic NeuroSim - Current Neural Decision Model
 
-skinparam backgroundColor #1a1a1a
-skinparam defaultFontColor #e0e0e0
+left to right direction
 skinparam componentStyle rectangle
-skinparam NoteBackgroundColor #444
-skinparam NoteFontColor #ffcc00
 
-' ─── SEEDING ─────────────────────────────────────────────────────────────────
-
-package "Cluster Profile (seed)" {
-    [ClusterProfile\na_combat, a_risk, a_resource\na_map_objective, a_team\nfeed_risk, cluster_size] as CP
+package "Input Layer\n11 sensors + bias" {
+  [food_ratio]
+  [pop_ratio]
+  [territory]
+  [feed_risk]
+  [a_combat]
+  [a_resource]
+  [a_map_objective]
+  [a_team]
+  [nearest_enemy]
+  [nearest_ally]
+  [a_risk]
+  [bias = 1.0]
 }
 
-package "TribeState Initialization" {
-    [TribeStats::from_profile()\ntanh(v / 3.0) normalization] as TS
-    [Genome::new(8, 3)\n⚠ hardcoded — should be (10,3)] as GN
-    [population = cluster_size * 10\nmax_pop = cluster_size * 600\nfood = pop * 5\nhome_tile] as INIT
+package "Genome / Neural Topology" {
+  [ConnectionGene\nweight, enabled,\ninnovation id] as C
+  [Optional Hidden Nodes\ncreated by mutation] as H
+  [tanh activation] as A
 }
 
-CP --> TS
-CP --> INIT
-INIT --> GN : "assigns genome (wrong input count)"
-
-' ─── EACH TICK ───────────────────────────────────────────────────────────────
-
-package "Per-Tick Sensing (apply_state_machine)" {
-    [Input Vector\n(0) food_ratio\n(1) pop_ratio\n(2) territory/100\n(3) feed_risk\n(4) a_combat\n(5) a_resource\n(6) a_map_objective\n(7) a_team\n⚠(8) nearest_enemy (dropped)\n⚠(9) nearest_ally (dropped)] as INP
-    
-    note right of INP 
-      ⚠ MISMATCH:
-      network built with 8 inputs
-      but 10 computed here.
-      inputs(8,9) never reach network.
-    end note
+package "Output Layer\n7 behavioral drives" {
+  [aggression]
+  [resource_drive]
+  [goal_drive]
+  [migration_drive]
+  [raid_drive]
+  [isolation]
+  [expansion_speed]
 }
 
-' Declare NET standalone before linking
-[CompiledGenome\n.activate(inputs(0..7))] as NET
-GN --> NET
-INP --> NET : "first 8 only"
-
-package "Neural Outputs" {
-    [Output(0): aggression\n= (tanh(raw) + 1) / 2\n(0,1)] as AGG
-    [Output(1): resource_drive\n= (tanh(raw) + 1) / 2\n(0,1)] as RES
-    [Output(2): goal_drive\n= (tanh(raw) + 1) / 2\n(0,1)] as GOL
+package "Rule-Based Simulation" {
+  [Behavior State Machine\nSettling, Foraging, AtWar,\nAllied, Migrating, etc.] as SM
+  [Action Systems\ncombat, expansion,\nalliances, migration] as ACT
 }
 
-NET --> AGG
-NET --> RES
-NET --> GOL
-
-' ─── STATE MACHINE ────────────────────────────────────────────────────────────
-
-package "Behavior State Machine (rule-based thresholds)" {
-    [Settling] as ST
-    [Foraging] as FO
-    [AtWar] as AW
-    [Occupying] as OC
-    [Peace] as PE
-    [Allied] as AL
-    [Starving] as SV
-    [Desperate] as DE
-    [Imploding] as IM
-    [Migrating\n⚠ DEAD STATE\n(no movement logic)] as MIG
-    [Consolidating] as CON
-    [Administering] as ADM
-    [Rebellious] as REB
-    
-    ' Declare these components first to avoid inline parsing errors
-    [River Tech] as RTECH_PROXY
-    [DEATH] as DEATH
+package "Evolution" {
+  [Fitness Evaluation\nevery 1000 ticks] as FIT
+  [Mutation\nweights, connections,\nhidden nodes, stats] as MUT
+  [Merger Crossover\nfitness-weighted inheritance] as CROSS
 }
 
-AGG --> ST : "aggr > 0.50 → AtWar"
-AGG --> DE : "aggr > 0.60 → AtWar (desperate)"
-AGG --> REB : "aggr > 0.70 → AtWar (rebellion)"
-GOL --> MIG : "goal > 0.60\n(overrides settling/foraging)"
-GOL --> AL : "goal > 0.70 formation\ngoal > 0.60 partner"
-GOL --> RTECH_PROXY : "goal > 0.70"
+[food_ratio] --> C
+[pop_ratio] --> C
+[territory] --> C
+[feed_risk] --> C
+[a_combat] --> C
+[a_resource] --> C
+[a_map_objective] --> C
+[a_team] --> C
+[nearest_enemy] --> C
+[nearest_ally] --> C
+[a_risk] --> C
+[bias = 1.0] --> C
 
-ST --> FO : "food < 0.3"
-ST --> AW : "aggr > 0.50 + neighbor"
-FO --> ST : "food > 0.8"
-FO --> SV : "food < 0.1"
-SV --> DE : "ticks > 50"
-DE --> IM : "ticks > 100"
-IM --> DEATH : "pop shrinks"
-AW --> OC : "attacker wins"
-AW --> PE : "timeout > 300 ticks"
-OC --> ST : "ticks > 200"
-PE --> ST : "ticks > 500"
-AL --> CON : "ticks > 300 (merger)"
-CON --> ADM : "ticks > 100"
-ADM --> REB : "a_team < 0.25"
-REB --> ADM : "ticks > 200"
+C --> H
+H --> A
+C --> A
 
-' ─── ACTION SUBSYSTEMS ────────────────────────────────────────────────────────
+A --> [aggression]
+A --> [resource_drive]
+A --> [goal_drive]
+A --> [migration_drive]
+A --> [raid_drive]
+A --> [isolation]
+A --> [expansion_speed]
 
-package "Action Subsystems" {
-    package "Territory Expansion (R8)" {
-        [resource_drive > 0.25\n+ population gate\n+ cooldown\n+ food cost\nclaim neutral/disputed tile] as EXP
-    }
-    package "Combat (Task 8)" {
-        [pop * a_combat * gaussian\nPoisson casualties\nbiome defense bonus\nwinner absorbs territory] as COM
-    }
-    package "Alliance (Task 9)" {
-        [every 50 ticks\nfood sharing 5%\n→ merger if 300+ ticks] as ALLI
-    }
-    package "Merger (R5)" {
-        [absorber gains territory\n+ population + constituents\npolity tier by count\nspecialization roles assigned] as MER
-    }
-    package "Rebellion (R5)" {
-        [a_team < 0.25\nconstituent breaks away\nparent tier may drop] as REBL
-    }
-    package "Reproduction (R6)" {
-        [every 50 ticks\ncitizen entity in lineage DAG\nnew CitizenRecord] as REPR
-    }
-    package "River Tech (Task 11)" {
-        [Proxy: territory.len() > 2\nNone→Bridges: goal>0.7, 50+ ticks\nBridges→Boats: goal>0.8, river_crossings>20\n⚠ river_crossings never incremented\n→ Boats permanently locked] as RTECH
-    }
-}
+[aggression] --> SM
+[resource_drive] --> SM
+[goal_drive] --> SM
+[migration_drive] --> SM
+[raid_drive] --> SM
+[isolation] --> SM
+[expansion_speed] --> SM
 
-RES --> EXP
-AW --> COM
-AL --> ALLI
-AL --> MER
-ADM --> REBL
-ST --> REPR
-GOL --> RTECH
+SM --> ACT
+ACT --> FIT
+FIT --> MUT
+MUT --> C
+CROSS --> C
 
-' ─── EVOLUTION ────────────────────────────────────────────────────────────────
-
-package "Generation Boundary (every 1000 ticks)" {
-    [genome.mutate()\n80% weight perturbation ±rate\n5% connection toggle\noccasional add_node / add_connection] as GMUT
-    [Stat nudge ±0.02 per artifact\nfeed_risk > 0.6 → a_resource boost] as SSTAT
-    note right of GMUT
-      ⚠ NO FITNESS FUNCTION
-      All alive tribes mutate equally.
-      No selection pressure.
-      No crossover.
-    end note
-}
-
-' Standalone decay component definition
-[Stat decay (every 50 ticks)\nStarving tribes:\na_combat, a_resource,\na_map_objective, a_team,\na_risk all decay 0.008*deficit] as SDEC
-
-' ─── INTENDED (PLANNED) vs CURRENT ───────────────────────────────────────────
-
-package "Planned but not implemented" {
-    [Real nearest-enemy sensing\n(enemy need not be AtWar)] as P1
-    [10 inputs wired to network] as P2
-    [10 outputs: forage/settle/expand\nmigrate/attack/defend/ally\nretreat/risk/explore] as P3
-    [Explicit action selection\nfrom output argmax/softmax] as P4
-    [Fitness function\n(survival + territory + war win)] as P5
-    [Selection pressure\nat generation boundary] as P6
-    [Real migration\n(destination + pathfinding + territory change)] as P7
-    [river_crossings counter increment\n(Boats unlock possible)] as P8
-    [Brain inspectability UI:\ntopology, complexity,\nmutation history, strategy lineage] as P9
-}
 
 @enduml

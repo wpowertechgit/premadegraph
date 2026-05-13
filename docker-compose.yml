@@ -18,7 +18,6 @@ services:
       - ./backend:/app
       - /app/node_modules
       - /app/pathfinder-rust/target
-      - ./playersrefined.db:/app/data/databases/default/playersrefined.db
     environment:
       - NODE_ENV=development
       - GRAPH_DB_PATH=/app/data/databases/default/playersrefined.db
@@ -32,7 +31,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 15s
+      start_period: 120s
 
   db-explorer:
     build:
@@ -42,7 +41,6 @@ services:
       - "5088:5088"
     volumes:
       - ./backend:/workspace/backend
-      - ./playersrefined.db:/workspace/playersrefined.db
       - ./docs/databaseproject/simple-interface/Data:/workspace/docs/databaseproject/simple-interface/Data
     environment:
       - ASPNETCORE_URLS=http://0.0.0.0:5088

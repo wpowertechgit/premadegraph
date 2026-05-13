@@ -63,9 +63,10 @@ Do **not** send workers through the old markdown set unless blocked by code ambi
 
 - dispute war-path now removes pair from registry (bug fix found during F1 harness)
 - 5 controlled harness tests added to `simulation.rs::harness_tests`: migration, dispute, opportunity war, alliance/merger, generation boundary
+- F2 CLI runner added: `--cli-run` advances the Rust simulation without clients and writes JSONL run logs with events, all-tribe checkpoints, final summary, combat rounds, war endings, fitness, lineage, tombstone, and marker counts. `--require-dataset-export` prevents accidentally validating synthetic tribes when a real dataset-backed run is required.
 
 ### Still Incomplete
-- F2–F3: full run validation and final doc pass (pending)
+- F3: final doc pass (pending)
 
 ---
 
@@ -394,7 +395,7 @@ By the end of this task list:
 
 ### Task F2 — Full Run Validation
 
-**Status:** pending
+**Status:** done
 
 **Goal:** Prove the integrated sim is alive, aggressive, and inspectable.
 
@@ -405,6 +406,8 @@ By the end of this task list:
 - fewer deadlocked tribes
 - real lineage/fitness visibility
 - C# view matches Rust state
+
+**Verification note:** `backend/genetic-neurosim/docs/taskrun/F2-full-run-validation-cli.md`
 
 ### Task F3 — Final Doc Pass
 
