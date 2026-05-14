@@ -69,6 +69,7 @@ public sealed class GameRoot : Game
     // M17: Performance metrics
     private float _smoothedFps;
     private readonly RenderMetrics _renderMetrics = new();
+    private double _perfLogAccumulator;
 
     // M19: Screenshot capture
     private readonly Diagnostics.ScreenshotCapture _screenshotCapture = new();
@@ -179,9 +180,10 @@ public sealed class GameRoot : Game
         _runtimeAssets = new RuntimeAssetLoader(GraphicsDevice);
         _vegetationRenderer = new VegetationRenderer(GraphicsDevice);
         _settlementRenderer = new SettlementRenderer(GraphicsDevice);
-        // Network maps are large; scale LOD thresholds up so 3D models render closer in.
+        // Network maps are large; keep 3D settlement LOD conservative so zooming
+        // into a 599-tribe dataset does not promote the whole viewport at once.
         if (_launchOptions.ConnectMode)
-            _settlementRenderer.SetLodDistanceScale(8f);
+            _settlementRenderer.SetLodDistanceScale(1.35f);
         _blobShadowRenderer = new BlobShadowRenderer();
         _blobShadowRenderer.Initialize(GraphicsDevice);
         _postProcessRenderer = new PostProcessRenderer();
@@ -411,9 +413,10 @@ public sealed class GameRoot : Game
 
             // M17: Collect render metrics
             UpdateRenderMetrics(
-                tiles.Length,
+                _worldRenderer?.LastTerrainTilesDrawn ?? 0,
                 _settlementRenderer?.LastStats ?? default,
                 _vegetationRenderer?.BatchTotalInstances ?? 0);
+            LogNetworkRenderMetrics(gameTime);
 
             if (_selectionPanel is not null && _panelFontRenderer is not null)
             {
@@ -574,7 +577,7 @@ public sealed class GameRoot : Game
 
                 _controlClient = new Net.SimulationControlClient(_httpClient, _launchOptions.NodeHttpEndpoint);
                 await FetchWorldSnapshotAsync(cancellationToken).ConfigureAwait(false);
-                _settlementRenderer?.SetLodDistanceScale(8f);
+                _settlementRenderer?.SetLodDistanceScale(1.35f);
 
                 // Pause simulation on connect so user starts from a known state
                 try
@@ -1171,6 +1174,29 @@ public sealed class GameRoot : Game
         // Vegetation: ~150 triangles (50 primitives) avg per instance (trees ~200, grass ~20)
         var vegPrim = vegetationInstances * 50;
         return terrainPrim + settlementPrimitives + vegPrim;
+    }
+
+    private void LogNetworkRenderMetrics(GameTime gameTime)
+    {
+        if (!_isNetworkMode || !_viewModel.HasV1Data)
+            return;
+
+        _perfLogAccumulator += gameTime.ElapsedGameTime.TotalSeconds;
+        if (_perfLogAccumulator < 2.0)
+            return;
+        _perfLogAccumulator = 0;
+
+        Console.WriteLine(
+            "[perf] " +
+            $"tick={_viewModel.Tick} " +
+            $"fps={_renderMetrics.Fps:0.0} " +
+            $"cam={_renderMetrics.CameraDistance:0}({_renderMetrics.ZoomLevelLabel}) " +
+            $"terrain={_renderMetrics.TerrainTilesDrawn}/{_viewModel.TileData.Count} " +
+            $"terrainMode={_worldRenderer?.LastTerrainMode ?? "none"} " +
+            $"settlements=C:{_renderMetrics.SettlementCloseCount} M:{_renderMetrics.SettlementMidCount} F:{_renderMetrics.SettlementFarCulledCount} " +
+            $"vegetation={_renderMetrics.VegetationInstanceCount} " +
+            $"wars={_viewModel.Wars.Count} " +
+            $"tribes={_viewModel.V1Tribes.Count}");
     }
 
     private DebugHudState BuildHudState()

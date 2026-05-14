@@ -3383,7 +3383,7 @@ app.post("/api/neurosim/launch-client", (req, res) => {
   if (result.ok) {
     res.json({ ok: true, pid: result.pid });
   } else {
-    res.status(503).json({ ok: false, error: result.error });
+    res.json({ ok: false, error: result.error });
   }
 });
 

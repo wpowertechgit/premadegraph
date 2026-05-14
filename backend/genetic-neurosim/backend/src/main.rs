@@ -325,33 +325,37 @@ async fn load_cli_clusters(config: &CliRunConfig) -> Result<(Vec<simulation::Clu
 }
 
 fn synthetic_validation_clusters(count: usize) -> Vec<simulation::ClusterProfile> {
+    // Values are pre-divided by 10.0 to match the 0–1 range that server.js produces
+    // (server.js divides raw artifact scores by CAP=4.5; these were designed for the
+    // old /10.0 normalizer that was removed from TribeStats::from_profile).
+    let n = |v: f32| (v / 10.0f32).clamp(0.0, 1.0);
     (0..count)
         .map(|i| {
             let band = (i % 8) as f32;
-            let cluster_size = 45 + ((i % 9) as u32 * 8);
+            let cluster_size = 2 + (i % 9) as u32;
             simulation::ClusterProfile {
                 id: format!("cli-cluster-{i:03}"),
-                size_ratio: (cluster_size as f32 / 120.0).clamp(0.2, 1.0),
-                mean_opscore: 5.5 + band * 0.22,
+                size_ratio: (cluster_size as f32 / 10.0).clamp(0.2, 1.0),
+                mean_opscore: n(5.5 + band * 0.22),
                 opscore_stddev: 0.4 + (i % 5) as f32 * 0.08,
                 cohesion: 0.45 + (i % 6) as f32 * 0.06,
                 internal_edge_ratio: 0.30 + (i % 7) as f32 * 0.04,
-                a_combat: 5.8 + band * 0.34,
-                a_risk: 4.4 + (7.0 - band) * 0.25,
-                a_resource: 5.2 + (i % 5) as f32 * 0.45,
-                a_map_objective: 4.8 + (i % 6) as f32 * 0.42,
-                a_team: 4.5 + (i % 4) as f32 * 0.55,
-                fight_conversion: 5.0 + band * 0.30,
-                damage_pressure: 5.4 + band * 0.28,
-                death_cost: 3.5 + (i % 5) as f32 * 0.38,
-                survival_quality: 4.8 + (i % 6) as f32 * 0.35,
-                economy: 5.0 + (i % 5) as f32 * 0.40,
-                tempo: 5.2 + band * 0.25,
-                vision_control: 4.2 + (i % 7) as f32 * 0.35,
-                objective_conversion: 4.7 + (i % 6) as f32 * 0.36,
-                setup_control: 4.5 + (i % 5) as f32 * 0.34,
-                protection_support: 4.0 + (i % 4) as f32 * 0.45,
-                feed_risk: 2.0 + (i % 6) as f32 * 0.45,
+                a_combat:              n(5.8 + band * 0.34),
+                a_risk:                n(4.4 + (7.0 - band) * 0.25),
+                a_resource:            n(5.2 + (i % 5) as f32 * 0.45),
+                a_map_objective:       n(4.8 + (i % 6) as f32 * 0.42),
+                a_team:                n(4.5 + (i % 4) as f32 * 0.55),
+                fight_conversion:      n(5.0 + band * 0.30),
+                damage_pressure:       n(5.4 + band * 0.28),
+                death_cost:            n(3.5 + (i % 5) as f32 * 0.38),
+                survival_quality:      n(4.8 + (i % 6) as f32 * 0.35),
+                economy:               n(5.0 + (i % 5) as f32 * 0.40),
+                tempo:                 n(5.2 + band * 0.25),
+                vision_control:        n(4.2 + (i % 7) as f32 * 0.35),
+                objective_conversion:  n(4.7 + (i % 6) as f32 * 0.36),
+                setup_control:         n(4.5 + (i % 5) as f32 * 0.34),
+                protection_support:    n(4.0 + (i % 4) as f32 * 0.45),
+                feed_risk:             n(2.0 + (i % 6) as f32 * 0.45),
                 cluster_size,
                 founder_puuids: vec![],
             }

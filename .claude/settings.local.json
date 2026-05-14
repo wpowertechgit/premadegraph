@@ -31,7 +31,20 @@
       "PowerShell(docker compose up -d frontend 2>&1)",
       "Bash(npx tsc *)",
       "PowerShell(docker compose up *)",
-      "Bash(dotnet build *)"
+      "Bash(dotnet build *)",
+      "Bash(tee \"C:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\backend\\\\genetic-neurosim\\\\docs\\\\taskrun\\\\sim-1200-run.jsonl\")",
+      "Bash(sqlite3 *)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(curl -s http://localhost:3001/api/neurosim/cluster-export)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'datasetId={d[\\\\\"datasetId\\\\\"]} clusterCount={d[\\\\\"clusterCount\\\\\"]} totalMembers={d[\\\\\"totalMembersInClusters\\\\\"]}'\\)\")",
+      "Bash(curl -s \"http://localhost:3001/api/neurosim/datasets/flexset/cluster-export\")",
+      "Bash(curl -s \"http://localhost:3001/api/datasets\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(x.get\\('id'\\), x.get\\('refinedDbAbsolutePath','N/A'\\)\\) for x in d]\")",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const j=JSON.parse\\(d\\); j.forEach\\(x=>console.log\\(x.id, x.refinedDbAbsolutePath||'N/A'\\)\\)\")",
+      "PowerShell($resp = Invoke-RestMethod \"http://localhost:3001/api/datasets\"; $resp | ForEach-Object { Write-Host \"$\\($_.id\\) -> $\\($_.refinedDbAbsolutePath\\)\" })",
+      "Bash(docker exec premadegraph-backend-1 *)",
+      "Bash(node export-neurosim-clusters.js)",
+      "Bash(node *)"
     ]
   }
 }

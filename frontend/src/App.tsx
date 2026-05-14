@@ -21,6 +21,33 @@ const NAV_WIDTH_STORAGE_KEY = "premadegraph-sidebar-width";
 const NAV_WIDTH_MIN = 280;
 const NAV_WIDTH_MAX = 520;
 const COLLAPSED_NAV_WIDTH = 104;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/u, "");
+
+function apiUrl(path: string) {
+  return `${API_BASE_URL}${path}`;
+}
+
+async function readApiPayload(response: Response, fallbackMessage: string): Promise<any> {
+  const text = await response.text();
+  let payload: any = {};
+
+  if (text.trim()) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      if (!response.ok) {
+        throw new Error(`${fallbackMessage} (${response.status})`);
+      }
+      throw new Error("The server returned an invalid JSON response.");
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || `${fallbackMessage} (${response.status})`);
+  }
+
+  return payload;
+}
 
 type FeedbackState = {
   message: string;
@@ -173,6 +200,16 @@ function AppRoutes({ navCollapsed, onOpenLandingSidebar }: { navCollapsed: boole
   );
 }
 
+function RouteLocationTracker({ onPathChange }: { onPathChange: (path: string) => void }) {
+  const location = useLocation();
+
+  useEffect(() => {
+    onPathChange(location.pathname);
+  }, [location.pathname, onPathChange]);
+
+  return null;
+}
+
 function App() {
   const { t } = useI18n();
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -198,6 +235,7 @@ function App() {
   const [runtimeKeysLoading, setRuntimeKeysLoading] = useState(false);
   const [navResizeActive, setNavResizeActive] = useState(false);
   const [landingSidebarOpen, setLandingSidebarOpen] = useState(false);
+  const [currentPath, setCurrentPath] = useState(() => (typeof window !== "undefined" ? window.location.pathname : "/"));
 
   React.useEffect(() => {
     document.title = t.app.title;
@@ -270,11 +308,8 @@ function App() {
   const refreshDatasets = async () => {
     setDatasetLoading(true);
     try {
-      const response = await fetch("http://localhost:3001/api/datasets");
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to load datasets.");
-      }
+      const response = await fetch(apiUrl("/api/datasets"));
+      const payload = await readApiPayload(response, "Failed to load datasets.");
       setDatasets(Array.isArray(payload.datasets) ? payload.datasets : []);
       setCurrentDatasetId(payload.current || null);
     } finally {
@@ -285,11 +320,8 @@ function App() {
   const refreshRuntimeKeys = async () => {
     setRuntimeKeysLoading(true);
     try {
-      const response = await fetch("http://localhost:3001/api/runtime-keys");
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Failed to load runtime key metadata.");
-      }
+      const response = await fetch(apiUrl("/api/runtime-keys"));
+      const payload = await readApiPayload(response, "Failed to load runtime key metadata.");
       setRuntimeKeys(Array.isArray(payload.keys) ? payload.keys : []);
     } finally {
       setRuntimeKeysLoading(false);
@@ -297,6 +329,10 @@ function App() {
   };
 
   useEffect(() => {
+    if (currentPath === "/" && !landingSidebarOpen) {
+      return;
+    }
+
     void refreshDatasets().catch((error) => {
       console.error("Dataset load failed:", error);
       showFeedback(error instanceof Error ? error.message : "Failed to load datasets.", "error");
@@ -305,63 +341,50 @@ function App() {
       console.error("Runtime key metadata load failed:", error);
       showFeedback(error instanceof Error ? error.message : "Failed to load runtime key metadata.", "error");
     });
-  }, []);
+  }, [currentPath, landingSidebarOpen]);
 
   const createDataset = async (payload: { id: string; name: string; description: string }) => {
-    const response = await fetch("http://localhost:3001/api/datasets", {
+    const response = await fetch(apiUrl("/api/datasets"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
     });
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || "Failed to create dataset.");
-    }
+    await readApiPayload(response, "Failed to create dataset.");
     await refreshDatasets();
     showFeedback(`Dataset "${payload.name || payload.id}" created.`, "success");
   };
 
   const selectDataset = async (datasetId: string) => {
-    const response = await fetch(`http://localhost:3001/api/datasets/${encodeURIComponent(datasetId)}/select`, {
+    const response = await fetch(apiUrl(`/api/datasets/${encodeURIComponent(datasetId)}/select`), {
       method: "POST",
     });
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || "Failed to switch dataset.");
-    }
+    const result = await readApiPayload(response, "Failed to switch dataset.");
     setCurrentDatasetId(result.current || datasetId);
     showFeedback(`Dataset switched to ${result.dataset?.name || datasetId}.`, "success");
     window.location.reload();
   };
 
   const saveRuntimeKey = async (keyName: RuntimeKeyRecord["keyName"], value: string) => {
-    const response = await fetch(`http://localhost:3001/api/runtime-keys/${encodeURIComponent(keyName)}`, {
+    const response = await fetch(apiUrl(`/api/runtime-keys/${encodeURIComponent(keyName)}`), {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ value }),
     });
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || "Failed to update runtime key.");
-    }
+    await readApiPayload(response, "Failed to update runtime key.");
     await refreshRuntimeKeys();
     showFeedback(`${keyName} ${value.trim() ? "updated" : "cleared"}.`, "success");
   };
 
   const normalizePlayers = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/normalize-players", {
+      const response = await fetch(apiUrl("/api/normalize-players"), {
         method: "POST",
       });
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || t.app.alerts.normalizationError);
-      }
+      await readApiPayload(response, t.app.alerts.normalizationError);
 
       showFeedback(t.app.alerts.normalizationSuccess, "success");
     } catch (error) {
@@ -375,13 +398,10 @@ function App() {
 
   const generateGraph = async () => {
     try {
-      const response = await fetch("http://localhost:3001/api/generate-graph", {
+      const response = await fetch(apiUrl("/api/generate-graph"), {
         method: "POST",
       });
-
-      if (!response.ok) {
-        throw new Error(t.app.alerts.graphGenerationFailed);
-      }
+      await readApiPayload(response, t.app.alerts.graphGenerationFailed);
 
       showFeedback(`${t.app.alerts.graphGenerated} ${t.app.alerts.refreshGraph}`, "success");
     } catch (error) {
@@ -396,6 +416,7 @@ function App() {
   return (
     <BrowserRouter>
       <ViewTransitionLinkInterceptor />
+      <RouteLocationTracker onPathChange={setCurrentPath} />
       <div
         className={`app-shell${navCollapsed ? " is-collapsed" : ""}${isMobileLayout ? " is-mobile-layout" : ""}${mobileNavOpen ? " is-mobile-nav-open" : ""}`}
         style={{

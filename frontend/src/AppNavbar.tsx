@@ -199,12 +199,29 @@ export default function AppNavbar({
   const [createDatasetLoading, setCreateDatasetLoading] = useState(false);
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [runtimeKeyDrafts, setRuntimeKeyDrafts] = useState<Record<string, string>>({});
-  const [launchingDesktop] = useState(false);
+  const [launchingDesktop, setLaunchingDesktop] = useState(false);
 
-  const handleLaunchDesktop = () => {
+  const handleLaunchDesktop = async () => {
     const nodeWs   = "ws://localhost:3001/api/neurosim/desktop/v2/frames";
     const nodeHttp = "http://localhost:3001/api/neurosim/desktop/v1";
     const session  = currentDatasetId ?? "";
+    setLaunchingDesktop(true);
+    try {
+      const response = await fetch("/api/neurosim/launch-client", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datasetId: session || null }),
+      });
+
+      if (response.ok && (await response.json()).ok === true) {
+        return;
+      }
+    } catch {
+      // Fall through to the custom protocol path below.
+    } finally {
+      setLaunchingDesktop(false);
+    }
+
     const uri = `neurosim://?nodeWs=${encodeURIComponent(nodeWs)}&nodeHttp=${encodeURIComponent(nodeHttp)}&session=${encodeURIComponent(session)}`;
     window.location.href = uri;
   };

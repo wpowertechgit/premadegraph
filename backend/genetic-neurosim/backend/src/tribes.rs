@@ -109,10 +109,9 @@ pub struct TribeStats {
 
 impl TribeStats {
     pub fn from_profile(p: &crate::simulation::ClusterProfile) -> TribeStats {
-        // Linear normalization: raw score / 10.0 clamped to [0,1].
-        // Score 6.3 → 0.63. Preserves database proportionality without tanh squashing.
-        // Max scale 10.0 covers the full premadegraph opscore range.
-        let c = |v: f32| (v / 10.0).clamp(0.0, 1.0);
+        // Profiles arrive pre-normalized to [0,1] by server.js (/4.5 or /5.0).
+        // Clamp only — no further division.
+        let c = |v: f32| v.clamp(0.0, 1.0);
         TribeStats {
             a_combat: c(p.a_combat),
             a_risk: c(p.a_risk),
@@ -204,7 +203,7 @@ impl TribeState {
         home_tile: u16,
     ) -> TribeState {
         // max_pop uncapped so tiers earn through gameplay; start small in Tribe tier.
-        let max_population = (profile.cluster_size as u32 * 600).min(50_000).max(6_000);
+        let max_population = (profile.cluster_size as u32 * 200).min(10_000).max(500);
         let starting_pop   = (profile.cluster_size as u32 * 10).min(250).max(40);
         let founders = profile
             .founder_puuids
@@ -246,7 +245,7 @@ impl TribeState {
             main_camp_tile: home_tile,
             citizens: vec![],
             last_expansion_tick: 0,
-            expansion_cooldown_ticks: 8,
+            expansion_cooldown_ticks: 3,
             tile_integration: std::collections::HashMap::new(),
             migration_target_tile: u16::MAX, // sentinel: no target
             fitness_score: 0.0,

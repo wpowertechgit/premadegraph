@@ -58,4 +58,5 @@ services:
       - CHOKIDAR_USEPOLLING=true
       - BACKEND_URL=http://backend:3001
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy

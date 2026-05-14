@@ -73,5 +73,6 @@ public sealed class ClientDiagnostics
             LastFrameBytes = payloadBytes;
             LastDecodeError = error.Message;
         }
+        Console.WriteLine($"[net] decode error: bytes={payloadBytes} {error.GetType().Name}: {error.Message}");
     }
 }

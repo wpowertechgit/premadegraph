@@ -161,7 +161,7 @@ function launchMonoGameClient({ nodePort = 3001, datasetId } = {}) {
   if (!binary) {
     return { ok: false, error: "MonoGame client not built. Run: dotnet build backend/genetic-neurosim/client-monogame" };
   }
-  const nodeWs   = `ws://localhost:${nodePort}/api/neurosim/desktop/v1/frames`;
+  const nodeWs   = `ws://localhost:${nodePort}/api/neurosim/desktop/v2/frames`;
   const nodeHttp = `http://localhost:${nodePort}/api/neurosim/desktop/v1`;
   const args = [`--node-ws=${nodeWs}`, `--node-http=${nodeHttp}`];
   if (datasetId) args.push(`--session=${datasetId}`);

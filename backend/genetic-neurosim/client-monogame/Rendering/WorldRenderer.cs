@@ -63,6 +63,9 @@ public sealed class WorldRenderer : IDisposable
     // Cache biome profiles by BiomeId for fast ambient-tint lookups
     private readonly Dictionary<BiomeId, Color> _ambientTintCache = new();
 
+    public int LastTerrainTilesDrawn { get; private set; }
+    public string LastTerrainMode { get; private set; } = "none";
+
     public void DrawWorld(
         SpriteBatch spriteBatch,
         IReadOnlyList<RenderableTile> tiles,
@@ -82,14 +85,23 @@ public sealed class WorldRenderer : IDisposable
     {
         EnsureEffects(spriteBatch.GraphicsDevice);
         LoadBiomeTextures();
-        if (camera.Distance <= 900f)
+        LastTerrainTilesDrawn = 0;
+        LastTerrainMode = "none";
+
+        // 599 Flex tribes create a 190x190 map. The close 3D hex mesh path is
+        // too expensive at that scale; keep large network maps on strategic
+        // flat terrain while retaining borders, symbols, HUD, and selection.
+        var richTerrainDistance = tiles.Count > 12000 ? 0f : 900f;
+        if (camera.Distance <= richTerrainDistance)
         {
+            LastTerrainMode = "hex";
             DrawHexTerrain(spriteBatch.GraphicsDevice, tiles, camera);
             DrawTerritoryOverlays(spriteBatch, tiles, camera);
             DrawWaterOverlay(spriteBatch, tiles, camera);
         }
         else
         {
+            LastTerrainMode = "flat";
             // Strategic/overview zoom: render flat 2D biome quads so the map is always visible.
             // Owned tiles show tribe color. Much cheaper than 3D mesh at this scale.
             DrawFlatTerrainOverview(spriteBatch, tiles, camera);
@@ -264,6 +276,7 @@ public sealed class WorldRenderer : IDisposable
             }
 
             spriteBatch.Draw(_pixel, new Rectangle(x, y, pixelSize, pixelSize), color);
+            LastTerrainTilesDrawn++;
         }
 
         spriteBatch.End();
@@ -341,6 +354,7 @@ public sealed class WorldRenderer : IDisposable
                 groups[groupKey] = list;
             }
             list.Add(tile);
+            LastTerrainTilesDrawn++;
         }
 
         foreach (var ((biome, textureKey), batch) in groups)
@@ -414,6 +428,7 @@ public sealed class WorldRenderer : IDisposable
 
         var waterColor = new Color(30, 90, 180, 90);
         var viewport = _graphicsDevice.Viewport;
+        var (aabbMinX, aabbMinY, aabbMaxX, aabbMaxY) = ComputeVisibleAabb(camera, viewport, tiles[0].Size * 2f);
 
         spriteBatch.Begin(
             sortMode: SpriteSortMode.Deferred,
@@ -422,6 +437,9 @@ public sealed class WorldRenderer : IDisposable
         foreach (var tile in tiles)
         {
             if (tile.Biome != BiomeId.Riverland) continue;
+            if (tile.Center.X < aabbMinX || tile.Center.X > aabbMaxX ||
+                tile.Center.Y < aabbMinY || tile.Center.Y > aabbMaxY)
+                continue;
 
             var screenCenter = camera.HexToScreen(tile.Center, viewport);
             var screenEdge = camera.HexToScreen(tile.Center + new Vector2(tile.Size, 0f), viewport);

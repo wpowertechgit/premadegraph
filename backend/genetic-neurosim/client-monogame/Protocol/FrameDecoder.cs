@@ -89,13 +89,15 @@ public sealed class FrameDecoder
     {
         var offset = 0;
 
-        // ── Tribe records (50 bytes each) ──
+        var tribeRecordBytes = SelectFrameV1TribeRecordBytes(payload, tribeRecordCount);
+
+        // ── Tribe records ──
         var v1Tribes = new List<TribeFrameV1Record>((int)tribeRecordCount);
         for (var i = 0; i < tribeRecordCount; i++)
         {
-            var tribe = ReadTribeFrameV1Record(payload, offset);
+            var tribe = ReadTribeFrameV1Record(payload, offset, tribeRecordBytes);
             v1Tribes.Add(tribe);
-            offset += DesktopProtocol.FrameV1TribeRecordBytes;
+            offset += tribeRecordBytes;
         }
 
         // ── Flags byte ──
@@ -186,12 +188,33 @@ public sealed class FrameDecoder
         };
     }
 
-    private static TribeFrameV1Record ReadTribeFrameV1Record(ReadOnlySpan<byte> payload, int offset)
+    private static int SelectFrameV1TribeRecordBytes(ReadOnlySpan<byte> payload, uint tribeRecordCount)
+    {
+        var extendedBytes = checked((int)tribeRecordCount * DesktopProtocol.FrameV1TribeRecordBytes);
+        if (payload.Length >= extendedBytes + 1)
+        {
+            return DesktopProtocol.FrameV1TribeRecordBytes;
+        }
+
+        var legacyBytes = checked((int)tribeRecordCount * DesktopProtocol.LegacyFrameV1TribeRecordBytes);
+        if (payload.Length >= legacyBytes + 1)
+        {
+            return DesktopProtocol.LegacyFrameV1TribeRecordBytes;
+        }
+
+        throw new InvalidDataException(
+            $"FrameV1 payload too short for {tribeRecordCount} tribe records: {payload.Length} bytes.");
+    }
+
+    private static TribeFrameV1Record ReadTribeFrameV1Record(ReadOnlySpan<byte> payload, int offset, int recordBytes)
     {
         // E1: NN outputs — 7 floats starting at byte 60
         var nnOutputs = new float[7];
-        for (var i = 0; i < 7; i++)
-            nnOutputs[i] = ReadSingle(payload, offset + 60 + i * 4);
+        if (recordBytes >= DesktopProtocol.FrameV1TribeRecordBytes)
+        {
+            for (var i = 0; i < 7; i++)
+                nnOutputs[i] = ReadSingle(payload, offset + 60 + i * 4);
+        }
 
         return new TribeFrameV1Record(
             Id: ReadUInt32(payload, offset),
@@ -213,9 +236,9 @@ public sealed class FrameDecoder
             BehaviorState: payload[offset + 48],
             IsAlive: payload[offset + 49] != 0,
             // E1 extension
-            FitnessScore: ReadSingle(payload, offset + 50),
-            MigrationTargetTile: ReadUInt16(payload, offset + 54),
-            AllyTribeId: ReadUInt32(payload, offset + 56),
+            FitnessScore: recordBytes >= DesktopProtocol.FrameV1TribeRecordBytes ? ReadSingle(payload, offset + 50) : 0f,
+            MigrationTargetTile: recordBytes >= DesktopProtocol.FrameV1TribeRecordBytes ? ReadUInt16(payload, offset + 54) : ushort.MaxValue,
+            AllyTribeId: recordBytes >= DesktopProtocol.FrameV1TribeRecordBytes ? ReadUInt32(payload, offset + 56) : uint.MaxValue,
             NeuralOutputs: nnOutputs);
     }
 

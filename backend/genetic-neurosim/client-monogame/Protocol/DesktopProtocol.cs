@@ -18,6 +18,7 @@ public static class DesktopProtocol
     public const byte FlagTerritoryData = 0x08;
 
     // Record sizes (match Rust frame_v1.rs constants)
+    public const int LegacyFrameV1TribeRecordBytes = 50;
     // E1: extended from 50 → 88 (fitness f32, migration_target u16, ally_id u32, 7×f32 NN outputs)
     public const int FrameV1TribeRecordBytes = 88;
     public const int FrameV1TileRecordBytes = 9;
