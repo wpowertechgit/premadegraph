@@ -1,4 +1,5 @@
 using TribalNeuroSim.Client.Launcher;
+using TribalNeuroSim.Client.Assets;
 
 namespace TribalNeuroSim.Client;
 
@@ -20,6 +21,10 @@ public static class Program
 
         try
         {
+            ContentBootstrapper.EnsureContentAsync(cancellationToken: CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
             using var game = new GameRoot(launchOptions);
             game.Run();
         }

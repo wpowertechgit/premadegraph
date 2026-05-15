@@ -108,6 +108,13 @@ pub struct ControlConfig {
     /// O1: Named deterministic scenario. None = live dataset default.
     #[serde(default)]
     pub scenario_id: Option<String>,
+    /// Disable binary frame packing for offline analysis/test runs.
+    #[serde(default)]
+    pub headless: bool,
+    /// Target tiles per tribe for world sizing. 0 = use WorldGenerationConfig default (60).
+    /// Set to ~8 for 599-cluster runs to match 80-cluster reference density.
+    #[serde(default)]
+    pub tiles_per_tribe: u32,
 }
 
 impl Default for ControlConfig {
@@ -122,6 +129,8 @@ impl Default for ControlConfig {
             food_spawn_rate: 0.1,
             energy_decay: 0.01,
             scenario_id: None,
+            headless: false,
+            tiles_per_tribe: 0,
         }
     }
 }
@@ -1005,14 +1014,25 @@ pub struct TribeSimulation {
     /// C2: Dispute registry — tracks when each (i,j) tribe pair first began disputing.
     /// Key is (min_idx, max_idx). Removed when no shared disputed tile remains.
     dispute_registry: std::collections::BTreeMap<(usize, usize), u64>,
+    /// Per-tick cache: tile index → tribe array index. u32::MAX = neutral/unknown.
+    /// Rebuilt at the start of each step() to accelerate O(n²) neighbor scans.
+    tile_tribe_idx: Vec<u32>,
+    /// Per-tick cache: tribe id → tribe array index for alive tribes.
+    tribe_id_to_idx: HashMap<u32, usize>,
+    /// Tick when the last tribe death occurred. Used for stagnation detection.
+    last_death_tick: u64,
 }
 
 impl TribeSimulation {
     pub fn shared(config: ControlConfig) -> SharedSimulation {
         use rand::SeedableRng;
-        let wgen = crate::world::WorldGenerationConfig::from_clusters(config.world_seed, &config.clusters);
+        let mut wgen = crate::world::WorldGenerationConfig::from_clusters(config.world_seed, &config.clusters);
+        if config.tiles_per_tribe > 0 {
+            wgen.target_tiles_per_tribe = config.tiles_per_tribe as usize;
+        }
         let world = crate::world::WorldGrid::new(&wgen);
         let rng = rand::rngs::SmallRng::seed_from_u64(config.world_seed);
+        let total_tiles = world.total_tiles;
         let mut sim = TribeSimulation {
             config,
             world,
@@ -1034,6 +1054,9 @@ impl TribeSimulation {
             lineage_registry: LineageRegistry::new(),
             tombstone: TombstoneLedger::new(),
             dispute_registry: std::collections::BTreeMap::new(),
+            tile_tribe_idx: vec![u32::MAX; total_tiles],
+            tribe_id_to_idx: HashMap::new(),
+            last_death_tick: 0,
         };
         sim.initialize_tribes();
         Arc::new(RwLock::new(sim))
@@ -1177,7 +1200,10 @@ impl TribeSimulation {
         if self.config.scenario_id.as_deref() == Some("two_tribes_one_border") {
             self.initialize_two_tribes_scenario();
         } else {
-            let wgen = crate::world::WorldGenerationConfig::from_clusters(self.config.world_seed, &self.config.clusters);
+            let mut wgen = crate::world::WorldGenerationConfig::from_clusters(self.config.world_seed, &self.config.clusters);
+            if self.config.tiles_per_tribe > 0 {
+                wgen.target_tiles_per_tribe = self.config.tiles_per_tribe as usize;
+            }
             self.world = crate::world::WorldGrid::new(&wgen);
             self.rng = rand::rngs::SmallRng::seed_from_u64(self.config.world_seed);
             self.initialize_tribes();
@@ -1442,8 +1468,34 @@ impl TribeSimulation {
         crate::war::ActiveWarsResponse { wars, active_count }
     }
 
+    /// Rebuild per-tick O(1) lookup caches. Called at start of each step().
+    fn rebuild_tile_cache(&mut self) {
+        self.tribe_id_to_idx.clear();
+        for (i, t) in self.tribes.iter().enumerate() {
+            if t.alive {
+                self.tribe_id_to_idx.insert(t.id as u32, i);
+            }
+        }
+        let n = self.world.total_tiles;
+        if self.tile_tribe_idx.len() != n {
+            self.tile_tribe_idx.resize(n, u32::MAX);
+        }
+        for tile_idx in 0..n {
+            let occ = &self.world.tile_occupants[tile_idx];
+            self.tile_tribe_idx[tile_idx] = if occ.is_empty() {
+                u32::MAX
+            } else {
+                match self.tribe_id_to_idx.get(&occ[0].tribe_id) {
+                    Some(&idx) => idx as u32,
+                    None => u32::MAX,
+                }
+            };
+        }
+    }
+
     pub fn step(&mut self) -> Vec<u8> {
         self.tick += 1;
+        self.rebuild_tile_cache();
 
         // Snapshot for extinction detection (alive before this tick)
         let was_alive: Vec<bool> = self.tribes.iter().map(|t| t.alive).collect();
@@ -1495,6 +1547,11 @@ impl TribeSimulation {
         // C3: Proactive conquest pressure — tribes with high raid/aggression pick targeted rivals
         if self.tick % 20 == 0 {
             self.apply_opportunity_war();
+        }
+
+        // Last-stand sweep: when few survivors stagnate for 300 ticks, force total war.
+        if self.tick % 10 == 0 {
+            self.apply_stagnation_war_sweep();
         }
 
         // 4. Combat resolution (Task 8)
@@ -1565,23 +1622,28 @@ impl TribeSimulation {
 
         // Population-based polity tier promotion (never demote)
         {
+            let tick = self.tick;
             let promotions: Vec<(usize, crate::tribes::PolityTier)> = self.tribes.iter()
                 .enumerate()
                 .filter(|(_, t)| t.alive)
                 .filter_map(|(i, t)| {
                     let pop_tier = Self::polity_tier_for_population(t.population);
-                    if pop_tier as u8 > t.polity_tier as u8 { Some((i, pop_tier)) } else { None }
+                    if pop_tier as u8 > t.polity_tier as u8 {
+                        Some((i, pop_tier))
+                    } else {
+                        None
+                    }
                 })
                 .collect();
-            let tick = self.tick;
             let gen = self.generation;
             for (i, new_tier) in promotions {
                 self.tribes[i].polity_tier = new_tier;
+                self.tribes[i].tier_entered_tick = tick;
                 // Raise max_population so next tier can be reached
                 let required_max: u32 = match new_tier {
-                    crate::tribes::PolityTier::City    => 12_000,
-                    crate::tribes::PolityTier::Duchy   => 30_000,
-                    crate::tribes::PolityTier::Kingdom => 80_000,
+                    crate::tribes::PolityTier::City    =>  12_000,
+                    crate::tribes::PolityTier::Duchy   =>  30_000,
+                    crate::tribes::PolityTier::Kingdom =>  80_000,
                     crate::tribes::PolityTier::Empire  => 200_000,
                     _ => self.tribes[i].max_population,
                 };
@@ -1630,6 +1692,9 @@ impl TribeSimulation {
             .enumerate()
             .filter_map(|(i, (&was, t))| if was && !t.alive { Some(i) } else { None })
             .collect();
+        if !extinct_indices.is_empty() {
+            self.last_death_tick = tick;
+        }
         for tribe_idx in &extinct_indices {
             let cause = if self.tribes[*tribe_idx].population == 0 { "extinction" } else { "unknown" };
             self.cleanup_tribe(*tribe_idx, cause);
@@ -1650,8 +1715,14 @@ impl TribeSimulation {
             self.log_sim_health();
         }
 
-        // 10. Pack and return current frame
-        self.pack_current_frame()
+        // 10. Pack and return current frame unless this is an offline analytics run.
+        if self.config.headless {
+            self.last_frame.clear();
+            self.last_frame_v1.clear();
+            Vec::new()
+        } else {
+            self.pack_current_frame()
+        }
     }
 
     fn refresh_fitness_scores(&mut self) {
@@ -2106,15 +2177,6 @@ impl TribeSimulation {
                 continue;
             }
 
-            // Territory cap per polity tier: Tribe≤25, City≤80, Duchy/Kingdom/Empire=∞
-            let tier_cap: u32 = match tribe.polity_tier {
-                crate::tribes::PolityTier::Tribe => 25,
-                crate::tribes::PolityTier::City  => 80,
-                _                                => u32::MAX,
-            };
-            if tile_count >= tier_cap {
-                continue;
-            }
 
             // Resource drive (output index 1) drives expansion
             let resource_drive = tribe.last_outputs[1];
@@ -2190,14 +2252,15 @@ impl TribeSimulation {
     /// True if any adjacent tribe has population < self.population * 0.6 (imperialistic target).
     fn has_weaker_neighbor(&self, tribe_idx: usize) -> bool {
         let my_pop = self.tribes[tribe_idx].population;
-        let my_tiles: std::collections::HashSet<u16> =
-            self.tribes[tribe_idx].territory.iter().cloned().collect();
-        for (i, other) in self.tribes.iter().enumerate() {
-            if i == tribe_idx || !other.alive { continue; }
-            if other.population as f32 >= my_pop as f32 * 0.6 { continue; }
-            for &tile in &other.territory {
-                let adjacent = self.world.adjacent_tiles(tile as usize);
-                if adjacent.iter().any(|&a| my_tiles.contains(&(a as u16))) {
+        let threshold = my_pop as f32 * 0.6;
+        for &tile in &self.tribes[tribe_idx].territory {
+            for adj in self.world.adjacent_tiles(tile as usize) {
+                let owner_raw = self.tile_tribe_idx[adj];
+                if owner_raw == u32::MAX { continue; }
+                let j = owner_raw as usize;
+                if j == tribe_idx { continue; }
+                let other = &self.tribes[j];
+                if other.alive && (other.population as f32) < threshold {
                     return true;
                 }
             }
@@ -2234,22 +2297,21 @@ impl TribeSimulation {
 
     /// Returns the index of the weakest (pop × a_combat) adjacent rival tribe, if any.
     fn find_weakest_adjacent_target(&self, tribe_idx: usize) -> Option<usize> {
-        let my_tiles: std::collections::HashSet<u16> =
-            self.tribes[tribe_idx].territory.iter().cloned().collect();
         let my_ally = self.tribes[tribe_idx].ally_tribe;
-
         let mut best: Option<(usize, f32)> = None;
-        for (j, other) in self.tribes.iter().enumerate() {
-            if j == tribe_idx || !other.alive { continue; }
-            if my_ally == Some(j) { continue; }
-            let adjacent = other.territory.iter().any(|&tile| {
-                self.world.adjacent_tiles(tile as usize)
-                    .iter().any(|&a| my_tiles.contains(&(a as u16)))
-            });
-            if !adjacent { continue; }
-            let strength = other.population as f32 * other.stats.a_combat;
-            if best.map_or(true, |(_, s)| strength < s) {
-                best = Some((j, strength));
+        let mut seen = std::collections::HashSet::new();
+        for &tile in &self.tribes[tribe_idx].territory {
+            for adj in self.world.adjacent_tiles(tile as usize) {
+                let owner_raw = self.tile_tribe_idx[adj];
+                if owner_raw == u32::MAX { continue; }
+                let j = owner_raw as usize;
+                if j == tribe_idx || !seen.insert(j) { continue; }
+                if my_ally == Some(j) { continue; }
+                if !self.tribes[j].alive { continue; }
+                let strength = self.tribes[j].population as f32 * self.tribes[j].stats.a_combat;
+                if best.map_or(true, |(_, s)| strength < s) {
+                    best = Some((j, strength));
+                }
             }
         }
         best.map(|(j, _)| j)
@@ -2259,30 +2321,100 @@ impl TribeSimulation {
     /// Used by surrounded tribes seeking a desperate alliance.
     fn find_least_aggressive_adjacent(&self, tribe_idx: usize) -> Option<usize> {
         use crate::tribes::BehaviorState;
-        let my_tiles: std::collections::HashSet<u16> =
-            self.tribes[tribe_idx].territory.iter().cloned().collect();
         let my_ally = self.tribes[tribe_idx].ally_tribe;
-
         let mut best: Option<(usize, f32)> = None;
-        for (j, other) in self.tribes.iter().enumerate() {
-            if j == tribe_idx || !other.alive { continue; }
-            if my_ally == Some(j) { continue; }
-            if other.ally_tribe.is_some() { continue; }
-            match other.behavior {
-                BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Allied => continue,
-                _ => {}
-            }
-            let adjacent = other.territory.iter().any(|&tile| {
-                self.world.adjacent_tiles(tile as usize)
-                    .iter().any(|&a| my_tiles.contains(&(a as u16)))
-            });
-            if !adjacent { continue; }
-            let aggr = other.last_outputs[0];
-            if best.map_or(true, |(_, a)| aggr < a) {
-                best = Some((j, aggr));
+        let mut seen = std::collections::HashSet::new();
+        for &tile in &self.tribes[tribe_idx].territory {
+            for adj in self.world.adjacent_tiles(tile as usize) {
+                let owner_raw = self.tile_tribe_idx[adj];
+                if owner_raw == u32::MAX { continue; }
+                let j = owner_raw as usize;
+                if j == tribe_idx || !seen.insert(j) { continue; }
+                if my_ally == Some(j) { continue; }
+                let other = &self.tribes[j];
+                if !other.alive { continue; }
+                if other.ally_tribe.is_some() { continue; }
+                match other.behavior {
+                    BehaviorState::AtWar | BehaviorState::Imploding | BehaviorState::Allied => continue,
+                    _ => {}
+                }
+                let aggr = other.last_outputs[0];
+                if best.map_or(true, |(_, a)| aggr < a) {
+                    best = Some((j, aggr));
+                }
             }
         }
         best.map(|(j, _)| j)
+    }
+
+    /// Total-war decree: when ≤6 survivors have not killed anyone for 300 ticks,
+    /// force every alive tribe into AtWar against their nearest rival.
+    /// Called every 10 ticks; fires only when stagnation conditions are met.
+    fn apply_stagnation_war_sweep(&mut self) {
+        use crate::tribes::BehaviorState;
+
+        let alive_count = self.tribes.iter().filter(|t| t.alive).count();
+        if alive_count > 6 { return; }
+        if alive_count <= 1 { return; }
+        if self.tick.saturating_sub(self.last_death_tick) < 300 { return; }
+
+        let tick = self.tick;
+        let gen = self.generation;
+
+        if !self.config.headless {
+            println!("[TOTAL WAR tick={}] stagnation detected — {} survivors, last death tick={} — forcing total war",
+                tick, alive_count, self.last_death_tick);
+        }
+
+        // Collect all alive tribes before mutating
+        let alive_indices: Vec<usize> = (0..self.tribes.len())
+            .filter(|&i| self.tribes[i].alive)
+            .collect();
+
+        for &i in &alive_indices {
+            // Find nearest alive enemy by home-tile hex distance
+            let my_home = self.tribes[i].home_tile as usize;
+            let target = (0..self.tribes.len())
+                .filter(|&j| j != i && self.tribes[j].alive)
+                .min_by_key(|&j| self.world.hex_distance(my_home, self.tribes[j].home_tile as usize));
+
+            let Some(target_idx) = target else { continue };
+
+            self.tribes[i].behavior = BehaviorState::AtWar;
+            self.tribes[i].target_tribe = Some(target_idx);
+            self.tribes[i].ticks_in_state = 0;
+
+            let atk_id = self.tribes[i].id as u32;
+            let def_id = self.tribes[target_idx].id as u32;
+            let already = self.active_wars.iter().any(|w| {
+                w.status == crate::war::WarStatus::Active
+                    && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                        || (w.attacker_id == def_id && w.defender_id == atk_id))
+            });
+            if !already {
+                let war_id = self.next_war_id;
+                self.next_war_id += 1;
+                self.active_wars.push(crate::war::WarState {
+                    war_id,
+                    attacker_id: atk_id,
+                    defender_id: def_id,
+                    start_tick: tick,
+                    status: crate::war::WarStatus::Active,
+                    attacker_casualties: 0,
+                    defender_casualties: 0,
+                    battle_tile: Some(self.tribes[target_idx].home_tile as u32),
+                });
+                let mut ev = crate::events::SimulationEvent::new(
+                    0, tick, gen,
+                    crate::events::EventType::WarDeclared,
+                    crate::events::EventSeverity::Important,
+                    atk_id,
+                );
+                ev.other_tribe_id = def_id;
+                ev.war_id = war_id;
+                self.push_event(ev);
+            }
+        }
     }
 
     /// Proactive conquest: tribes with high raid/aggression drives and a weaker adjacent rival
@@ -2292,6 +2424,7 @@ impl TribeSimulation {
         use crate::tribes::BehaviorState;
         let tick = self.tick;
         let gen = self.generation;
+        let alive_count = self.tribes.iter().filter(|t| t.alive).count();
 
         // Collect (attacker, target) before any mutation
         let mut declarations: Vec<(usize, usize)> = Vec::new();
@@ -2303,9 +2436,22 @@ impl TribeSimulation {
             }
             let raid = self.tribes[i].last_outputs[4];
             let aggr = self.tribes[i].last_outputs[0];
-            let trigger = raid > 0.58 || (aggr > 0.48 && self.has_weaker_neighbor(i));
+            // Endgame: force war by hex-distance when final standoff begins.
+            // 20 fires organically around tick 3250 in 599-cluster runs before frozen-front lock.
+            let endgame_threshold = 20usize;
+            let endgame = alive_count <= endgame_threshold;
+            let trigger = endgame || raid > 0.58 || (aggr > 0.48 && self.has_weaker_neighbor(i));
             if !trigger { continue; }
-            if let Some(target_idx) = self.find_weakest_adjacent_target(i) {
+
+            let target = self.find_weakest_adjacent_target(i).or_else(|| {
+                if !endgame { return None; }
+                let my_home = self.tribes[i].home_tile as usize;
+                (0..self.tribes.len())
+                    .filter(|&j| j != i && self.tribes[j].alive)
+                    .min_by_key(|&j| self.world.hex_distance(my_home, self.tribes[j].home_tile as usize))
+            });
+
+            if let Some(target_idx) = target {
                 declarations.push((i, target_idx));
             }
         }
@@ -2350,10 +2496,12 @@ impl TribeSimulation {
                 ev.other_tribe_id = def_id;
                 ev.war_id = war_id;
                 self.push_event(ev);
-                println!("[OPPORTUNITY WAR tick={}] tribe_{} → tribe_{} (raid={:.2} aggr={:.2})",
-                    tick, atk_id, def_id,
-                    self.tribes[atk_idx].last_outputs[4],
-                    self.tribes[atk_idx].last_outputs[0]);
+                if !self.config.headless {
+                    println!("[OPPORTUNITY WAR tick={}] tribe_{} → tribe_{} (raid={:.2} aggr={:.2})",
+                        tick, atk_id, def_id,
+                        self.tribes[atk_idx].last_outputs[4],
+                        self.tribes[atk_idx].last_outputs[0]);
+                }
             }
         }
     }
@@ -2438,7 +2586,9 @@ impl TribeSimulation {
                 ev.other_tribe_id = def_id;
                 ev.war_id = war_id;
                 self.push_event(ev);
-                println!("[SURROUNDED tick={}] tribe_{} breaks out → war on tribe_{}", tick, atk_id, def_id);
+                if !self.config.headless {
+                    println!("[SURROUNDED tick={}] tribe_{} breaks out → war on tribe_{}", tick, atk_id, def_id);
+                }
             }
         }
 
@@ -2468,7 +2618,9 @@ impl TribeSimulation {
             ev.other_tribe_id = tgt_id;
             ev.flags = 4; // desperate_alliance
             self.push_event(ev);
-            println!("[SURROUNDED tick={}] tribe_{} desperate alliance → tribe_{}", tick, req_id, tgt_id);
+            if !self.config.headless {
+                println!("[SURROUNDED tick={}] tribe_{} desperate alliance → tribe_{}", tick, req_id, tgt_id);
+            }
         }
 
         for i in desp_trans {
@@ -2476,7 +2628,9 @@ impl TribeSimulation {
             if matches!(self.tribes[i].behavior, BehaviorState::Desperate) { continue; }
             self.tribes[i].behavior = BehaviorState::Desperate;
             self.tribes[i].ticks_in_state = 0;
-            println!("[SURROUNDED tick={}] tribe_{} boxed in → Desperate", tick, self.tribes[i].id);
+            if !self.config.headless {
+                println!("[SURROUNDED tick={}] tribe_{} boxed in → Desperate", tick, self.tribes[i].id);
+            }
         }
     }
 
@@ -2527,7 +2681,9 @@ impl TribeSimulation {
         let tick = self.tick;
         let gen = self.generation;
         for (atk_id, def_id, battle_tile) in new_war_pairs {
-            println!("[WAR tick={}] tribe_{} declares war on tribe_{}", tick, atk_id, def_id);
+            if !self.config.headless {
+                println!("[WAR tick={}] tribe_{} declares war on tribe_{}", tick, atk_id, def_id);
+            }
             let war_id = self.next_war_id;
             self.next_war_id += 1;
             self.active_wars.push(crate::war::WarState {
@@ -2657,7 +2813,9 @@ impl TribeSimulation {
             if self.tribes[attacker_idx].population == 0 {
                 self.tribes[attacker_idx].alive = false;
                 self.tombstone.record_death(&self.tribes[attacker_idx], self.tick, "defeated-in-war");
-                println!("[WAR tick={}] tribe_{} defeated by tribe_{} (defender won)", self.tick, atk_id, def_id);
+                if !self.config.headless {
+                    println!("[WAR tick={}] tribe_{} defeated by tribe_{} (defender won)", self.tick, atk_id, def_id);
+                }
                 // L1: defender won — attacker wiped out
                 let ended_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
                     w.status == crate::war::WarStatus::Active
@@ -2687,7 +2845,9 @@ impl TribeSimulation {
             if self.tribes[defender_idx].population == 0 {
                 self.tribes[defender_idx].alive = false;
                 self.tombstone.record_death(&self.tribes[defender_idx], self.tick, "defeated-in-war");
-                println!("[WAR tick={}] tribe_{} defeated tribe_{} (attacker won)", self.tick, atk_id, def_id);
+                if !self.config.headless {
+                    println!("[WAR tick={}] tribe_{} defeated tribe_{} (attacker won)", self.tick, atk_id, def_id);
+                }
                 // Absorb territory and founders
                 let absorbed_territory: Vec<u16> = self.tribes[defender_idx].territory.clone();
                 let absorbed_founders: Vec<crate::tribes::FounderTag> =
@@ -2880,9 +3040,9 @@ impl TribeSimulation {
             let occupants = self.world.get_tile_occupants(tile_idx);
             if occupants.len() < 2 { continue; }
 
-            // Resolve occupant tribe_id → tribe index
+            // O(1) lookup via cached tribe_id → index map
             let indices: Vec<usize> = occupants.iter()
-                .filter_map(|occ| self.tribes.iter().position(|t| t.alive && t.id as u32 == occ.tribe_id))
+                .filter_map(|occ| self.tribe_id_to_idx.get(&occ.tribe_id).copied())
                 .collect();
 
             for a in 0..indices.len() {
@@ -2964,7 +3124,9 @@ impl TribeSimulation {
                 ev.other_tribe_id = id_j;
                 ev.flags = 1; // resolution_kind = alliance
                 self.push_event(ev);
-                println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via alliance", tick, id_i, id_j);
+                if !self.config.headless {
+                    println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via alliance", tick, id_i, id_j);
+                }
                 continue;
             }
 
@@ -3031,7 +3193,9 @@ impl TribeSimulation {
                     ev2.other_tribe_id = def_id;
                     ev2.flags = 2; // resolution_kind = war
                     self.push_event(ev2);
-                    println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via war declaration", tick, atk_id, def_id);
+                    if !self.config.headless {
+                        println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: resolved via war declaration", tick, atk_id, def_id);
+                    }
                     self.dispute_registry.remove(&(i, j));
                 }
             } else {
@@ -3068,7 +3232,9 @@ impl TribeSimulation {
                 ev.other_tribe_id = atk_id;
                 ev.flags = 3; // resolution_kind = retreat
                 self.push_event(ev);
-                println!("[DISPUTE tick={}] tribe_{} retreats from tribe_{} ({} tiles yielded)", tick, def_id, atk_id, tiles_to_yield.len());
+                if !self.config.headless {
+                    println!("[DISPUTE tick={}] tribe_{} retreats from tribe_{} ({} tiles yielded)", tick, def_id, atk_id, tiles_to_yield.len());
+                }
             }
         }
     }
@@ -3146,13 +3312,13 @@ impl TribeSimulation {
     /// A_team below this triggers rebellion.
     pub const REBELLION_A_TEAM_THRESHOLD: f32 = 0.25;
 
-    /// Map total unique constituent count to polity tier.
+    /// Map total unique constituent count to polity tier (merger/alliance path).
     fn polity_tier_for_count(total: usize) -> crate::tribes::PolityTier {
         use crate::tribes::PolityTier;
         if total >= 100 { PolityTier::Empire }
         else if total >= 50 { PolityTier::Kingdom }
         else if total >= 25 { PolityTier::Duchy }
-        else if total >= 3 { PolityTier::City }
+        else if total >=  3 { PolityTier::City }
         else { PolityTier::Tribe }
     }
 
@@ -3295,7 +3461,10 @@ impl TribeSimulation {
 
         let new_tier = Self::polity_tier_for_count(total_in_polity);
         let tier_upgraded = new_tier as u8 > self.tribes[absorber].polity_tier as u8;
-        if tier_upgraded { self.tribes[absorber].polity_tier = new_tier; }
+        if tier_upgraded {
+            self.tribes[absorber].polity_tier = new_tier;
+            self.tribes[absorber].tier_entered_tick = self.tick;
+        }
 
         self.tribes[absorbed].behavior = BehaviorState::Administering;
         self.tribes[absorbed].parent_polity_id = Some(absorber_id);
@@ -3391,6 +3560,7 @@ impl TribeSimulation {
         self.tribes[parent_id].constituent_tribe_ids.retain(|&cid| cid != tribe_id);
         self.tribes[tribe_idx].parent_polity_id = None;
         self.tribes[tribe_idx].polity_tier = PolityTier::Tribe;
+        self.tribes[tribe_idx].tier_entered_tick = self.tick;
         self.tribes[tribe_idx].behavior = BehaviorState::Settling;
         self.tribes[tribe_idx].ticks_in_state = 0;
         self.tribes[tribe_idx].specialization_role = SpecializationRole::Generalist;
@@ -3655,7 +3825,7 @@ impl TribeSimulation {
             + 32;
         let mut buf = Vec::with_capacity(approx_cap);
 
-        // ── Per-tribe records (46 bytes each) ──
+        // ── Per-tribe records (88 bytes each: 50 base + 38 E1 extension) ──
         for tribe in &alive_tribes {
             push_u32(&mut buf, tribe.id as u32);                          // 4
             buf.push(tribe.polity_tier as u8);                            // 1
@@ -4285,7 +4455,7 @@ mod harness_tests {
                 (0.35 + band * 0.35).min(1.0),           // a_combat 0.35–0.70
                 (0.30 + ((i % 5) as f32) * 0.10).min(1.0), // a_resource 0.30–0.70
                 (0.40 + ((i % 4) as f32) * 0.12).min(1.0), // a_team 0.40–0.76
-                (2 + (i % 5) as u32),                        // cluster_size 2–6
+                2 + (i % 5) as u32,                          // cluster_size 2-6
             )
         }).collect();
 
@@ -4662,7 +4832,7 @@ mod harness_tests {
 
     // ─── FLEXSET-EMPIRE: real flex-queue cluster profiles → one-empire finale ──
     //
-    // Loads top 80 clusters from flexset-clusters.json (run export-neurosim-clusters.js first).
+    // Loads all clusters from flexset-clusters.json (run export-neurosim-clusters.js first).
     // Runs until alive==1 or 10 000-tick cap. Executed TWICE with seed 7777; both fingerprints
     // must match exactly (determinism check). Shows tombstone ledger for all fallen tribes.
     // Run: cargo test sim_flexset_empire -- --nocapture --ignored
@@ -4684,36 +4854,34 @@ mod harness_tests {
             clusters: Vec<ClusterProfile>,
         }
         let export: Export = serde_json::from_str(&json_str).expect("invalid flexset-clusters.json");
-        let clusters: Vec<ClusterProfile> = export.clusters.into_iter().take(80).collect();
+        let clusters: Vec<ClusterProfile> = export.clusters;
         let tribe_count = clusters.len();
 
         println!(
-            "\n=== FLEXSET-EMPIRE ===\nDataset: {} | total: {} | using top: {} | seed: 7777",
+            "\n=== FLEXSET-EMPIRE ===\nDataset: {} | total: {} | using: {} | seed: 7777",
             export.dataset_id, export.cluster_count, tribe_count,
         );
-
-        // Inline tombstone record (we track deaths as they happen)
-        #[derive(Debug, Clone, PartialEq)]
-        struct Death {
-            id: usize, cluster_id: String, tick: u64,
-            tier: u8, pop: u32, tiles: usize, cause: String,
-        }
 
         // Fingerprint for determinism comparison
         #[derive(Debug, PartialEq)]
         struct Fingerprint {
-            ticks_run: u64,
+            ticks_run: u64, survivor_count: usize,
             winner_id: usize, winner_cluster: String,
             winner_tier: u8, winner_tiles: usize, winner_pop: u32,
             total_wars: usize, death_count: usize,
             death_order: Vec<u32>, // tombstone tribe_ids in order
         }
 
-        let run = |seed: u64, print: bool| -> Fingerprint {
-            let config = ControlConfig { clusters: clusters.clone(), world_seed: seed, ..Default::default() };
+        let run = |seed: u64, print: bool| -> (Fingerprint, Vec<crate::tombstone::TombstoneRecord>) {
+            let config = ControlConfig {
+                clusters: clusters.clone(),
+                world_seed: seed,
+                headless: true,
+                ..Default::default()
+            };
             let sim_arc = TribeSimulation::shared(config);
             let mut ticks = 0u64;
-            const MAX_TICKS: u64 = 10_000;
+            const MAX_TICKS: u64 = 20_000;
 
             loop {
                 let alive_count = sim_arc.read().tribes.iter().filter(|t| t.alive).count();
@@ -4734,8 +4902,9 @@ mod harness_tests {
             let sim = sim_arc.read();
             let survivors: Vec<_> = sim.tribes.iter().filter(|t| t.alive).collect();
             let winner = survivors.first().map_or(&sim.tribes[0], |v| v);
-            Fingerprint {
+            let fp = Fingerprint {
                 ticks_run: ticks,
+                survivor_count: survivors.len(),
                 winner_id: winner.id,
                 winner_cluster: winner.cluster_id.clone(),
                 winner_tier: winner.polity_tier as u8,
@@ -4744,57 +4913,47 @@ mod harness_tests {
                 total_wars: sim.active_wars.len(),
                 death_count: sim.tombstone.count(),
                 death_order: sim.tombstone.all_records().iter().map(|r| r.tribe_id).collect(),
-            }
+            };
+            (fp, sim.tombstone.all_records().to_vec())
         };
 
         // ── Run 1 (with live output) ──────────────────────────────────────────
         println!("\n── RUN 1 ──");
-        let fp1 = run(7_777, true);
+        let (fp1, tombstones1) = run(7_777, true);
 
-        // Print tombstone from a fresh run (run 1 state is consumed; re-run briefly for tombstone)
-        {
-            let config = ControlConfig { clusters: clusters.clone(), world_seed: 7_777, ..Default::default() };
-            let sim_arc = TribeSimulation::shared(config);
-            let mut ticks = 0u64;
-            loop {
-                let alive_count = sim_arc.read().tribes.iter().filter(|t| t.alive).count();
-                if alive_count <= 1 || ticks >= 10_000 { break; }
-                sim_arc.write().step();
-                ticks += 1;
-            }
-            let sim = sim_arc.read();
-            println!("\n=== TOMBSTONE LEDGER ({} tribes fallen) ===", sim.tombstone.count());
-            for r in sim.tombstone.all_records() {
-                println!(
-                    "  tick={:5} | id={:3} | cluster={:<28} | tier={} | pop={:6} | tiles={:4} | {}",
-                    r.tick_died, r.tribe_id, r.cluster_id, r.generation_died,
-                    r.population_at_death, r.territory_at_death, r.cause,
-                );
-            }
+        println!("\n=== TOMBSTONE LEDGER ({} tribes fallen) ===", tombstones1.len());
+        for r in &tombstones1 {
+            println!(
+                "  tick={:5} | id={:3} | cluster={:<28} | tier={} | pop={:6} | tiles={:4} | {}",
+                r.tick_died, r.tribe_id, r.cluster_id, r.generation_died,
+                r.population_at_death, r.territory_at_death, r.cause,
+            );
         }
 
         println!(concat!(
             "\n=== FLEXSET-EMPIRE RUN 1 ===\n",
             "  ticks:   {}\n",
+            "  alive:   {}\n",
             "  winner:  tribe_{} ({})\n",
             "  tier:    {}\n",
             "  tiles:   {}\n",
             "  pop:     {}\n",
             "  wars:    {}\n",
             "=== END RUN 1 ===",
-        ), fp1.ticks_run, fp1.winner_id, fp1.winner_cluster,
+        ), fp1.ticks_run, fp1.survivor_count, fp1.winner_id, fp1.winner_cluster,
            fp1.winner_tier, fp1.winner_tiles, fp1.winner_pop, fp1.total_wars);
 
         // ── Run 2 (silent — determinism check) ───────────────────────────────
         println!("\n── RUN 2 (determinism check, silent) ──");
-        let fp2 = run(7_777, false);
+        let (fp2, _) = run(7_777, false);
         println!(
-            "Run 2: ticks={} winner=tribe_{} ({}) tier={} tiles={} pop={} wars={} deaths={}",
-            fp2.ticks_run, fp2.winner_id, fp2.winner_cluster,
+            "Run 2: ticks={} alive={} winner=tribe_{} ({}) tier={} tiles={} pop={} wars={} deaths={}",
+            fp2.ticks_run, fp2.survivor_count, fp2.winner_id, fp2.winner_cluster,
             fp2.winner_tier, fp2.winner_tiles, fp2.winner_pop, fp2.total_wars, fp2.death_count,
         );
 
         assert_eq!(fp1, fp2, "simulation must be deterministic across both runs with seed=7777");
+        assert_eq!(fp1.survivor_count, 1, "simulation must end with exactly one surviving tribe");
         assert!(fp1.winner_tier >= PolityTier::Kingdom as u8,
             "final survivor must be Kingdom+ tier; got tier={}", fp1.winner_tier);
         println!("\n✓ DETERMINISM CONFIRMED | ✓ EMPIRE ACHIEVED | thesis-defensible ✓");

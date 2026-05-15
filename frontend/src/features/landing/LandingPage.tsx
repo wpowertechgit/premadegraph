@@ -37,8 +37,8 @@ function computeOpacities(scrollY: number, heroH: number): BgOpacities {
   const videoFadeEnd = sectionH;
   const video = clamp01(1 - (scrollY - videoFadeStart) / (videoFadeEnd - videoFadeStart));
 
-  // between.png: fade in during last 25% of hero, hold through section 1, fade out during last 25% of section 1
-  const betweenFadeInStart = sectionH * 0.75;
+  // between.png: fade in while the video fades out, then hold through section 1.
+  const betweenFadeInStart = videoFadeStart;
   const betweenFadeInEnd = sectionH;
   const betweenFadeOutStart = sectionH * 1.75;
   const betweenFadeOutEnd = sectionH * 2;

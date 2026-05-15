@@ -65,6 +65,8 @@ var tests = new (string Name, Action Body)[]
     ("M12 fbx material texture siblings cover diffuse normal metallic roughness", M12_FbxMaterialTextureSiblingsCoverPbr),
     ("M12 settlement fbx model bounds are finite in reasonable world space", M12_SettlementFbxModelBoundsAreFinite),
     ("M12 asset load diagnostics log covers transform policy and index format", M12_AssetLoadDiagnosticsLogCoversTransformPolicy),
+    ("content bootstrap skips download when required assets exist", ContentBootstrapSkipsDownloadWhenRequiredAssetsExist),
+    ("content bootstrap downloads when required assets are missing", RunAsync(ContentBootstrapDownloadsWhenRequiredAssetsAreMissing)),
 };
 
 var failures = 0;
@@ -272,6 +274,84 @@ static void M12_AssetLoadDiagnosticsLogCoversTransformPolicy()
     // If the log does not exist, that's acceptable — it's created at app startup.
     // The test just confirms the path resolves correctly.
     Assert(!string.IsNullOrWhiteSpace(logPath), "log path should be resolvable");
+}
+
+static void ContentBootstrapSkipsDownloadWhenRequiredAssetsExist()
+{
+    var tempRoot = CreateTempDirectory();
+    try
+    {
+        var contentRoot = Path.Combine(tempRoot, "Content");
+        CreateBootstrapRequiredAssets(contentRoot);
+        var downloader = new RecordingContentDownloader();
+
+        var result = ContentBootstrapper.EnsureContentAsync(
+                new ContentBootstrapOptions(contentRoot, "folder-id", requiredRelativePaths: BootstrapRequiredAssetPaths()),
+                downloader,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        Assert(result.Downloaded == false, "present content should not trigger a download");
+        Assert(downloader.Requests.Count == 0, "downloader should not be called when required assets exist");
+        Assert(result.ContentRoot == contentRoot, $"expected content root {contentRoot}, got {result.ContentRoot}");
+    }
+    finally
+    {
+        Directory.Delete(tempRoot, recursive: true);
+    }
+}
+
+static async Task ContentBootstrapDownloadsWhenRequiredAssetsAreMissing()
+{
+    var tempRoot = CreateTempDirectory();
+    try
+    {
+        var contentRoot = Path.Combine(tempRoot, "Content");
+        var downloader = new RecordingContentDownloader(request =>
+        {
+            CreateBootstrapRequiredAssets(request.TargetContentRoot);
+            return Task.CompletedTask;
+        });
+
+        var result = await ContentBootstrapper.EnsureContentAsync(
+            new ContentBootstrapOptions(contentRoot, "folder-id", requiredRelativePaths: BootstrapRequiredAssetPaths()),
+            downloader,
+            CancellationToken.None);
+
+        Assert(result.Downloaded, "missing content should trigger a download");
+        Assert(downloader.Requests.Count == 1, $"expected one download request, got {downloader.Requests.Count}");
+        Assert(downloader.Requests[0].FolderId == "folder-id", $"unexpected folder id {downloader.Requests[0].FolderId}");
+        Assert(ContentBootstrapper.HasRequiredContent(contentRoot, BootstrapRequiredAssetPaths()),
+            "downloaded content should satisfy required asset check");
+    }
+    finally
+    {
+        Directory.Delete(tempRoot, recursive: true);
+    }
+}
+
+static string[] BootstrapRequiredAssetPaths() =>
+[
+    "Materials/Terrain/rocky_terrain_02_diff_1k.png",
+    "Image/icons/anarchy.png",
+];
+
+static void CreateBootstrapRequiredAssets(string contentRoot)
+{
+    foreach (var relativePath in BootstrapRequiredAssetPaths())
+    {
+        var fullPath = Path.Combine(contentRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllText(fullPath, "asset");
+    }
+}
+
+static string CreateTempDirectory()
+{
+    var path = Path.Combine(Path.GetTempPath(), "neurosim-content-bootstrap-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(path);
+    return path;
 }
 
 static void Assert(bool condition, string message)
@@ -1037,4 +1117,16 @@ static void EmpireStressCanReachDuchyOrHigherWithinTheDemoBudget()
         $"expected empire stress to reach at least Duchy, got {simulation.HighestTierReached}");
     Assert(simulation.ActiveMergeCount > 0, "expected merge tracking to become non-zero in empire stress");
     Assert(simulation.Tombstones.Count > 0, "expected merger/extinction tombstones in empire stress");
+}
+
+internal sealed class RecordingContentDownloader(
+    Func<ContentDownloadRequest, Task>? onDownload = null) : IContentDownloader
+{
+    public List<ContentDownloadRequest> Requests { get; } = [];
+
+    public Task DownloadAsync(ContentDownloadRequest request, CancellationToken cancellationToken)
+    {
+        Requests.Add(request);
+        return onDownload?.Invoke(request) ?? Task.CompletedTask;
+    }
 }

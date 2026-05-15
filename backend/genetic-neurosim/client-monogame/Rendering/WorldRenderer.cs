@@ -88,11 +88,7 @@ public sealed class WorldRenderer : IDisposable
         LastTerrainTilesDrawn = 0;
         LastTerrainMode = "none";
 
-        // 599 Flex tribes create a 190x190 map. The close 3D hex mesh path is
-        // too expensive at that scale; keep large network maps on strategic
-        // flat terrain while retaining borders, symbols, HUD, and selection.
-        var richTerrainDistance = tiles.Count > 12000 ? 0f : 900f;
-        if (camera.Distance <= richTerrainDistance)
+        if (camera.Distance <= 900f)
         {
             LastTerrainMode = "hex";
             DrawHexTerrain(spriteBatch.GraphicsDevice, tiles, camera);

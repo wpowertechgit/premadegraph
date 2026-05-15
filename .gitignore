@@ -43,3 +43,6 @@ backend/genetic-neurosim/client-monogame/obj/
 
 # 3D assets, textures, models — store on Google Drive instead
 backend/genetic-neurosim/client-monogame/Content/
+.claude/
+*.lscache
+.playwright-cli

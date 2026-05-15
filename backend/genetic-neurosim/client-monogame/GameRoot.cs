@@ -643,6 +643,8 @@ public sealed class GameRoot : Game
         }
     }
 
+    private int _drainFrameCount;
+
     private void DrainReceivedFrames()
     {
         if (_frameReceiver is null)
@@ -652,6 +654,19 @@ public sealed class GameRoot : Game
 
         while (_frameReceiver.TryDequeueFrame(out var frame))
         {
+            _drainFrameCount++;
+            if (_drainFrameCount == 1 || _drainFrameCount % 200 == 0)
+            {
+                Console.WriteLine($"[hud] frame #{_drainFrameCount}: hasV1={frame.FrameV1Data is not null} v1TribeCount={frame.FrameV1Data?.Tribes.Count ?? 0} v0TribeCount={frame.Tribes.Count} mapW={_mapWidth} mapH={_mapHeight} selectedId={_playableSimulation.SelectedTribeId}");
+                if (_viewModel.HasV1Data && _playableSimulation.SelectedTribeId >= 0)
+                {
+                    _viewModel.V1Tribes.TryGetValue((uint)_playableSimulation.SelectedTribeId, out var dbgTribe);
+                    if (dbgTribe is not null)
+                        Console.WriteLine($"[hud] selectedV1 tribe {dbgTribe.Id}: fitness={dbgTribe.FitnessScore:F4} territory={dbgTribe.TerritoryCount} NNlen={dbgTribe.NeuralOutputs.Length} NN[0]={dbgTribe.NeuralOutputs[0]:F3}");
+                    else
+                        Console.WriteLine($"[hud] selectedId={_playableSimulation.SelectedTribeId} NOT FOUND in v1Tribes (count={_viewModel.V1Tribes.Count})");
+                }
+            }
             _viewModel.ApplyFrame(frame);
 
             // M6: Derive map dimensions from tile data if not explicitly configured

@@ -40,6 +40,10 @@ impl TombstoneLedger {
     /// Record a tribe's death. Takes snapshot of tribe state at death time.
     /// `lineage` filter: only entries starting with "seed-" or "gen-" for compact summary.
     pub fn record_death(&mut self, tribe: &crate::tribes::TribeState, tick: u64, cause: &str) {
+        if self.is_dead(tribe.id as u32) {
+            return;
+        }
+
         let lineage_summary: Vec<String> = tribe
             .lineage
             .iter()
@@ -136,6 +140,7 @@ mod tests {
             tile_integration: std::collections::HashMap::new(),
             migration_target_tile: u16::MAX,
             fitness_score: 0.0,
+            tier_entered_tick: 0,
         };
         t
     }

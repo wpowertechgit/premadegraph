@@ -190,6 +190,8 @@ pub struct TribeState {
     pub migration_target_tile: u16,
     // Fitness score updated at each generation boundary.
     pub fitness_score: f32,
+    // Tick at which this tribe last changed polity tier (used for time-gate on promotion).
+    pub tier_entered_tick: u64,
 }
 
 impl TribeState {
@@ -203,7 +205,7 @@ impl TribeState {
         home_tile: u16,
     ) -> TribeState {
         // max_pop uncapped so tiers earn through gameplay; start small in Tribe tier.
-        let max_population = (profile.cluster_size as u32 * 200).min(10_000).max(500);
+        let max_population = (profile.cluster_size as u32 * 600).min(50_000).max(6_000);
         let starting_pop   = (profile.cluster_size as u32 * 10).min(250).max(40);
         let founders = profile
             .founder_puuids
@@ -249,6 +251,7 @@ impl TribeState {
             tile_integration: std::collections::HashMap::new(),
             migration_target_tile: u16::MAX, // sentinel: no target
             fitness_score: 0.0,
+            tier_entered_tick: 0,
         }
     }
 
