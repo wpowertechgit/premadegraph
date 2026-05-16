@@ -121,7 +121,7 @@ public sealed class DebugHud : IDisposable
         var tierRowCount = hasTierInfo ? 1 : 0;
         // M5: V3 stats section (3 compact rows when visible)
         var showV3Stats = ShowV3Stats && !string.IsNullOrWhiteSpace(state.PolityTierCounts);
-        var v3RowCount = showV3Stats ? 3 : 0;
+        var v3RowCount = showV3Stats ? 2 : 0;
         // E2: brain / fitness rows when selection has E1 data
         var hasBrainData = hasSelection && (!string.IsNullOrEmpty(state.SelectedTopDrive) || state.SelectedFitnessScore > 0f);
         var brainRowCount = hasBrainData ? 2 : 0;
@@ -216,7 +216,7 @@ public sealed class DebugHud : IDisposable
         _font.DrawString(spriteBatch, pauseIndicator, new Vector2(x + 90, y + 1), FontSize.Small, pauseColor);
         _font.DrawString(spriteBatch, state.Paused ? "PAUSED" : "RUN", new Vector2(x + 104, y), FontSize.Body, TextColor);
 
-        _font.DrawString(spriteBatch, "SPC N R TAB +/- V", new Vector2(x + 160, y), FontSize.Small, MutedColor);
+        _font.DrawString(spriteBatch, "SPC N R K ESC +/-", new Vector2(x + 160, y), FontSize.Small, MutedColor);
         y += lineHeight + 2;
 
         // M5: V3 simulation stats (polity tiers, wars, entities, tombstones, lineage, protocol)
@@ -224,10 +224,8 @@ public sealed class DebugHud : IDisposable
         {
             // Thin separator
             FillRect(spriteBatch, new Rectangle(x - 4, y - 2, PanelWidth - PanelMargin - 12, 1), new Color(255, 255, 255, 12));
-            _font.DrawString(spriteBatch, "V3", new Vector2(x, y), FontSize.Small, AccentColor);
-            y += smallHeight + 1;
 
-            // Row 1: Polity tier counts
+            // Row 1: Polity tier counts (compact: T:392 C:16 D:0 K:0 E:0)
             DrawRow(spriteBatch, x, y, lineHeight, "POLITY", state.PolityTierCounts, GoodColor);
             y += lineHeight;
 
@@ -236,13 +234,6 @@ public sealed class DebugHud : IDisposable
                 "WARS", state.ActiveWarCount.ToString(), TextColor,
                 "ENT", state.TotalEntityCount.ToString("#,0"), TextColor,
                 "TOMB", state.TombstoneCount.ToString(), state.TombstoneCount > 0 ? WarningColor : MutedColor);
-            y += lineHeight;
-
-            // Row 3: Lineage depth / Protocol version
-            var protoLabel = state.ProtocolVersion > 0 ? $"v{state.ProtocolVersion}" : "local";
-            var protoColor = state.ProtocolVersion > 0 ? GoodColor : MutedColor;
-            DrawRow(spriteBatch, x, y, lineHeight, "LINEAGE", state.LineageDepth > 0 ? $"{state.LineageDepth} gen" : "N/A", MutedColor);
-            DrawRow(spriteBatch, x + 164, y, lineHeight, "PROTO", protoLabel, protoColor);
             y += lineHeight + 2;
         }
 
@@ -272,7 +263,7 @@ public sealed class DebugHud : IDisposable
             var cooldownColor = state.ExpansionCooldownRemaining > 0 ? WarningColor : GoodColor;
             var cooldownLabel = state.ExpansionCooldownRemaining > 0 ? $"{state.ExpansionCooldownRemaining}t" : "READY";
             DrawRow(spriteBatch, x, y, lineHeight, "EXP-CD", cooldownLabel, cooldownColor);
-            DrawRow(spriteBatch, x + 164, y, lineHeight, "COST", ((int)MathF.Round(state.SelectedExpansionCost)).ToString(),
+            DrawRow(spriteBatch, x + 164, y, lineHeight, "EXP$", ((int)MathF.Round(state.SelectedExpansionCost)).ToString(),
                 state.SelectedExpansionCost > 100 ? WarningColor : AccentColor);
             y += lineHeight;
         }

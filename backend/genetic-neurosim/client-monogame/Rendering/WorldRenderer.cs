@@ -88,7 +88,7 @@ public sealed class WorldRenderer : IDisposable
         LastTerrainTilesDrawn = 0;
         LastTerrainMode = "none";
 
-        if (camera.Distance <= 900f)
+        if (camera.Distance <= 2300f)
         {
             LastTerrainMode = "hex";
             DrawHexTerrain(spriteBatch.GraphicsDevice, tiles, camera);
@@ -114,6 +114,65 @@ public sealed class WorldRenderer : IDisposable
     {
         EnsureEffects(spriteBatch.GraphicsDevice);
         DrawSpriteOverlays(spriteBatch, tiles, tribes, camera, selectedTribeId);
+    }
+
+    /// <summary>
+    /// Draw war indicator lines between attacker and defender camp world positions.
+    /// Each pair is (attackerWorldPos, defenderWorldPos). Renders as red lines with
+    /// animated tick segments so they're visually distinct from territory borders.
+    /// </summary>
+    public void DrawWarLines(
+        SpriteBatch spriteBatch,
+        IReadOnlyList<(Vector2 Attacker, Vector2 Defender)> warPairs,
+        IsometricCamera camera,
+        ulong tick)
+    {
+        if (_pixel is null || _graphicsDevice is null || warPairs.Count == 0) return;
+
+        var viewport = _graphicsDevice.Viewport;
+        var warColor = new Color(220, 60, 60, 200);
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend,
+            samplerState: SamplerState.LinearClamp);
+
+        foreach (var (attackerWorld, defenderWorld) in warPairs)
+        {
+            var a = camera.HexToScreen(attackerWorld, viewport);
+            var b = camera.HexToScreen(defenderWorld, viewport);
+            // Animated dash: offset shifts by tick so the line appears to pulse
+            DrawDashedLine(spriteBatch, a, b, warColor, 1.5f, dashLen: 8f, gapLen: 6f, offset: (tick % 14) * 1f);
+        }
+
+        spriteBatch.End();
+    }
+
+    private void DrawDashedLine(
+        SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color,
+        float thickness, float dashLen, float gapLen, float offset)
+    {
+        var delta = end - start;
+        var length = delta.Length();
+        if (length < 1f) return;
+
+        var dir = delta / length;
+        var angle = MathF.Atan2(delta.Y, delta.X);
+        var period = dashLen + gapLen;
+        var t = offset % period;
+
+        while (t < length)
+        {
+            var segStart = start + dir * t;
+            var segLen = MathF.Min(dashLen, length - t);
+            if (segLen > 0.5f)
+            {
+                spriteBatch.Draw(_pixel, segStart, null, color, angle,
+                    new Vector2(0f, 0.5f), new Vector2(segLen, Math.Max(1f, thickness)),
+                    SpriteEffects.None, 0f);
+            }
+            t += period;
+        }
     }
 
     public void Dispose()
@@ -420,7 +479,7 @@ public sealed class WorldRenderer : IDisposable
     {
         if (_pixel is null || _graphicsDevice is null) return;
 
-        if (camera.Distance > 900f) return;
+        if (camera.Distance > 2300f) return;
 
         var waterColor = new Color(30, 90, 180, 90);
         var viewport = _graphicsDevice.Viewport;

@@ -3364,6 +3364,10 @@ app.get("/api/neurosim/desktop/v1/world-snapshot", (req, res) => {
   neurosimBridge.proxyHttpToPath(req, res, "/api/world-snapshot");
 });
 
+app.get("/api/neurosim/desktop/v1/tombstones", (req, res) => {
+  neurosimBridge.proxyHttpToPath(req, res, "/api/tombstones");
+});
+
 app.post("/api/neurosim/desktop/v1/control/reset", (req, res) => {
   neurosimBridge.proxyHttpToPath(req, res, "/api/control/reset");
 });

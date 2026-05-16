@@ -85,6 +85,14 @@ public sealed class GameRoot : Game
     private bool _lineagePanelVisible;
     private bool _tombstonePanelVisible;
 
+    // ESC menu
+    private readonly UI.EscMenu _escMenu = new();
+
+    // Tombstone founder polling (every 8 seconds)
+    private double _tombstoneFounderPollTimer;
+    private readonly Dictionary<int, IReadOnlyList<string>> _tombstoneFounders = new();
+    private Net.TombstonesResponseDto? _serverTombstones;
+
     public GameRoot(LaunchOptions launchOptions)
     {
         _launchOptions = launchOptions;
@@ -206,7 +214,26 @@ public sealed class GameRoot : Game
 
         if (commands.QuitRequested)
         {
-            Exit();
+            if (_escMenu.IsOpen)
+                _escMenu.Close();
+            else
+                _escMenu.Toggle();
+        }
+
+        // Handle ESC menu mouse clicks
+        if (_escMenu.IsOpen)
+        {
+            var mb = Mouse.GetState();
+            var prevMb = _previousMouse;
+            if (mb.LeftButton == Microsoft.Xna.Framework.Input.ButtonState.Pressed
+                && prevMb.LeftButton == Microsoft.Xna.Framework.Input.ButtonState.Released)
+            {
+                _escMenu.HandleMouseClick(mb.X, mb.Y);
+            }
+            if (_escMenu.ExitRequested) { Exit(); return; }
+            // Block all other input while menu open
+            _previousKeyboard = keyboard;
+            _previousMouse = mb;
             return;
         }
 
@@ -236,6 +263,7 @@ public sealed class GameRoot : Game
 
         UpdatePlayableSimulation(gameTime);
         DrainReceivedFrames();
+        PollTombstoneFounders(gameTime);
         UpdateWindowTitle(gameTime);
 
         _previousKeyboard = keyboard;
@@ -389,6 +417,27 @@ public sealed class GameRoot : Game
                 _camera,
                 selectedTribeId);
 
+            // 5. War indicator lines (network mode only — wars come from V1 frame)
+            if (_useNetworkRender && _viewModel.Wars.Count > 0)
+            {
+                var tribePositionById = new Dictionary<uint, Microsoft.Xna.Framework.Vector2>();
+                foreach (var tribe in tribes)
+                    tribePositionById[(uint)tribe.Id] = tribe.Position;
+
+                var warPairs = new List<(Microsoft.Xna.Framework.Vector2, Microsoft.Xna.Framework.Vector2)>();
+                foreach (var war in _viewModel.Wars)
+                {
+                    if (tribePositionById.TryGetValue(war.AttackerId, out var atk)
+                        && tribePositionById.TryGetValue(war.DefenderId, out var def))
+                    {
+                        warPairs.Add((atk, def));
+                    }
+                }
+
+                if (warPairs.Count > 0)
+                    _worldRenderer.DrawWarLines(_spriteBatch, warPairs, _camera, _viewModel.Tick);
+            }
+
             // Restore back buffer before post-process / screenshot finalize
             GraphicsDevice.SetRenderTarget(null);
 
@@ -482,14 +531,27 @@ public sealed class GameRoot : Game
             }
 
             // M9: Tombstone ledger (toggled with K) — positioned below debug HUD
-            if (_panelFontRenderer is not null && !_useNetworkRender)
+            if (_panelFontRenderer is not null)
             {
-                _tombstonePanel.Draw(
-                    _spriteBatch,
-                    _playableSimulation,
-                    _panelFontRenderer,
-                    _panelDragController.ResolveOrigin(DraggablePanelId.Tombstone, new Point(12, 280)),
-                    _tombstonePanelVisible);
+                var tombstoneOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.Tombstone, new Point(12, 280));
+                if (_useNetworkRender)
+                {
+                    _tombstonePanel.DrawNetwork(
+                        _spriteBatch,
+                        _serverTombstones,
+                        _panelFontRenderer,
+                        tombstoneOrigin,
+                        _tombstonePanelVisible);
+                }
+                else
+                {
+                    _tombstonePanel.Draw(
+                        _spriteBatch,
+                        _playableSimulation,
+                        _panelFontRenderer,
+                        tombstoneOrigin,
+                        _tombstonePanelVisible);
+                }
             }
 
             if (_debugHud is not null)
@@ -504,6 +566,13 @@ public sealed class GameRoot : Game
             }
 
             UpdatePanelBounds();
+
+            // ESC menu drawn last so it overlays everything
+            if (_escMenu.IsOpen)
+            {
+                var ms = Mouse.GetState();
+                _escMenu.Draw(_spriteBatch, ms.X, ms.Y);
+            }
         }
 
         base.Draw(gameTime);
@@ -537,6 +606,7 @@ public sealed class GameRoot : Game
             _postProcessRenderer?.Dispose();
             _bannerRenderer?.Dispose();
             _debugHud?.Dispose();
+            _escMenu.Dispose();
             _panelFontRenderer?.Dispose();
             _runtimeAssets?.Dispose();
             _spriteBatch?.Dispose();
@@ -577,6 +647,8 @@ public sealed class GameRoot : Game
 
                 _controlClient = new Net.SimulationControlClient(_httpClient, _launchOptions.NodeHttpEndpoint);
                 await FetchWorldSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                // Fetch tombstones immediately on connect — don't wait 8 seconds for first poll
+                _ = FetchTombstoneFoundersAsync();
                 _settlementRenderer?.SetLodDistanceScale(1.35f);
 
                 // Pause simulation on connect so user starts from a known state
@@ -643,7 +715,38 @@ public sealed class GameRoot : Game
         }
     }
 
-    private int _drainFrameCount;
+    private void PollTombstoneFounders(GameTime gameTime)
+    {
+        if (!_isNetworkMode || _controlClient is null) return;
+
+        _tombstoneFounderPollTimer += gameTime.ElapsedGameTime.TotalSeconds;
+        if (_tombstoneFounderPollTimer < 8.0) return;
+        _tombstoneFounderPollTimer = 0;
+
+        // Fire-and-forget; result is applied when ready
+        _ = FetchTombstoneFoundersAsync();
+    }
+
+    private async Task FetchTombstoneFoundersAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await _controlClient!.GetTombstonesAsync(cts.Token).ConfigureAwait(false);
+            if (response?.Records is null) return;
+
+            _serverTombstones = response;
+
+            foreach (var rec in response.Records)
+                _tombstoneFounders[(int)rec.TribeId] = rec.FounderPuuids.AsReadOnly();
+
+            _tombstonePanel.SetFounders(_tombstoneFounders);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[tombstone] fetch failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
 
     private void DrainReceivedFrames()
     {
@@ -654,19 +757,6 @@ public sealed class GameRoot : Game
 
         while (_frameReceiver.TryDequeueFrame(out var frame))
         {
-            _drainFrameCount++;
-            if (_drainFrameCount == 1 || _drainFrameCount % 200 == 0)
-            {
-                Console.WriteLine($"[hud] frame #{_drainFrameCount}: hasV1={frame.FrameV1Data is not null} v1TribeCount={frame.FrameV1Data?.Tribes.Count ?? 0} v0TribeCount={frame.Tribes.Count} mapW={_mapWidth} mapH={_mapHeight} selectedId={_playableSimulation.SelectedTribeId}");
-                if (_viewModel.HasV1Data && _playableSimulation.SelectedTribeId >= 0)
-                {
-                    _viewModel.V1Tribes.TryGetValue((uint)_playableSimulation.SelectedTribeId, out var dbgTribe);
-                    if (dbgTribe is not null)
-                        Console.WriteLine($"[hud] selectedV1 tribe {dbgTribe.Id}: fitness={dbgTribe.FitnessScore:F4} territory={dbgTribe.TerritoryCount} NNlen={dbgTribe.NeuralOutputs.Length} NN[0]={dbgTribe.NeuralOutputs[0]:F3}");
-                    else
-                        Console.WriteLine($"[hud] selectedId={_playableSimulation.SelectedTribeId} NOT FOUND in v1Tribes (count={_viewModel.V1Tribes.Count})");
-                }
-            }
             _viewModel.ApplyFrame(frame);
 
             // M6: Derive map dimensions from tile data if not explicitly configured
@@ -789,9 +879,19 @@ public sealed class GameRoot : Game
             _ticksPerSecond = Math.Max(1, _ticksPerSecond - 2);
         }
 
-        if (commands.SelectAtScreenPosition && !_panelDragController.ConsumesPointer && commands.SelectionScreenPosition is { } screenPosition)
+        if (commands.SelectAtScreenPosition && commands.SelectionScreenPosition is { } screenPosition)
         {
-            SelectTribeAtScreenPosition(screenPosition);
+            // Route click to tombstone panel first if it's visible and the cursor is over it
+            var clickedPanel = false;
+            if (_tombstonePanelVisible && _tombstonePanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
+                && _tombstonePanel.LastBounds.Contains((int)screenPosition.X, (int)screenPosition.Y))
+            {
+                _tombstonePanel.HandleMouseClick((int)screenPosition.X, (int)screenPosition.Y);
+                clickedPanel = true;
+            }
+
+            if (!clickedPanel && !_panelDragController.ConsumesPointer)
+                SelectTribeAtScreenPosition(screenPosition);
         }
 
         if (commands.ToggleIsolatedViewer)
@@ -1225,7 +1325,8 @@ public sealed class GameRoot : Game
                 .Where(kv => kv.Value.IsAlive)
                 .GroupBy(kv => kv.Value.PolityTier)
                 .ToDictionary(g => g.Key, g => g.Count());
-            var tierStr = string.Join(" ", v1PolityTiers.OrderBy(kv => kv.Key).Select(kv => $"T{GetTierLabel(kv.Key)}:{kv.Value}"));
+            var tierStr = string.Join(" ", new byte[] {0,1,2,3,4}
+                .Select(t => $"{(t == 0 ? 'T' : t == 1 ? 'C' : t == 2 ? 'D' : t == 3 ? 'K' : 'E')}:{v1PolityTiers.GetValueOrDefault(t, 0)}"));
             var warCount = _viewModel.Wars.Count;
             var entityCount = (int)_viewModel.V1Tribes.Where(kv => kv.Value.IsAlive).Sum(kv => (long)kv.Value.EntityCount);
 

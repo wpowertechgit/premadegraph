@@ -23,6 +23,9 @@ pub struct TombstoneRecord {
     /// Compact lineage summary: seed cluster references and generation milestones.
     pub lineage_summary: Vec<String>,
     pub final_artifacts: ArtifactSnapshot,
+    /// PUUIDs of the founding players from the flexset cluster profile.
+    /// Links the simulation tribe back to real League of Legends players.
+    pub founder_puuids: Vec<String>,
 }
 
 // ─── TombstoneLedger ─────────────────────────────────────────────────────────
@@ -56,6 +59,10 @@ impl TombstoneLedger {
             .cloned()
             .collect();
 
+        let founder_puuids: Vec<String> = tribe.founders.iter()
+            .map(|f| f.puuid.clone())
+            .collect();
+
         self.records.push(TombstoneRecord {
             tribe_id: tribe.id as u32,
             cluster_id: tribe.cluster_id.clone(),
@@ -72,6 +79,7 @@ impl TombstoneLedger {
                 a_map_objective: tribe.stats.a_map_objective,
                 a_team: tribe.stats.a_team,
             },
+            founder_puuids,
         });
     }
 

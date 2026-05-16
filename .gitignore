@@ -45,4 +45,5 @@ backend/genetic-neurosim/client-monogame/obj/
 backend/genetic-neurosim/client-monogame/Content/
 .claude/
 *.lscache
+*.cache
 .playwright-cli

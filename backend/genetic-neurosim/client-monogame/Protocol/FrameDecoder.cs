@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Linq;
 
 namespace TribalNeuroSim.Client.Protocol;
 
@@ -14,24 +13,11 @@ public sealed class FrameDecoder
     // The headerBytes field may claim 40 (V1 forward-looking), but actual data starts at 32.
     private const int Tns3EnvelopeBytes = 32;
 
-    // Diagnostic: log decode details periodically so we can trace the actual protocol path.
-    private int _decodeCount;
-    private const int DiagLogEvery = 200;
-
     public SimulationFrame Decode(ReadOnlySpan<byte> payload)
     {
-        _decodeCount++;
-        var shouldLog = _decodeCount == 1 || _decodeCount % DiagLogEvery == 0;
-
         if (IsDesktopV1Frame(payload))
-        {
-            if (shouldLog)
-                Console.WriteLine($"[diag] frame #{_decodeCount}: TNS3 magic detected, total bytes={payload.Length}");
-            return DecodeDesktopV1(payload, shouldLog);
-        }
+            return DecodeDesktopV1(payload);
 
-        if (shouldLog)
-            Console.WriteLine($"[diag] frame #{_decodeCount}: NO TNS3 magic → legacy V0 path, total bytes={payload.Length}, first4={payload[0]:x2}{payload[1]:x2}{payload[2]:x2}{payload[3]:x2}");
         return DecodeLegacyTribal(payload, LegacyTribalFrameVersion);
     }
 
@@ -41,7 +27,7 @@ public sealed class FrameDecoder
             payload[..4].SequenceEqual(DesktopProtocol.Magic);
     }
 
-    private SimulationFrame DecodeDesktopV1(ReadOnlySpan<byte> payload, bool shouldLog = false)
+    private SimulationFrame DecodeDesktopV1(ReadOnlySpan<byte> payload)
     {
         var version = ReadUInt16(payload, 4);
         var headerBytes = ReadUInt16(payload, 6);
@@ -50,9 +36,6 @@ public sealed class FrameDecoder
         var tick = ReadUInt64(payload, 16);
         var generation = ReadUInt32(payload, 24);
         var recordCount = ReadUInt32(payload, 28);
-
-        if (shouldLog)
-            Console.WriteLine($"[diag]   payloadKind={payloadKind} (expected {DesktopProtocol.PayloadKindFrameV1}=V1) recordCount={recordCount} payloadByteCount={payloadByteCount} headerBytes={headerBytes} tick={tick}");
 
         if (version != DesktopProtocol.Version)
         {
@@ -76,9 +59,7 @@ public sealed class FrameDecoder
 
         if (payloadKind == DesktopProtocol.PayloadKindFrameV1)
         {
-            if (shouldLog)
-                Console.WriteLine($"[diag]   innerPayload.Length={innerPayload.Length}, need for 88B records={(int)recordCount * 88 + 1}, need for 50B records={(int)recordCount * 50 + 1}");
-            return DecodeFrameV1(innerPayload, version, tick, generation, recordCount, shouldLog);
+            return DecodeFrameV1(innerPayload, version, tick, generation, recordCount);
         }
 
         // Legacy V0 tribal frame
@@ -102,25 +83,17 @@ public sealed class FrameDecoder
         ushort protocolVersion,
         ulong tick,
         uint generation,
-        uint tribeRecordCount,
-        bool shouldLog = false)
+        uint tribeRecordCount)
     {
         var offset = 0;
 
-        var tribeRecordBytes = SelectFrameV1TribeRecordBytes(payload, tribeRecordCount, shouldLog);
+        var tribeRecordBytes = SelectFrameV1TribeRecordBytes(payload, tribeRecordCount);
 
         // ── Tribe records ──
         var v1Tribes = new List<TribeFrameV1Record>((int)tribeRecordCount);
         for (var i = 0; i < tribeRecordCount; i++)
         {
             var tribe = ReadTribeFrameV1Record(payload, offset, tribeRecordBytes);
-            if (shouldLog && i == 0)
-            {
-                var nn = tribe.NeuralOutputs;
-                Console.WriteLine($"[diag]   tribe[0] id={tribe.Id} polityTier={tribe.PolityTier} fitness={tribe.FitnessScore:F4} territory={tribe.TerritoryCount}");
-                Console.WriteLine($"[diag]   tribe[0] NNoutputs ({nn.Length}): {string.Join(" ", nn.Select(v => $"{v:F3}"))}");
-                Console.WriteLine($"[diag]   tribe[0] artifacts: combat={tribe.Artifacts.Combat:F3} resource={tribe.Artifacts.Resource:F3} risk={tribe.Artifacts.Risk:F3} team={tribe.Artifacts.Team:F3}");
-            }
             v1Tribes.Add(tribe);
             offset += tribeRecordBytes;
         }
@@ -213,23 +186,15 @@ public sealed class FrameDecoder
         };
     }
 
-    private static int SelectFrameV1TribeRecordBytes(ReadOnlySpan<byte> payload, uint tribeRecordCount, bool shouldLog = false)
+    private static int SelectFrameV1TribeRecordBytes(ReadOnlySpan<byte> payload, uint tribeRecordCount)
     {
         var extendedBytes = checked((int)tribeRecordCount * DesktopProtocol.FrameV1TribeRecordBytes);
         if (payload.Length >= extendedBytes + 1)
-        {
-            if (shouldLog)
-                Console.WriteLine($"[diag]   SelectRecordBytes → 88 (extended E1): payload={payload.Length} >= need={extendedBytes + 1}");
             return DesktopProtocol.FrameV1TribeRecordBytes;
-        }
 
         var legacyBytes = checked((int)tribeRecordCount * DesktopProtocol.LegacyFrameV1TribeRecordBytes);
         if (payload.Length >= legacyBytes + 1)
-        {
-            if (shouldLog)
-                Console.WriteLine($"[diag]   SelectRecordBytes → 50 (LEGACY fallback!): payload={payload.Length} < 88-need={extendedBytes + 1}, >= 50-need={legacyBytes + 1}");
             return DesktopProtocol.LegacyFrameV1TribeRecordBytes;
-        }
 
         throw new InvalidDataException(
             $"FrameV1 payload too short for {tribeRecordCount} tribe records: {payload.Length} bytes.");

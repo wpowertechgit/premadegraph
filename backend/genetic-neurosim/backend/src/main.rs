@@ -692,6 +692,7 @@ async fn main() {
         .route("/api/lineage/seed/{entity_id}", get(get_lineage_seed))
         .route("/api/lineage/stats", get(get_lineage_stats))
         .route("/api/tombstones", get(get_tombstones))
+        .route("/api/desktop/v1/tombstones", get(get_tombstones))
         .with_state(state)
         .layer(
             CorsLayer::new()

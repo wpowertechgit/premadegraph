@@ -1,7 +1,18 @@
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using TribalNeuroSim.Client.Models;
 
 namespace TribalNeuroSim.Client.Net;
+
+public sealed record TombstoneFounderDto(
+    [property: JsonPropertyName("tribe_id")] uint TribeId,
+    [property: JsonPropertyName("cluster_id")] string ClusterId,
+    [property: JsonPropertyName("tick_died")] ulong TickDied,
+    [property: JsonPropertyName("founder_puuids")] List<string> FounderPuuids);
+
+public sealed record TombstonesResponseDto(
+    [property: JsonPropertyName("count")] int Count,
+    [property: JsonPropertyName("records")] List<TombstoneFounderDto> Records);
 
 public sealed class SimulationControlClient
 {
@@ -25,6 +36,12 @@ public sealed class SimulationControlClient
     {
         return _httpClient.GetFromJsonAsync<Models.WorldSnapshotDto>(
             Resolve("world-snapshot"), cancellationToken);
+    }
+
+    public Task<TombstonesResponseDto?> GetTombstonesAsync(CancellationToken cancellationToken)
+    {
+        return _httpClient.GetFromJsonAsync<TombstonesResponseDto>(
+            Resolve("tombstones"), cancellationToken);
     }
 
     public Task PauseAsync(CancellationToken cancellationToken)
