@@ -80,27 +80,67 @@ function proxyHttp(req, res, pathPrefix = "/api/neurosim") {
 }
 
 function proxyHttpToPath(req, res, upstreamPath) {
+  const seedRequestId = req.headers["x-neurosim-seed-request"];
+  const serializedBody = req.body && Object.keys(req.body).length > 0
+    ? Buffer.from(JSON.stringify(req.body))
+    : null;
+  const headers = { ...req.headers, host: `${NEUROSIM_HOST}:${NEUROSIM_PORT}` };
+  if (serializedBody) {
+    headers["content-type"] = headers["content-type"] || "application/json";
+    headers["content-length"] = String(serializedBody.length);
+    delete headers["transfer-encoding"];
+  }
+
   const options = {
     hostname: NEUROSIM_HOST,
     port: NEUROSIM_PORT,
     path: upstreamPath,
     method: req.method,
-    headers: { ...req.headers, host: `${NEUROSIM_HOST}:${NEUROSIM_PORT}` },
+    headers,
   };
 
+  if (seedRequestId || upstreamPath.includes("restart-seed")) {
+    console.log("[neurosim-bridge][http-proxy]", {
+      requestId: seedRequestId || null,
+      method: req.method,
+      upstreamPath,
+      hasParsedBody: !!req.body,
+      bodyLength: serializedBody ? serializedBody.length : 0,
+      contentLength: headers["content-length"] || null,
+    });
+  }
+
   const upstream = http.request(options, upstreamRes => {
+    if (seedRequestId || upstreamPath.includes("restart-seed")) {
+      console.log("[neurosim-bridge][http-proxy:response]", {
+        requestId: seedRequestId || null,
+        upstreamPath,
+        statusCode: upstreamRes.statusCode,
+      });
+    }
     res.writeHead(upstreamRes.statusCode, upstreamRes.headers);
     upstreamRes.pipe(res, { end: true });
   });
 
   upstream.on("error", err => {
+    if (seedRequestId || upstreamPath.includes("restart-seed")) {
+      console.error("[neurosim-bridge][http-proxy:error]", {
+        requestId: seedRequestId || null,
+        upstreamPath,
+        error: err.message,
+      });
+    }
     if (!res.headersSent) {
       res.writeHead(502);
       res.end(`[neurosim-bridge] upstream error: ${err.message}`);
     }
   });
 
-  req.pipe(upstream, { end: true });
+  if (serializedBody) {
+    upstream.end(serializedBody);
+  } else {
+    req.pipe(upstream, { end: true });
+  }
 }
 
 /**

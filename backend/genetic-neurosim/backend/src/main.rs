@@ -196,6 +196,44 @@ where
         .map_err(|error| format!("Invalid value for {flag}: {error}"))
 }
 
+fn parse_live_seed_from_args<I>(args: I) -> Result<Option<u64>, String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let args: Vec<String> = args.into_iter().collect();
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--seed" => {
+                return parse_arg_value(&args, &mut index, "--seed").map(Some);
+            }
+            arg if arg.starts_with("--seed=") => {
+                let value = arg.trim_start_matches("--seed=");
+                return value
+                    .parse::<u64>()
+                    .map(Some)
+                    .map_err(|error| format!("Invalid value for --seed: {error}"));
+            }
+            _ => index += 1,
+        }
+    }
+    Ok(None)
+}
+
+fn live_world_seed_from_env_or_args() -> Result<u64, String> {
+    if let Some(seed) = parse_live_seed_from_args(env::args().skip(1))? {
+        return Ok(seed);
+    }
+
+    match env::var("NEUROSIM_WORLD_SEED") {
+        Ok(value) if !value.trim().is_empty() => value
+            .trim()
+            .parse::<u64>()
+            .map_err(|error| format!("Invalid NEUROSIM_WORLD_SEED: {error}")),
+        _ => Ok(ControlConfig::default().world_seed),
+    }
+}
+
 async fn run_cli_validation(config: CliRunConfig) -> Result<(), String> {
     let mut writer = open_cli_log_writer(config.log_path.as_ref())?;
     let (clusters, cluster_source) = load_cli_clusters(&config).await?;
@@ -659,7 +697,17 @@ async fn main() {
         }
     };
 
-    let simulation = TribeSimulation::shared(ControlConfig::default());
+    let mut initial_config = ControlConfig::default();
+    initial_config.world_seed = match live_world_seed_from_env_or_args() {
+        Ok(seed) => seed,
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    };
+    println!("NeuroSim live world seed: {}", initial_config.world_seed);
+
+    let simulation = TribeSimulation::shared(initial_config);
     let (frame_tx, _) = broadcast::channel::<Arc<Vec<u8>>>(32);
     let (frame_v1_tx, _) = broadcast::channel::<Arc<Vec<u8>>>(32);
     let state = Arc::new(AppState {
@@ -915,8 +963,14 @@ async fn control_restart_seed(
     State(state): State<Arc<AppState>>,
     Json(request): Json<RestartSeedRequest>,
 ) -> Json<ControlResponse> {
+    println!("[neurosim-control] restart-seed requested seed={}", request.world_seed);
     let mut simulation = state.simulation.write();
     simulation.restart_with_seed(request.world_seed);
+    println!(
+        "[neurosim-control] restart-seed applied seed={} tick={}",
+        request.world_seed,
+        simulation.status().tick
+    );
     Json(ControlResponse {
         ok: true,
         status: simulation.status(),

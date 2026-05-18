@@ -26,13 +26,13 @@ Primary research documents. Start here for algorithm design, theoretical framing
 
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
-| [[signed-balance-methodological-retirement]] | `signed-balance-methodological-retirement.md` | Authoritative scope decision — signed balance is downgraded to an experimental limitation case, not a central thesis result | `thesis` `signed-balance` `methodology` `retired-feature` |
-| [[thesis-framework-signed-balance-and-assortativity]] | `thesis-framework-signed-balance-and-assortativity.md` | Superseded thesis framing — earlier signed balance + assortativity narrative; read the retirement note first | `thesis` `signed-balance` `assortativity` `graph-theory` `superseded` |
-| [[signed-balance-theory]] | `signed-balance-theory.md` | Implementation note — triads, signed edges, ally/enemy classification; interpretation superseded by retirement note | `thesis` `signed-balance` `graph-theory` `backend` `superseded` |
-| [[assortativity-analysis]] | `assortativity-analysis.md` | Assortativity experiment design — whether connected players have similar opscore/feedscore values | `thesis` `assortativity` `graph-theory` `analytics` |
-| [[parallel-brandes-implementation-plan]] | `parallel-brandes-implementation-plan.md` | Rust parallel Brandes betweenness centrality — bridge nodes, community brokers, Rayon parallelism | `thesis` `betweenness` `rust` `graph-theory` `backend` |
-| [[experiment-runners]] | `experiment-runners.md` | Rust experiment layer — signed-balance sensitivity diagnostics and assortativity significance tests | `thesis` `signed-balance` `assortativity` `rust` `backend` |
-| [[project-feasibility-review-and-additions]] | `project-feasibility-review-and-additions.md` | Scope review — thesis direction validation and additions (parallel Brandes, experiment baselines) | `thesis` `planning` `betweenness` `architecture` |
+| [[features/graph-analytics/signed-balance-methodological-retirement]] | `features/graph-analytics/signed-balance-methodological-retirement.md` | Authoritative scope decision — signed balance is downgraded to an experimental limitation case, not a central thesis result | `thesis` `signed-balance` `methodology` `retired-feature` |
+| [[features/graph-analytics/thesis-framework-signed-balance-and-assortativity]] | `features/graph-analytics/thesis-framework-signed-balance-and-assortativity.md` | Superseded thesis framing — earlier signed balance + assortativity narrative; read the retirement note first | `thesis` `signed-balance` `assortativity` `graph-theory` `superseded` |
+| [[features/graph-analytics/signed-balance-theory]] | `features/graph-analytics/signed-balance-theory.md` | Implementation note — triads, signed edges, ally/enemy classification; interpretation superseded by retirement note | `thesis` `signed-balance` `graph-theory` `backend` `superseded` |
+| [[features/graph-analytics/assortativity-analysis]] | `features/graph-analytics/assortativity-analysis.md` | Assortativity experiment design — whether connected players have similar opscore/feedscore values | `thesis` `assortativity` `graph-theory` `analytics` |
+| [[features/graph-analytics/parallel-brandes-implementation-plan]] | `features/graph-analytics/parallel-brandes-implementation-plan.md` | Rust parallel Brandes betweenness centrality — bridge nodes, community brokers, Rayon parallelism | `thesis` `betweenness` `rust` `graph-theory` `backend` |
+| [[features/graph-analytics/experiment-runners]] | `features/graph-analytics/experiment-runners.md` | Rust experiment layer — signed-balance sensitivity diagnostics and assortativity significance tests | `thesis` `signed-balance` `assortativity` `rust` `backend` |
+| [[features/thesis-planning/project-feasibility-review-and-additions]] | `features/thesis-planning/project-feasibility-review-and-additions.md` | Scope review — thesis direction validation and additions (parallel Brandes, experiment baselines) | `thesis` `planning` `betweenness` `architecture` |
 
 ---
 
@@ -42,11 +42,12 @@ Dataset strategy, Riot API usage, and collection automation.
 
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
-| [[apex-flex-collection-strategy]] | `apex-flex-collection-strategy.md` | Master+ Ranked Flex Queue EUNE collection using 10 seed players — primary premade dataset | `data-collection` `dataset` `planning` `thesis` |
-| [[master-soloq-eune-collection-strategy]] | `master-soloq-eune-collection-strategy.md` | Master+ SoloQ EUNE collection — orthogonal performance baseline for genetic-neurosim seeding | `data-collection` `dataset` `planning` `genetic-neurosim` |
-| [[riot-api-rate-limit-analysis]] | `riot-api-rate-limit-analysis.md` | Rate limit analysis — limits not the bottleneck; player discovery efficiency is the real constraint | `data-collection` `api` `performance` |
-| [[multi-key-implementation-prompt]] | `multi-key-implementation-prompt.md` | Multi-key rotation for Riot API — combine rate limit buckets across keys to reduce collection time | `api` `backend` `data-collection` |
-| [[mock-datasets-and-chaos-design]] | `mock-datasets-and-chaos-design.md` | Synthetic datasets for dev/demo/UI testing when full real dataset is unavailable | `dataset` `ux` `frontend` `data-collection` |
+| [[features/data-collection/README]] | `features/data-collection/README.md` | Dataset collection feature hub | `data-collection` `dataset` `index` |
+| [[features/data-collection/apex-flex-collection-strategy]] | `features/data-collection/apex-flex-collection-strategy.md` | Master+ Ranked Flex Queue EUNE collection using 10 seed players — primary premade dataset | `data-collection` `dataset` `planning` `thesis` |
+| [[features/data-collection/master-soloq-eune-collection-strategy]] | `features/data-collection/master-soloq-eune-collection-strategy.md` | Master+ SoloQ EUNE collection — orthogonal performance baseline for genetic-neurosim seeding | `data-collection` `dataset` `planning` `genetic-neurosim` |
+| [[features/data-collection/riot-api-rate-limit-analysis]] | `features/data-collection/riot-api-rate-limit-analysis.md` | Rate limit analysis — limits not the bottleneck; player discovery efficiency is the real constraint | `data-collection` `api` `performance` |
+| [[features/data-collection/multi-key-implementation-prompt]] | `features/data-collection/multi-key-implementation-prompt.md` | Multi-key rotation for Riot API — combine rate limit buckets across keys to reduce collection time | `api` `backend` `data-collection` |
+| [[features/data-collection/mock-datasets-and-chaos-design]] | `features/data-collection/mock-datasets-and-chaos-design.md` | Synthetic datasets for dev/demo/UI testing when full real dataset is unavailable | `dataset` `ux` `frontend` `data-collection` |
 
 ---
 
@@ -56,12 +57,12 @@ System design, data flow, and backend implementation docs.
 
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
-| [[multi-dataset-architecture]] | `multi-dataset-architecture.md` | Multi-dataset architecture — independent datasets with separate DBs and analysis caches | `architecture` `database` `backend` `planning` |
-| [[unified-cluster-persistence-and-astar]] | `unified-cluster-persistence-and-astar.md` | SQLite cluster persistence + Rust A* integration — canonical post-prototype architecture | `backend` `database` `architecture` `pathfinder` |
-| [[graph-builder-v2]] | `graph-builder-v2.md` | Rust-first graph artifact pipeline replacing Python/PyVis — clusters, progressive WebGL rendering | `backend` `rust` `graph-theory` `architecture` |
-| [[dynamic-opscore-system]] | `dynamic-opscore-system.md` | Dataset-scoped, role-aware player scoring — what does a player's performance profile look like | `backend` `analytics` `database` |
-| [[pathfinder-backend-prototype]] | `pathfinder-backend-prototype.md` | Early backend-migration stage for pathfinding — request/response contracts, optional backend exec | `backend` `pathfinder` `architecture` `rust` |
-| [[birdseye-3d-sphere]] | `birdseye-3d-sphere.md` | 3D global-view sphere — Rust artifact pipeline + frontend WebGL rendering layout | `frontend` `backend` `rust` `architecture` |
+| [[features/backend-runtime/README]] | `features/backend-runtime/README.md` | Backend runtime feature hub | `backend` `architecture` `index` |
+| [[features/backend-runtime/multi-dataset-architecture]] | `features/backend-runtime/multi-dataset-architecture.md` | Multi-dataset architecture — independent datasets with separate DBs and analysis caches | `architecture` `database` `backend` `planning` |
+| [[features/backend-runtime/unified-cluster-persistence-and-astar]] | `features/backend-runtime/unified-cluster-persistence-and-astar.md` | SQLite cluster persistence + Rust A* integration — canonical post-prototype architecture | `backend` `database` `architecture` `pathfinder` |
+| [[features/graph-analytics/graph-builder-v2]] | `features/graph-analytics/graph-builder-v2.md` | Rust-first graph artifact pipeline replacing Python/PyVis — clusters, progressive WebGL rendering | `backend` `rust` `graph-theory` `architecture` |
+| [[features/scoring/dynamic-opscore-system]] | `features/scoring/dynamic-opscore-system.md` | Dataset-scoped, role-aware player scoring — what does a player's performance profile look like | `backend` `analytics` `database` |
+| [[features/backend-runtime/pathfinder-backend-prototype]] | `features/backend-runtime/pathfinder-backend-prototype.md` | Early backend-migration stage for pathfinding — request/response contracts, optional backend exec | `backend` `pathfinder` `architecture` `rust` |
 
 ---
 
@@ -71,11 +72,27 @@ UI pages, design system, and user-facing implementation docs.
 
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
-| [[new-gui-overview]] | `new-gui-overview.md` | Frontend architecture overview — historical note; signed-balance page is no longer thesis-facing | `frontend` `architecture` `ux` |
-| [[frontend-plan-signed-balance-assortativity]] | `frontend-plan-signed-balance-assortativity.md` | Superseded frontend plan for combined signed balance + assortativity analytics visualization | `frontend` `analytics` `signed-balance` `assortativity` `ux` `superseded` |
-| [[ux-design-system-analytics]] | `ux-design-system-analytics.md` | Design system — color semantics and interpretation palette for analytics pages | `frontend` `ux` `analytics` |
-| [[route-transition-overlay]] | `route-transition-overlay.md` | Page transition orchestration — animated navigation between screens | `frontend` `ux` `architecture` |
-| [[player-details-impact-benchmarking]] | `player-details-impact-benchmarking.md` | Player-details card revision — dataset-grounded impact metrics relative to player pool | `frontend` `ux` `analytics` `performance` |
+| [[features/frontend-ux/README]] | `features/frontend-ux/README.md` | Frontend and UX feature hub | `frontend` `ux` `index` |
+| [[features/frontend-ux/new-gui-overview]] | `features/frontend-ux/new-gui-overview.md` | Frontend architecture overview — historical note; signed-balance page is no longer thesis-facing | `frontend` `architecture` `ux` |
+| [[features/frontend-ux/frontend-plan-signed-balance-assortativity]] | `features/frontend-ux/frontend-plan-signed-balance-assortativity.md` | Superseded frontend plan for combined signed balance + assortativity analytics visualization | `frontend` `analytics` `signed-balance` `assortativity` `ux` `superseded` |
+| [[features/frontend-ux/ux-design-system-analytics]] | `features/frontend-ux/ux-design-system-analytics.md` | Design system — color semantics and interpretation palette for analytics pages | `frontend` `ux` `analytics` |
+| [[features/frontend-ux/route-transition-overlay]] | `features/frontend-ux/route-transition-overlay.md` | Page transition orchestration — animated navigation between screens | `frontend` `ux` `architecture` |
+| [[features/frontend-ux/player-details-impact-benchmarking]] | `features/frontend-ux/player-details-impact-benchmarking.md` | Player-details card revision — dataset-grounded impact metrics relative to player pool | `frontend` `ux` `analytics` `performance` |
+| [[features/frontend-ux/birdseye-3d-sphere]] | `features/frontend-ux/birdseye-3d-sphere.md` | 3D global-view sphere — Rust artifact pipeline + frontend WebGL rendering layout | `frontend` `backend` `rust` `architecture` |
+| [[features/frontend-ux/landingpagedesign]] | `features/frontend-ux/landingpagedesign.md` | Landing-page and demo narrative design | `frontend` `ux` `demo` |
+
+---
+
+## Scoring
+
+Performance-metric docs used by graph analytics, player detail views, and NeuroSim seeding.
+
+| Note | Path | Description | Tags |
+|------|------|-------------|------|
+| [[features/scoring/README]] | `features/scoring/README.md` | Scoring feature hub | `scoring` `opscore` `index` |
+| [[features/scoring/dynamic-opscore-system]] | `features/scoring/dynamic-opscore-system.md` | Dataset-scoped, role-aware player scoring system | `scoring` `opscore` `analytics` |
+| [[features/scoring/opscore-v2-local-formula]] | `features/scoring/opscore-v2-local-formula.md` | Local formula note for opscore V2 | `scoring` `opscore` `formula` |
+| [[features/scoring/opscore-v2-vs-current-model]] | `features/scoring/opscore-v2-vs-current-model.md` | Comparison between current scoring and proposed V2 model | `scoring` `opscore` `planning` |
 
 ---
 
@@ -85,24 +102,52 @@ Analysis outputs, validation reports, and AI-assisted analysis tooling.
 
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
-| [[graph-v2-claude-analysis-report]] | `graph-v2-claude-analysis-report.md` | Graph V2 validation report — flexset and soloq datasets pass signed-network analysis checks | `analytics` `graph-theory` `dataset` `thesis` |
-| [[flexset-associative-graph-interpretation]] | `flexset-associative-graph-interpretation.md` | Interpretation note — flexset as a core-periphery player association graph with bridge-rich core and peripheral ally islands | `analytics` `graph-v2` `flexset` `visualization` `thesis` |
-| [[soloq-associative-graph-interpretation]] | `soloq-associative-graph-interpretation.md` | Interpretation note — soloq as an apex matchmaking-recurrence control graph with singleton/duo periphery | `analytics` `graph-v2` `soloq` `visualization` `thesis` |
-| [[claude-graph-v2-analysis-prompt]] | `claude-graph-v2-analysis-prompt.md` | Prompt template for analyzing Graph V2 outputs and identifying pipeline improvements | `graph-theory` `planning` `analytics` |
+| [[features/graph-analytics/README]] | `features/graph-analytics/README.md` | Graph analytics feature hub | `graph-theory` `analytics` `index` |
+| [[features/graph-analytics/graph-v2-claude-analysis-report]] | `features/graph-analytics/graph-v2-claude-analysis-report.md` | Graph V2 validation report — flexset and soloq datasets pass signed-network analysis checks | `analytics` `graph-theory` `dataset` `thesis` |
+| [[features/graph-analytics/flexset-associative-graph-interpretation]] | `features/graph-analytics/flexset-associative-graph-interpretation.md` | Interpretation note — flexset as a core-periphery player association graph with bridge-rich core and peripheral ally islands | `analytics` `graph-v2` `flexset` `visualization` `thesis` |
+| [[features/graph-analytics/soloq-associative-graph-interpretation]] | `features/graph-analytics/soloq-associative-graph-interpretation.md` | Interpretation note — soloq as an apex matchmaking-recurrence control graph with singleton/duo periphery | `analytics` `graph-v2` `soloq` `visualization` `thesis` |
+| [[features/graph-analytics/claude-graph-v2-analysis-prompt]] | `features/graph-analytics/claude-graph-v2-analysis-prompt.md` | Prompt template for analyzing Graph V2 outputs and identifying pipeline improvements | `graph-theory` `planning` `analytics` |
 
 ---
 
-## Future Planning
+## NeuroSim
 
-Forward-looking integration docs. Out of active scope unless owner reopens.
+Genetic / Tribal NeuroSim documentation, now consolidated under `docs/neurosim/` for Obsidian navigation and thesis writing.
 
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
-| [[premadegraph-x-genetic-neurosim-integration-plan]] | `premadegraph-x-genetic-neurosim-integration-plan.md` | Integration plan — seed Genetic NeuroSim v2 from validated player cluster profiles | `thesis` `genetic-neurosim` `planning` `graph-theory` |
-| [[neurosim-tribal-simulation-critical-redesign]] | `neurosim-tribal-simulation-critical-redesign.md` | Critical redesign proposal — current tribal page is a prototype; this doc supersedes the design and implementation docs for future work | `genetic-neurosim` `planning` `architecture` `frontend` `backend` |
-| [[superpowers/plans/2026-05-03-neurosim-tribal-simulation-agent-tasks]] | `superpowers/plans/2026-05-03-neurosim-tribal-simulation-agent-tasks.md` | Agent task plan — narrow vertical slices for implementing the critical redesign, one task per session | `genetic-neurosim` `planning` `agent-reference` |
+| [[neurosim/README]] | `neurosim/README.md` | NeuroSim documentation hub — start here for architecture, mechanics, validation, implementation runs, media, and chapter-writing notes | `genetic-neurosim` `index` `thesis` `obsidian` |
+| [[neurosim/status-map]] | `neurosim/status-map.md` | NeuroSim document status map — separates writing drafts, stable validation evidence, working architecture, run logs, and archive material | `genetic-neurosim` `documentation-status` `thesis` |
+| [[neurosim/chapter-writing/latex-chapter-map]] | `neurosim/chapter-writing/latex-chapter-map.md` | LaTeX chapter map — which NeuroSim docs support each thesis section | `genetic-neurosim` `thesis` `latex` `writing` |
+| [[neurosim/chapter-writing/tribal-neurosim-subchapter-fit-draft]] | `neurosim/chapter-writing/tribal-neurosim-subchapter-fit-draft.md` | Thesis subchapter framing — ABM, MAS, game theory, neuroevolution, graph theory, geometry, EDA, visualization, and HPC | `genetic-neurosim` `thesis` `writing` |
+| [[neurosim/chapter-writing/premadegraph-x-genetic-neurosim-integration-plan]] | `neurosim/chapter-writing/premadegraph-x-genetic-neurosim-integration-plan.md` | Integration plan — seed Genetic NeuroSim v2 from validated player cluster profiles | `thesis` `genetic-neurosim` `planning` `graph-theory` |
+| [[neurosim/architecture/critical-redesign]] | `neurosim/architecture/critical-redesign.md` | Critical redesign proposal — current tribal page is a prototype; this doc supersedes the design and implementation docs for future work | `genetic-neurosim` `planning` `architecture` `frontend` `backend` |
+| [[neurosim/validation/first-complete-simulation-run-2026-05-16]] | `neurosim/validation/first-complete-simulation-run-2026-05-16.md` | First complete simulation run — empirical evidence for the validated NeuroSim behavior story | `genetic-neurosim` `validation` `evidence` |
+| [[neurosim/validation/f2-validation-story/index]] | `neurosim/validation/f2-validation-story/index.md` | F2 validation story — bug discovery, fix, and post-fix validation narrative | `genetic-neurosim` `validation` `evidence` |
+| [[neurosim/mechanics/v4-border-pressure-and-dispute-mechanics]] | `neurosim/mechanics/v4-border-pressure-and-dispute-mechanics.md` | BP patch — border pressure system, war exhaustion, expansion pacing retuning; anti-chaos strategic mechanics | `genetic-neurosim` `mechanics` `simulation` `territory` |
+| [[neurosim/implementation-runs/rust/TaskR10Run]] | `neurosim/implementation-runs/rust/TaskR10Run.md` | Task R10 — Border Pressure System + war exhaustion + endgame tuning; strategic arc restoration for thesis-quality convergence | `genetic-neurosim` `implementation-run` `simulation` `rust` |
 
----
+## Documentation Status
+
+Final/working/superseded tracking and `mainraw.tex` inclusion maps.
+
+| Note | Path | Description | Tags |
+|------|------|-------------|------|
+| [[status/README]] | `status/README.md` | Documentation status hub — explains `final`, `working`, `retired`, and `superseded` labels | `documentation-status` `index` `thesis` |
+| [[status/mainraw-inclusion-map]] | `status/mainraw-inclusion-map.md` | Map of documents whose content is reflected in `docs/mainraw.tex` | `documentation-status` `mainraw` `thesis` |
+| [[status/working-documents-map]] | `status/working-documents-map.md` | Map of working, retired, and superseded documents | `documentation-status` `working` `thesis` |
+| [[status/workflow-provenance-map]] | `status/workflow-provenance-map.md` | Map of task runs, old versions, executor prompts, archive imports, and process-history documents | `documentation-status` `workflow` `provenance` |
+
+## LaTeX Thesis
+
+Modular thesis build files.
+
+| Note | Path | Description | Tags |
+|------|------|-------------|------|
+| [[latex/README]] | `latex/README.md` | Modular LaTeX thesis workspace — active `main.tex`, per-chapter files, references, preamble, and local assets | `latex` `thesis` `mainraw` |
+| `latex/main.tex` | `latex/main.tex` | Active modular thesis entry point | `latex` `thesis` |
+| `latex/chapters/` | `latex/chapters/` | One `.tex` file per thesis chapter | `latex` `chapters` |
+| `latex/assets/` | `latex/assets/` | Local copy of LaTeX image and diagram assets | `latex` `assets` |
 
 ## Evidence & Provenance
 

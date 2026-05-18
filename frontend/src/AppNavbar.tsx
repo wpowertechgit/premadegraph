@@ -9,6 +9,7 @@ import {
   FaChevronUp,
   FaChevronDown,
   FaDatabase,
+  FaDice,
   FaGlobe,
   FaKey,
   FaPlus,
@@ -200,12 +201,99 @@ export default function AppNavbar({
   const [switchingDatasetId, setSwitchingDatasetId] = useState<string | null>(null);
   const [runtimeKeyDrafts, setRuntimeKeyDrafts] = useState<Record<string, string>>({});
   const [launchingDesktop, setLaunchingDesktop] = useState(false);
+  const [seedMenuOpen, setSeedMenuOpen] = useState(false);
+  const [seedDraft, setSeedDraft] = useState("7777");
+  const [seedSubmitting, setSeedSubmitting] = useState(false);
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
+
+  const restartNeurosimWithDraftSeed = async () => {
+    const normalizedSeed = seedDraft.trim();
+    const parsedSeed = Number(normalizedSeed);
+    if (!normalizedSeed || !Number.isSafeInteger(parsedSeed) || parsedSeed < 0) {
+      throw new Error("Use a non-negative integer seed.");
+    }
+
+    const requestId = `seed-${Date.now()}`;
+    const startedAt = performance.now();
+    console.info("[neurosim-seed] restart request", { requestId, seed: parsedSeed });
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      console.error("[neurosim-seed] restart timed out", {
+        requestId,
+        seed: parsedSeed,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      });
+      controller.abort("NeuroSim seed restart timed out after 5s");
+    }, 5000);
+
+    let response: Response;
+    try {
+      response = await fetch("/api/neurosim/api/control/restart-seed", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-NeuroSim-Seed-Request": requestId,
+        },
+        body: JSON.stringify({ world_seed: parsedSeed }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error("[neurosim-seed] restart request failed", {
+        requestId,
+        seed: parsedSeed,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        reason,
+      });
+      throw new Error(reason === "signal is aborted without reason"
+        ? "Seed restart timed out before Rust replied."
+        : reason);
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+
+    console.info("[neurosim-seed] restart response", {
+      requestId,
+      seed: parsedSeed,
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.error("[neurosim-seed] restart bad response", {
+        requestId,
+        status: response.status,
+        body: text,
+      });
+      throw new Error(`Seed restart failed (${response.status}) ${text}`.trim());
+    }
+
+    const payload = await response.json();
+    console.info("[neurosim-seed] restart payload", { requestId, payload });
+    const reportedSeed = Number(payload?.status?.world_seed);
+    if (reportedSeed !== parsedSeed) {
+      throw new Error(`Backend still reports seed ${payload?.status?.world_seed ?? "unknown"}.`);
+    }
+
+    return parsedSeed;
+  };
 
   const handleLaunchDesktop = async () => {
     const nodeWs   = "ws://localhost:3001/api/neurosim/desktop/v2/frames";
     const nodeHttp = "http://localhost:3001/api/neurosim/desktop/v1";
     const session  = currentDatasetId ?? "";
     setLaunchingDesktop(true);
+    setSeedMessage(null);
+    try {
+      const parsedSeed = await restartNeurosimWithDraftSeed();
+      setSeedMessage(`Restarted with seed ${parsedSeed}`);
+    } catch (error) {
+      setSeedMessage(error instanceof Error ? error.message : "Seed restart failed.");
+      setLaunchingDesktop(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/neurosim/launch-client", {
         method: "POST",
@@ -225,6 +313,20 @@ export default function AppNavbar({
     const uri = `neurosim://?nodeWs=${encodeURIComponent(nodeWs)}&nodeHttp=${encodeURIComponent(nodeHttp)}&session=${encodeURIComponent(session)}`;
     window.location.href = uri;
   };
+
+  const handleApplySeed = async () => {
+    setSeedSubmitting(true);
+    setSeedMessage(null);
+    try {
+      const parsedSeed = await restartNeurosimWithDraftSeed();
+      setSeedMessage(`Restarted with seed ${parsedSeed}`);
+    } catch (error) {
+      setSeedMessage(error instanceof Error ? error.message : "Seed restart failed.");
+    } finally {
+      setSeedSubmitting(false);
+    }
+  };
+
   const [savingRuntimeKey, setSavingRuntimeKey] = useState<string | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const visibleRuntimeKeys = runtimeKeys.filter(
@@ -335,8 +437,8 @@ export default function AppNavbar({
     {
       label: language === "hu" ? "TribalNeuroSim" : "TribalNeuroSim",
       description: language === "hu"
-        ? "MonoGame kliens indítása az aktív adatkészlettel"
-        : "Launch MonoGame desktop client with active dataset",
+        ? "Neuroevolúciós last-man-standing törzsszimuláció"
+        : "Neuroevolutionary last-man-standing tribe simulation",
       icon: <FaGlobe />,
       onAction: handleLaunchDesktop,
       actionPending: launchingDesktop,
@@ -345,8 +447,8 @@ export default function AppNavbar({
       to: "http://localhost:3001/db-explorer/",
       label: language === "hu" ? "DB Explorer" : "DB Explorer",
       description: language === "hu"
-        ? "ASP.NET Core adatbázis-böngésző datasetválasztóval"
-        : "ASP.NET Core database browser with dataset selection",
+        ? "Adathalmazok, játékosok és meccsek gyors átnézése"
+        : "Browse datasets, players, and matches",
       icon: <FaDatabase />,
       external: true,
     },
@@ -474,12 +576,67 @@ export default function AppNavbar({
           <SidebarSection title={t.app.nav.navigateSection} collapsed={collapsed}>
             <nav className="app-sidebar__nav">
               {navItems.map((item) => (
-                <SidebarLink
-                  key={item.to ?? item.label}
-                  item={item}
-                  collapsed={collapsed}
-                  onNavigate={showMobileBar ? handleCloseMobileNav : undefined}
-                />
+                <React.Fragment key={item.to ?? item.label}>
+                  {item.label === "TribalNeuroSim" ? (
+                    <div className={`app-sidebar__seed-control${collapsed ? " is-collapsed" : ""}${seedMenuOpen ? " is-open" : ""}`}>
+                      <div className="app-sidebar__seed-link-row">
+                        <SidebarLink
+                          item={item}
+                          collapsed={collapsed}
+                          onNavigate={showMobileBar ? handleCloseMobileNav : undefined}
+                        />
+                        <button
+                          type="button"
+                          className="app-sidebar__seed-arrow"
+                          onClick={() => setSeedMenuOpen((open) => !open)}
+                          title="Set NeuroSim seed"
+                          aria-label="Set NeuroSim seed"
+                          aria-expanded={seedMenuOpen}
+                          aria-controls="neurosim-seed-menu"
+                        >
+                          <FaChevronDown />
+                        </button>
+                      </div>
+                      {!collapsed && seedMenuOpen ? (
+                        <div id="neurosim-seed-menu" className="app-sidebar__seed-menu">
+                          <div className="app-sidebar__seed-copy">
+                            Seed
+                          </div>
+                          <div className="app-sidebar__field-row">
+                            <input
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={seedDraft}
+                              onChange={(event) => setSeedDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  void handleApplySeed();
+                                }
+                              }}
+                              placeholder="7777"
+                              aria-label="NeuroSim world seed"
+                            />
+                            <button
+                              type="button"
+                              className="app-sidebar__mini-button"
+                              onClick={() => void handleApplySeed()}
+                              disabled={seedSubmitting}
+                            >
+                              {seedSubmitting ? "..." : "Apply"}
+                            </button>
+                          </div>
+                          {seedMessage ? <div className="app-sidebar__seed-status">{seedMessage}</div> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <SidebarLink
+                      item={item}
+                      collapsed={collapsed}
+                      onNavigate={showMobileBar ? handleCloseMobileNav : undefined}
+                    />
+                  )}
+                </React.Fragment>
               ))}
             </nav>
           </SidebarSection>

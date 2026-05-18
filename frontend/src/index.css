@@ -366,6 +366,102 @@ button:focus-visible {
   background: rgba(107, 124, 255, 0.14);
 }
 
+.app-sidebar__seed-control {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.app-sidebar__seed-control.is-collapsed {
+  margin: 0;
+  justify-items: center;
+}
+
+.app-sidebar__seed-link-row {
+  position: relative;
+}
+
+.app-sidebar__seed-arrow {
+  position: absolute;
+  right: 0.45rem;
+  top: 50%;
+  width: 1.55rem;
+  height: 1.55rem;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast),
+    border-color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.app-sidebar__seed-arrow:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--border-strong);
+}
+
+.app-sidebar__seed-control.is-open .app-sidebar__seed-arrow {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.app-sidebar__seed-control.is-collapsed .app-sidebar__seed-arrow {
+  right: 0.15rem;
+  top: 0.2rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 0.52rem;
+  transform: none;
+}
+
+.app-sidebar__seed-control.is-collapsed.is-open .app-sidebar__seed-arrow {
+  transform: rotate(180deg);
+}
+
+.app-sidebar__seed-menu {
+  display: grid;
+  gap: 0.5rem;
+  margin-left: 3.25rem;
+  padding: 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
+}
+
+.app-sidebar__seed-copy,
+.app-sidebar__seed-status {
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.app-sidebar__seed-copy code {
+  color: var(--text-primary);
+}
+
+.app-sidebar__seed-menu input {
+  width: 100%;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.app-sidebar__seed-status {
+  color: var(--text-muted);
+}
+
 .app-sidebar__link-copy {
   display: grid;
   gap: 0.15rem;
