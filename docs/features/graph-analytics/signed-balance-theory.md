@@ -1,3 +1,10 @@
+---
+status: retired
+mainraw_included: true
+mainraw_chapters: [3, 15]
+document_role: methodological-background
+---
+
 # Signed Balance Theory And Implementation
 
 ## Document Role

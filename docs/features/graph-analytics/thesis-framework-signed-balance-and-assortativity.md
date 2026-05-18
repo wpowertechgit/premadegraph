@@ -1,3 +1,10 @@
+---
+status: superseded
+mainraw_included: false
+mainraw_chapters: []
+document_role: historical-framing
+---
+
 # Thesis Framework: Signed Balance And Assortativity As Complementary Network Analysis
 
 > **Superseded note (2026-04-30):** This framing has been downgraded. Read

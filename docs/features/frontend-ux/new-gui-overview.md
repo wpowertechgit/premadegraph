@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [6, 14]
+document_role: thesis-source
+---
+
 # New GUI Overview
 
 ## Document Role

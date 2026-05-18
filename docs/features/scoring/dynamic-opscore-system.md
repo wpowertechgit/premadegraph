@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [9, 16, 20, 21]
+document_role: thesis-source
+---
+
 # Match-Based Performance Scoring System
 
 This document describes the scoring system currently implemented in the backend.

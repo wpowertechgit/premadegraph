@@ -117,12 +117,24 @@ Genetic / Tribal NeuroSim documentation, now consolidated under `docs/neurosim/`
 | Note | Path | Description | Tags |
 |------|------|-------------|------|
 | [[neurosim/README]] | `neurosim/README.md` | NeuroSim documentation hub — start here for architecture, mechanics, validation, implementation runs, media, and chapter-writing notes | `genetic-neurosim` `index` `thesis` `obsidian` |
+| [[neurosim/status-map]] | `neurosim/status-map.md` | NeuroSim document status map — separates writing drafts, stable validation evidence, working architecture, run logs, and archive material | `genetic-neurosim` `documentation-status` `thesis` |
 | [[neurosim/chapter-writing/latex-chapter-map]] | `neurosim/chapter-writing/latex-chapter-map.md` | LaTeX chapter map — which NeuroSim docs support each thesis section | `genetic-neurosim` `thesis` `latex` `writing` |
 | [[neurosim/chapter-writing/tribal-neurosim-subchapter-fit-draft]] | `neurosim/chapter-writing/tribal-neurosim-subchapter-fit-draft.md` | Thesis subchapter framing — ABM, MAS, game theory, neuroevolution, graph theory, geometry, EDA, visualization, and HPC | `genetic-neurosim` `thesis` `writing` |
 | [[neurosim/chapter-writing/premadegraph-x-genetic-neurosim-integration-plan]] | `neurosim/chapter-writing/premadegraph-x-genetic-neurosim-integration-plan.md` | Integration plan — seed Genetic NeuroSim v2 from validated player cluster profiles | `thesis` `genetic-neurosim` `planning` `graph-theory` |
 | [[neurosim/architecture/critical-redesign]] | `neurosim/architecture/critical-redesign.md` | Critical redesign proposal — current tribal page is a prototype; this doc supersedes the design and implementation docs for future work | `genetic-neurosim` `planning` `architecture` `frontend` `backend` |
 | [[neurosim/validation/first-complete-simulation-run-2026-05-16]] | `neurosim/validation/first-complete-simulation-run-2026-05-16.md` | First complete simulation run — empirical evidence for the validated NeuroSim behavior story | `genetic-neurosim` `validation` `evidence` |
 | [[neurosim/validation/f2-validation-story/index]] | `neurosim/validation/f2-validation-story/index.md` | F2 validation story — bug discovery, fix, and post-fix validation narrative | `genetic-neurosim` `validation` `evidence` |
+
+## Documentation Status
+
+Final/working/superseded tracking and `mainraw.tex` inclusion maps.
+
+| Note | Path | Description | Tags |
+|------|------|-------------|------|
+| [[status/README]] | `status/README.md` | Documentation status hub — explains `final`, `working`, `retired`, and `superseded` labels | `documentation-status` `index` `thesis` |
+| [[status/mainraw-inclusion-map]] | `status/mainraw-inclusion-map.md` | Map of documents whose content is reflected in `docs/mainraw.tex` | `documentation-status` `mainraw` `thesis` |
+| [[status/working-documents-map]] | `status/working-documents-map.md` | Map of working, retired, and superseded documents | `documentation-status` `working` `thesis` |
+| [[status/workflow-provenance-map]] | `status/workflow-provenance-map.md` | Map of task runs, old versions, executor prompts, archive imports, and process-history documents | `documentation-status` `workflow` `provenance` |
 
 ## Evidence & Provenance
 

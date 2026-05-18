@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [4, 20]
+document_role: thesis-source
+---
+
 # Apex Flex Queue Master+ Data Collection Strategy
 
 ## Overview

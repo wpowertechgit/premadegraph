@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [10, 18, 20]
+document_role: validation-source
+---
+
 # Graph V2 Claude Analysis Report
 
 Generated: 2026-04-28  

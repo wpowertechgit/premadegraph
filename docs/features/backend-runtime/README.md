@@ -13,10 +13,13 @@ aliases:
 
 This feature area covers runtime architecture, dataset separation, persistence, Rust integration, and pathfinding support.
 
-## Start Here
+## Final Thesis Sources
 
 - [[multi-dataset-architecture]] - independent dataset architecture.
 - [[unified-cluster-persistence-and-astar]] - SQLite cluster persistence and exact A* integration.
+
+## Working / Prototype Notes
+
 - [[pathfinder-backend-prototype]] - pathfinder backend migration notes.
 
 ## Thesis Role

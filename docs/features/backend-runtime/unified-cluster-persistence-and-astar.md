@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [8, 12, 13]
+document_role: thesis-source
+---
+
 # Unified Cluster Persistence And Exact A*
 
 ## Document Role

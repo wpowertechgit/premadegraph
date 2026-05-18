@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: true
+mainraw_chapters: [12, 13]
+document_role: implementation-note
+---
+
 # Pathfinder Backend Prototype
 
 ## Document Role

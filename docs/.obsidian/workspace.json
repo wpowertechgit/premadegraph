@@ -4,19 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "e19a26c79b051c96",
+        "id": "7159abb63a9edf6d",
         "type": "tabs",
         "children": [
           {
-            "id": "d641eb085116033e",
+            "id": "bf1f9ff5d4241814",
             "type": "leaf",
             "state": {
-              "type": "pdf",
+              "type": "markdown",
               "state": {
-                "file": "mainraw.pdf"
+                "file": "neurosim/chapter-writing/tribal-neurosim-subchapter-fit-draft.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-file-text",
-              "title": "mainraw"
+              "icon": "lucide-file",
+              "title": "tribal-neurosim-subchapter-fit-draft"
             }
           }
         ]
@@ -178,11 +180,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "d641eb085116033e",
+  "active": "bf1f9ff5d4241814",
   "lastOpenFiles": [
+    "neurosim/chapter-writing/premadegraph-x-genetic-neurosim-integration-plan.md",
+    "neurosim/chapter-writing/latex-chapter-map.md",
+    "DOCUMENT_MAP.md",
+    "mainraw.pdf",
     "master-soloq-eune-collection-strategy.md",
     "apex-flex-collection-strategy.md",
-    "DOCUMENT_MAP.md",
     "multi-key-implementation-prompt.md",
     "assortativity-analysis.md",
     "databaseproject/Adatbazis Project Dokumentacio.pdf"

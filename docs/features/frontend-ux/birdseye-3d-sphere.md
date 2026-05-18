@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [14]
+document_role: thesis-source
+---
+
 # Bird's-Eye 3D Sphere
 
 ## Document Role

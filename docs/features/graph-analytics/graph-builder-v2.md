@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [10, 12, 14]
+document_role: thesis-source
+---
+
 # Graph Builder V2
 
 ## Summary

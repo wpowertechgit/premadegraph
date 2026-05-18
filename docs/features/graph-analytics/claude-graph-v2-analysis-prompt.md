@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: false
+mainraw_chapters: []
+document_role: analysis-prompt
+---
+
 # Claude Code Prompt: Graph V2 Research Analysis
 
 You are analyzing the Graph Builder V2 outputs for this thesis project.

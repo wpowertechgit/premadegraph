@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [7]
+document_role: thesis-source
+---
+
 # Multi-Dataset Architecture
 
 ## Overview

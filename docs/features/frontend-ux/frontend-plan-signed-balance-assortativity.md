@@ -1,3 +1,10 @@
+---
+status: superseded
+mainraw_included: false
+mainraw_chapters: []
+document_role: historical-ui-plan
+---
+
 # Frontend Plan: Signed Balance & Assortativity Analytics
 
 ## Overview

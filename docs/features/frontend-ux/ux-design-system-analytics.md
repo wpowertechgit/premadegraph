@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [14, 19]
+document_role: supporting-source
+---
+
 # UX & Design System Guide: Signed Balance & Assortativity Frontend
 
 ## Color Semantics & Interpretation Palette

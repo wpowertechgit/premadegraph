@@ -13,7 +13,7 @@ aliases:
 
 This feature area contains high-level planning and scope review notes that guide future work.
 
-## Start Here
+## Working / Scope Notes
 
 - [[project-feasibility-review-and-additions]] - scope review and additions such as parallel Brandes and experiment baselines.
 

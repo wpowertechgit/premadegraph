@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [16, 18, 20, 21]
+document_role: thesis-source
+---
+
 # Assortativity Analysis Of Player Performance Metrics
 
 ## Document Role

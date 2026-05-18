@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: false
+mainraw_chapters: []
+document_role: dev-support
+---
+
 # Mock Datasets And Chaos Design
 
 ## Document Role

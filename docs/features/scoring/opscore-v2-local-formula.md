@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: false
+mainraw_chapters: []
+document_role: formula-draft
+---
+
 # Opscore v2 Local Formula
 
 ## Purpose

@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: true
+mainraw_chapters: [4]
+document_role: implementation-note
+---
+
 # Multi-API-Key Rate Limit Rotation Implementation
 
 ## Task Summary

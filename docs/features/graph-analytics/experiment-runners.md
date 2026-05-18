@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [18]
+document_role: validation-source
+---
+
 # Experiment Runners For Signed-Balance Sensitivity And Assortativity Significance
 
 ## Purpose

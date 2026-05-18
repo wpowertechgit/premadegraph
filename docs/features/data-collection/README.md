@@ -12,11 +12,14 @@ aliases:
 
 This feature area covers dataset acquisition, API constraints, collection strategy, and synthetic data used for validation or demo workflows.
 
-## Start Here
+## Final Thesis Sources
 
 - [[apex-flex-collection-strategy]] - primary Flex Queue evidence dataset.
 - [[master-soloq-eune-collection-strategy]] - SoloQ control dataset.
 - [[riot-api-rate-limit-analysis]] - practical API bottleneck analysis.
+
+## Working / Support Notes
+
 - [[multi-key-implementation-prompt]] - key rotation implementation prompt.
 - [[mock-datasets-and-chaos-design]] - synthetic/demo data design.
 

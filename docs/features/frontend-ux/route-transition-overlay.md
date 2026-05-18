@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: false
+mainraw_chapters: []
+document_role: ui-support
+---
+
 # Route Transition Overlay
 
 ## Document Role

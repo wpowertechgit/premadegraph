@@ -18,6 +18,7 @@ This folder is the root documentation home for Genetic / Tribal NeuroSim. Backen
 
 | Need | Read |
 |------|------|
+| NeuroSim document status | [[status-map]] |
 | Thesis prose and subchapter framing | [[chapter-writing/tribal-neurosim-subchapter-fit-draft]] |
 | LaTeX section evidence map | [[chapter-writing/latex-chapter-map]] |
 | System redesign narrative | [[architecture/critical-redesign]] |

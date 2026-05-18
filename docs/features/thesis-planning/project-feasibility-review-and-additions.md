@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: true
+mainraw_chapters: [19, 23]
+document_role: scope-review
+---
+
 # Project Feasibility Review And Useful Additions
 
 > **Superseded note (2026-04-30):** The optimistic signed-balance framing in this

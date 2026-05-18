@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: true
+mainraw_chapters: [17, 19, 23]
+document_role: implementation-plan
+---
+
 # Parallel Brandes Betweenness Centrality Implementation Plan
 
 **Status:** Implemented core Rust analysis + API command  

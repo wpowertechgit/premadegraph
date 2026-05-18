@@ -1,3 +1,10 @@
+---
+status: final
+mainraw_included: true
+mainraw_chapters: [4]
+document_role: thesis-source
+---
+
 # Riot API Rate Limit Analysis & Collection Capacity
 
 **Dev Key Tier:** Standard Rate Limits (provided)  

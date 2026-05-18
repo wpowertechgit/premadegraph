@@ -59,8 +59,8 @@ How to use it:
 ## Global Evidence Anchors
 
 - [[DOCUMENT_MAP]] is the agent-readable index of the documentation vault.
-- [[signed-balance-methodological-retirement]] is the scope authority for signed balance.
-- [[project-feasibility-review-and-additions]] is the current thesis-scope review.
-- [[graph-v2-claude-analysis-report]] is the Graph V2 validation report.
-- [[flexset-associative-graph-interpretation]] and [[soloq-associative-graph-interpretation]] support the dataset comparison narrative.
-
+- [[features/graph-analytics/signed-balance-methodological-retirement]] is the scope authority for signed balance.
+- [[features/thesis-planning/project-feasibility-review-and-additions]] is the current thesis-scope review.
+- [[features/graph-analytics/graph-v2-claude-analysis-report]] is the Graph V2 validation report.
+- [[features/graph-analytics/flexset-associative-graph-interpretation]] and [[features/graph-analytics/soloq-associative-graph-interpretation]] support the dataset comparison narrative.
+- [[status/mainraw-inclusion-map]] tracks which supporting documents have been reflected in `docs/mainraw.tex`.

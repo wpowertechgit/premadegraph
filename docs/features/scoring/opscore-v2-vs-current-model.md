@@ -1,3 +1,10 @@
+---
+status: working
+mainraw_included: false
+mainraw_chapters: []
+document_role: deferred-analysis
+---
+
 # Opscore v2 Compared With The Current Model
 
 ## Purpose
