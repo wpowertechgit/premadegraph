@@ -292,9 +292,6 @@ impl WorldGrid {
     /// Regenerate food on all non-river tiles.
     pub fn tick_food(&mut self) {
         for tile in &mut self.tiles {
-            if tile.biome == Biome::River {
-                continue;
-            }
             tile.food = (tile.food + tile.food_regen).min(tile.max_food);
         }
     }
@@ -375,15 +372,13 @@ impl WorldGrid {
         result
     }
 
-    /// Add `amount` food to every non-river tile, capped at `max_food`.
+    /// Add `amount` food to every tile, capped at `max_food`.
     /// Returns the number of tiles modified.
     pub fn spawn_food_global(&mut self, amount: f32) -> usize {
         let mut changed = 0;
         for tile in &mut self.tiles {
-            if tile.biome != Biome::River {
-                tile.food = (tile.food + amount).min(tile.max_food);
-                changed += 1;
-            }
+            tile.food = (tile.food + amount).min(tile.max_food);
+            changed += 1;
         }
         changed
     }
