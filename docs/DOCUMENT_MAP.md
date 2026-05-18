@@ -124,6 +124,8 @@ Genetic / Tribal NeuroSim documentation, now consolidated under `docs/neurosim/`
 | [[neurosim/architecture/critical-redesign]] | `neurosim/architecture/critical-redesign.md` | Critical redesign proposal — current tribal page is a prototype; this doc supersedes the design and implementation docs for future work | `genetic-neurosim` `planning` `architecture` `frontend` `backend` |
 | [[neurosim/validation/first-complete-simulation-run-2026-05-16]] | `neurosim/validation/first-complete-simulation-run-2026-05-16.md` | First complete simulation run — empirical evidence for the validated NeuroSim behavior story | `genetic-neurosim` `validation` `evidence` |
 | [[neurosim/validation/f2-validation-story/index]] | `neurosim/validation/f2-validation-story/index.md` | F2 validation story — bug discovery, fix, and post-fix validation narrative | `genetic-neurosim` `validation` `evidence` |
+| [[neurosim/mechanics/v4-border-pressure-and-dispute-mechanics]] | `neurosim/mechanics/v4-border-pressure-and-dispute-mechanics.md` | BP patch — border pressure system, war exhaustion, expansion pacing retuning; anti-chaos strategic mechanics | `genetic-neurosim` `mechanics` `simulation` `territory` |
+| [[neurosim/implementation-runs/rust/TaskR10Run]] | `neurosim/implementation-runs/rust/TaskR10Run.md` | Task R10 — Border Pressure System + war exhaustion + endgame tuning; strategic arc restoration for thesis-quality convergence | `genetic-neurosim` `implementation-run` `simulation` `rust` |
 
 ## Documentation Status
 
@@ -135,6 +137,17 @@ Final/working/superseded tracking and `mainraw.tex` inclusion maps.
 | [[status/mainraw-inclusion-map]] | `status/mainraw-inclusion-map.md` | Map of documents whose content is reflected in `docs/mainraw.tex` | `documentation-status` `mainraw` `thesis` |
 | [[status/working-documents-map]] | `status/working-documents-map.md` | Map of working, retired, and superseded documents | `documentation-status` `working` `thesis` |
 | [[status/workflow-provenance-map]] | `status/workflow-provenance-map.md` | Map of task runs, old versions, executor prompts, archive imports, and process-history documents | `documentation-status` `workflow` `provenance` |
+
+## LaTeX Thesis
+
+Modular thesis build files.
+
+| Note | Path | Description | Tags |
+|------|------|-------------|------|
+| [[latex/README]] | `latex/README.md` | Modular LaTeX thesis workspace — active `main.tex`, per-chapter files, references, preamble, and local assets | `latex` `thesis` `mainraw` |
+| `latex/main.tex` | `latex/main.tex` | Active modular thesis entry point | `latex` `thesis` |
+| `latex/chapters/` | `latex/chapters/` | One `.tex` file per thesis chapter | `latex` `chapters` |
+| `latex/assets/` | `latex/assets/` | Local copy of LaTeX image and diagram assets | `latex` `assets` |
 
 ## Evidence & Provenance
 

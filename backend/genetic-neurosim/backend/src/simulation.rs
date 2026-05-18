@@ -397,6 +397,7 @@ pub struct SeedClusterEntry {
 pub struct LineageStatsResponse {
     pub total_entities: usize,
     pub seed_clusters: Vec<SeedClusterEntry>,
+    pub tribe_nodes: Vec<crate::lineage_registry::TribeLineageNode>,
 }
 
 // ─── Tombstone Response types (R2) ──────────────────────────────────────────────
@@ -415,6 +416,7 @@ pub struct ValidationMetrics {
     pub dominant_output_counts: std::collections::BTreeMap<String, usize>,
     pub active_war_count: usize,
     pub disputed_tile_count: usize,
+    pub border_pressure_pair_count: usize,
     pub alliance_link_count: usize,
     pub tombstone_count: usize,
     pub lineage_entity_count: usize,
@@ -1014,6 +1016,13 @@ pub struct TribeSimulation {
     /// C2: Dispute registry — tracks when each (i,j) tribe pair first began disputing.
     /// Key is (min_idx, max_idx). Removed when no shared disputed tile remains.
     dispute_registry: std::collections::BTreeMap<(usize, usize), u64>,
+    /// BP: Border pressure — accumulated ticks two tribes have shared an adjacent border.
+    /// Builds while borders touch (+1/tick, cap 200), decays when separated (-2/tick).
+    /// War declarations gate on PRESSURE_WAR_THRESHOLD; endgame skips the gate.
+    border_pressure: std::collections::BTreeMap<(usize, usize), u32>,
+    /// BP: Tracks pairs that have already emitted a BorderTensionFormed event so the
+    /// event fires exactly once per pair per crossing of PRESSURE_WAR_THRESHOLD.
+    border_tension_announced: std::collections::BTreeSet<(usize, usize)>,
     /// Per-tick cache: tile index → tribe array index. u32::MAX = neutral/unknown.
     /// Rebuilt at the start of each step() to accelerate O(n²) neighbor scans.
     tile_tribe_idx: Vec<u32>,
@@ -1054,6 +1063,8 @@ impl TribeSimulation {
             lineage_registry: LineageRegistry::new(),
             tombstone: TombstoneLedger::new(),
             dispute_registry: std::collections::BTreeMap::new(),
+            border_pressure: std::collections::BTreeMap::new(),
+            border_tension_announced: std::collections::BTreeSet::new(),
             tile_tribe_idx: vec![u32::MAX; total_tiles],
             tribe_id_to_idx: HashMap::new(),
             last_death_tick: 0,
@@ -1109,6 +1120,11 @@ impl TribeSimulation {
                     generation: 0,
                 });
             }
+        }
+
+        // R9: Register tribe-level DAG nodes for all initial tribes
+        for tribe in &self.tribes {
+            self.lineage_registry.register_tribe(tribe.id as u32, &tribe.cluster_id, self.tick);
         }
 
         // Build the initial cached frame (no food changes on tick 0)
@@ -1272,6 +1288,11 @@ impl TribeSimulation {
                     generation: 0,
                 });
             }
+        }
+
+        // R9: Register tribe-level DAG nodes for scenario tribes
+        for tribe in &self.tribes {
+            self.lineage_registry.register_tribe(tribe.id as u32, &tribe.cluster_id, self.tick);
         }
 
         self.last_frame = self.build_frame(&[]);
@@ -1507,6 +1528,10 @@ impl TribeSimulation {
 
     pub fn step(&mut self) -> Vec<u8> {
         self.tick += 1;
+        // BP: Decay post-war exhaustion each tick so tribes can re-enter war after a cooldown.
+        for tribe in self.tribes.iter_mut() {
+            tribe.war_exhaustion_ticks = tribe.war_exhaustion_ticks.saturating_sub(1);
+        }
         self.rebuild_tile_cache();
 
         // Snapshot for extinction detection (alive before this tick)
@@ -1560,8 +1585,12 @@ impl TribeSimulation {
         // C2: Refresh dispute registry after expansion creates new shared tiles
         self.update_dispute_registry();
 
+        // BP: Accumulate/decay border pressure between adjacent tribe pairs
+        self.update_border_pressure();
+
         // C3: Proactive conquest pressure — tribes with high raid/aggression pick targeted rivals
-        if self.tick % 20 == 0 {
+        // BP: Interval raised 20→60: war declarations now require border pressure buildup first.
+        if self.tick % 60 == 0 {
             self.apply_opportunity_war();
         }
 
@@ -1628,7 +1657,9 @@ impl TribeSimulation {
         }
         let tick = self.tick;
         for idx in starved {
-            self.tombstone.record_death(&self.tribes[idx], tick, "starved");
+            let cause = crate::tombstone::ExtinctionCause::Starved;
+            self.lineage_registry.record_tribe_death(self.tribes[idx].id as u32, &cause, tick);
+            self.tombstone.record_death(&self.tribes[idx], tick, cause);
         }
 
         // Stat decay: applies every 50 ticks when tribes are starving
@@ -1712,8 +1743,7 @@ impl TribeSimulation {
             self.last_death_tick = tick;
         }
         for tribe_idx in &extinct_indices {
-            let cause = if self.tribes[*tribe_idx].population == 0 { "extinction" } else { "unknown" };
-            self.cleanup_tribe(*tribe_idx, cause);
+            self.cleanup_tribe(*tribe_idx);
             let tribe_id = self.tribes[*tribe_idx].id as u32;
             let ev = crate::events::SimulationEvent::new(
                 0, tick, gen,
@@ -1899,9 +1929,14 @@ impl TribeSimulation {
                 BehaviorState::Settling => {
                     if food_ratio < 0.3 {
                         BehaviorState::Foraging
-                    } else if (dr.aggression > 0.45 || dr.raid > 0.65) && self.has_neighbor(i) {
+                    } else if (dr.aggression > 0.45 || dr.raid > 0.65) && self.has_neighbor(i)
+                              && self.tribes[i].war_exhaustion_ticks == 0
+                              && self.has_pressured_neighbor(i) {
+                        // BP: only declare war after sufficient border contact
                         BehaviorState::AtWar
-                    } else if dr.aggression > 0.25 && food_ratio > 0.5 && self.has_weaker_neighbor(i) {
+                    } else if dr.aggression > 0.25 && food_ratio > 0.5 && self.has_weaker_neighbor(i)
+                              && self.tribes[i].war_exhaustion_ticks == 0
+                              && self.has_pressured_neighbor(i) {
                         BehaviorState::AtWar
                     } else if dr.resource > 0.35 && dr.aggression < 0.25 && dr.isolation > 0.50
                             && self.tribes[i].ticks_in_state >= 20 {
@@ -2296,6 +2331,28 @@ impl TribeSimulation {
         false
     }
 
+    /// True if this tribe has at least one adjacent rival with border pressure ≥ PRESSURE_WAR_THRESHOLD.
+    /// In endgame (≤ tribes.len()/6 alive) always returns true so stalemates can break.
+    fn has_pressured_neighbor(&self, tribe_idx: usize) -> bool {
+        let alive_count = self.tribes.iter().filter(|t| t.alive).count();
+        let endgame_threshold = (self.tribes.len() / 6).max(4);
+        if alive_count <= endgame_threshold { return true; }
+        for &tile in &self.tribes[tribe_idx].territory {
+            for adj in self.world.hex_adjacent_tiles(tile as usize) {
+                let adj_raw = self.tile_tribe_idx[adj];
+                if adj_raw == u32::MAX { continue; }
+                let adj_idx = adj_raw as usize;
+                if adj_idx == tribe_idx { continue; }
+                if !self.tribes[adj_idx].alive { continue; }
+                let pair = (tribe_idx.min(adj_idx), tribe_idx.max(adj_idx));
+                if self.border_pressure.get(&pair).copied().unwrap_or(0) >= Self::PRESSURE_WAR_THRESHOLD {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     // ─── C3: Spatial helpers and aggression mechanics ────────────────────────
 
     /// True if every tile adjacent to this tribe's territory is controlled by rival tribes —
@@ -2375,16 +2432,17 @@ impl TribeSimulation {
         best.map(|(j, _)| j)
     }
 
-    /// Total-war decree: when ≤6 survivors have not killed anyone for 300 ticks,
+    /// Total-war decree: when ≤ tribes.len()/6 survivors have not killed anyone for 600 ticks,
     /// force every alive tribe into AtWar against their nearest rival.
     /// Called every 10 ticks; fires only when stagnation conditions are met.
     fn apply_stagnation_war_sweep(&mut self) {
         use crate::tribes::BehaviorState;
 
+        let endgame_threshold = (self.tribes.len() / 6).max(4);
         let alive_count = self.tribes.iter().filter(|t| t.alive).count();
-        if alive_count > 6 { return; }
+        if alive_count > endgame_threshold { return; }
         if alive_count <= 1 { return; }
-        if self.tick.saturating_sub(self.last_death_tick) < 300 { return; }
+        if self.tick.saturating_sub(self.last_death_tick) < 600 { return; }
 
         let tick = self.tick;
         let gen = self.generation;
@@ -2468,11 +2526,14 @@ impl TribeSimulation {
             let raid = self.tribes[i].last_outputs[4];
             let aggr = self.tribes[i].last_outputs[0];
             // Endgame: force war by hex-distance when final standoff begins.
-            // 20 fires organically around tick 3250 in 599-cluster runs before frozen-front lock.
-            let endgame_threshold = 20usize;
+            // tribes.len()/6 ≈ 100 for 599-cluster runs; fires before isolated-empire deadlock.
+            let endgame_threshold = (self.tribes.len() / 6).max(4);
             let endgame = alive_count <= endgame_threshold;
             let trigger = endgame || raid > 0.58 || (aggr > 0.48 && self.has_weaker_neighbor(i));
             if !trigger { continue; }
+
+            // BP: Skip non-endgame declarations if tribe is recovering from a recent war.
+            if !endgame && self.tribes[i].war_exhaustion_ticks > 0 { continue; }
 
             let target = self.find_weakest_adjacent_target(i).or_else(|| {
                 if !endgame { return None; }
@@ -2483,6 +2544,13 @@ impl TribeSimulation {
             });
 
             if let Some(target_idx) = target {
+                // BP: Non-endgame wars require sufficient border pressure — tribes must have
+                // been neighbors long enough to have genuine territorial tension.
+                if !endgame {
+                    let pair = (i.min(target_idx), i.max(target_idx));
+                    let pressure = self.border_pressure.get(&pair).copied().unwrap_or(0);
+                    if pressure < Self::PRESSURE_WAR_THRESHOLD { continue; }
+                }
                 declarations.push((i, target_idx));
             }
         }
@@ -2678,18 +2746,40 @@ impl TribeSimulation {
                 && matches!(self.tribes[i].behavior, BehaviorState::AtWar)
                 && self.tribes[i].target_tribe.is_none())
             .collect();
+        let alive_count = self.tribes.iter().filter(|t| t.alive).count();
+        let endgame = alive_count <= (self.tribes.len() / 6).max(4);
         let target_assignments: Vec<(usize, Option<usize>)> = untargeted.iter().map(|&i| {
+            // BP: Exhausted tribe cannot declare war in non-endgame.
+            if !endgame && self.tribes[i].war_exhaustion_ticks > 0 {
+                return (i, None);
+            }
             let target = self.find_weakest_adjacent_target(i).or_else(|| {
                 let my_home = self.tribes[i].home_tile as usize;
                 (0..self.tribes.len())
                     .filter(|&j| j != i && self.tribes[j].alive)
                     .min_by_key(|&j| self.world.hex_distance(my_home, self.tribes[j].home_tile as usize))
             });
+            // BP: Non-endgame war declarations require sufficient border pressure.
+            if !endgame {
+                if let Some(target_idx) = target {
+                    let pair = (i.min(target_idx), i.max(target_idx));
+                    let pressure = self.border_pressure.get(&pair).copied().unwrap_or(0);
+                    if pressure < Self::PRESSURE_WAR_THRESHOLD {
+                        return (i, None);
+                    }
+                }
+            }
             (i, target)
         }).collect();
 
         let mut new_war_pairs: Vec<(u32, u32, u32)> = Vec::new();
+        let mut revert_to_peace: Vec<usize> = Vec::new();
         for (i, target) in target_assignments {
+            if target.is_none() && matches!(self.tribes[i].behavior, BehaviorState::AtWar) {
+                // BP: No valid war target (pressure/exhaustion gate) — revert to Peace.
+                revert_to_peace.push(i);
+                continue;
+            }
             self.tribes[i].target_tribe = target;
 
             // L1: record new war pair if not already tracked
@@ -2736,6 +2826,12 @@ impl TribeSimulation {
             ev.other_tribe_id = def_id;
             ev.war_id = war_id;
             self.push_event(ev);
+        }
+
+        // BP: Revert pressure-gated tribes back to Peace so they don't loop in untargeted AtWar.
+        for i in revert_to_peace {
+            self.tribes[i].behavior = BehaviorState::Peace;
+            self.tribes[i].ticks_in_state = 0;
         }
 
         // Combat ticks every 3 ticks — 40 rounds per 120-tick war, enough to be decisive at all scales
@@ -2843,7 +2939,9 @@ impl TribeSimulation {
             // Check extinction
             if self.tribes[attacker_idx].population == 0 {
                 self.tribes[attacker_idx].alive = false;
-                self.tombstone.record_death(&self.tribes[attacker_idx], self.tick, "defeated-in-war");
+                let cause = crate::tombstone::ExtinctionCause::ConqueredByWar { conqueror_id: def_id };
+                self.lineage_registry.record_tribe_death(atk_id, &cause, self.tick);
+                self.tombstone.record_death(&self.tribes[attacker_idx], self.tick, cause);
                 if !self.config.headless {
                     println!("[WAR tick={}] tribe_{} defeated by tribe_{} (defender won)", self.tick, atk_id, def_id);
                 }
@@ -2895,10 +2993,14 @@ impl TribeSimulation {
                         war.status = crate::war::WarStatus::WarCancelled;
                     }
                 }
+                // BP: Winner enters post-war cooldown — can't immediately chain another war.
+                self.tribes[defender_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS;
             }
             if self.tribes[defender_idx].population == 0 {
                 self.tribes[defender_idx].alive = false;
-                self.tombstone.record_death(&self.tribes[defender_idx], self.tick, "defeated-in-war");
+                let cause = crate::tombstone::ExtinctionCause::ConqueredByWar { conqueror_id: atk_id };
+                self.lineage_registry.record_tribe_death(def_id, &cause, self.tick);
+                self.tombstone.record_death(&self.tribes[defender_idx], self.tick, cause);
                 if !self.config.headless {
                     println!("[WAR tick={}] tribe_{} defeated tribe_{} (attacker won)", self.tick, atk_id, def_id);
                 }
@@ -2954,6 +3056,8 @@ impl TribeSimulation {
                         war.status = crate::war::WarStatus::WarCancelled;
                     }
                 }
+                // BP: Victor enters post-war cooldown before they can start another war.
+                self.tribes[attacker_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS;
             } else if self.tribes[attacker_idx].ticks_in_state > 120 {
                 // C4: War timeout lowered from 300 → 120 so winners rejoin diplomacy faster
                 self.tribes[attacker_idx].behavior = BehaviorState::Peace;
@@ -2985,6 +3089,9 @@ impl TribeSimulation {
                     ev.flags = crate::war::WarStatus::Peace as u32;
                     self.push_event(ev);
                 }
+                // BP: Both sides exhausted after a stalemated war.
+                self.tribes[attacker_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS;
+                self.tribes[defender_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS;
             }
         }
     }
@@ -3088,8 +3195,89 @@ impl TribeSimulation {
 
     // ─── C2: Dispute Escalation ───────────────────────────────────────────────
 
-    /// Ticks a dispute must exist before forced resolution. C4: lowered from 120 → 60.
-    const DISPUTE_GRACE_TICKS: u64 = 60;
+    /// Ticks a dispute must exist before forced resolution. BP: raised from 60 → 180 to give
+    /// border pressure time to accumulate before war declarations are valid.
+    const DISPUTE_GRACE_TICKS: u64 = 180;
+
+    /// Border pressure thresholds. Pressure builds at +1/tick while adjacent, decays at -2/tick.
+    const PRESSURE_WAR_THRESHOLD: u32 = 80;
+    const PRESSURE_DECAY_PER_TICK: u32 = 2;
+    const PRESSURE_CAP: u32 = 200;
+    /// Post-war cooldown: tribe cannot initiate new wars for this many ticks after a war ends.
+    const POST_WAR_EXHAUSTION_TICKS: u64 = 150;
+
+    /// Update border pressure for all alive tribe pairs.
+    /// Uses tile_tribe_idx (rebuilt each tick) to find adjacent borders in O(total_tiles × 6).
+    /// Adjacent pairs gain +1 pressure (capped at PRESSURE_CAP).
+    /// Non-adjacent pairs decay by PRESSURE_DECAY_PER_TICK and are removed at 0.
+    fn update_border_pressure(&mut self) {
+        let mut adjacent_pairs: std::collections::BTreeSet<(usize, usize)> =
+            std::collections::BTreeSet::new();
+
+        for tile_idx in 0..self.world.total_tiles {
+            let owner_raw = self.tile_tribe_idx[tile_idx];
+            if owner_raw == u32::MAX { continue; }
+            let owner_idx = owner_raw as usize;
+            if !self.tribes[owner_idx].alive { continue; }
+
+            for adj in self.world.hex_adjacent_tiles(tile_idx) {
+                let adj_raw = self.tile_tribe_idx[adj];
+                if adj_raw == u32::MAX || adj_raw == owner_raw { continue; }
+                let adj_idx = adj_raw as usize;
+                if !self.tribes[adj_idx].alive { continue; }
+                let key = (owner_idx.min(adj_idx), owner_idx.max(adj_idx));
+                adjacent_pairs.insert(key);
+            }
+        }
+
+        let mut newly_tense: Vec<(usize, usize)> = Vec::new();
+        for &pair in &adjacent_pairs {
+            let p = self.border_pressure.entry(pair).or_insert(0);
+            let before = *p;
+            *p = (*p + 1).min(Self::PRESSURE_CAP);
+            // Emit BorderTensionFormed exactly once when pair crosses war threshold
+            if before < Self::PRESSURE_WAR_THRESHOLD
+                && *p >= Self::PRESSURE_WAR_THRESHOLD
+                && !self.border_tension_announced.contains(&pair)
+            {
+                newly_tense.push(pair);
+                self.border_tension_announced.insert(pair);
+            }
+        }
+
+        self.border_pressure.retain(|pair, pressure| {
+            if !adjacent_pairs.contains(pair) {
+                if *pressure < Self::PRESSURE_WAR_THRESHOLD {
+                    // Pressure dropped back below threshold — allow re-announce if border re-forms
+                    self.border_tension_announced.remove(pair);
+                }
+                if *pressure <= Self::PRESSURE_DECAY_PER_TICK {
+                    return false;
+                }
+                *pressure -= Self::PRESSURE_DECAY_PER_TICK;
+            }
+            true
+        });
+
+        // Emit BorderTensionFormed events after borrow ends
+        let tick = self.tick;
+        let gen = self.generation;
+        for (i, j) in newly_tense {
+            if !self.tribes[i].alive || !self.tribes[j].alive { continue; }
+            let id_i = self.tribes[i].id as u32;
+            let id_j = self.tribes[j].id as u32;
+            let pressure = self.border_pressure.get(&(i, j)).copied().unwrap_or(0);
+            let mut ev = crate::events::SimulationEvent::new(
+                0, tick, gen,
+                crate::events::EventType::BorderTensionFormed,
+                crate::events::EventSeverity::Info,
+                id_i,
+            );
+            ev.other_tribe_id = id_j;
+            ev.value_a = pressure as f32;
+            self.push_event(ev);
+        }
+    }
 
     /// Scan all disputed tiles and update the dispute registry with first-seen ticks.
     /// Evict pairs where no shared disputed tile remains (resolved by war/death/etc).
@@ -3210,6 +3398,10 @@ impl TribeSimulation {
 
             if aggressor_wants_war && !defender_clearly_weaker {
                 // ── War path ──────────────────────────────────────────────
+                // BP: Skip war declaration if aggressor is still in post-war exhaustion.
+                // Dispute stays open; will be re-evaluated at next 30-tick cycle.
+                if self.tribes[aggressor].war_exhaustion_ticks > 0 { continue; }
+
                 if !matches!(self.tribes[aggressor].behavior, BehaviorState::AtWar | BehaviorState::Imploding) {
                     self.tribes[aggressor].behavior = BehaviorState::AtWar;
                     self.tribes[aggressor].target_tribe = Some(defender);
@@ -4253,9 +4445,11 @@ impl TribeSimulation {
                 entity_ids: ids.clone(),
             })
             .collect();
+        let tribe_nodes = self.lineage_registry.all_tribe_nodes().cloned().collect();
         LineageStatsResponse {
             total_entities: self.lineage_registry.total_entity_count(),
             seed_clusters,
+            tribe_nodes,
         }
     }
 
@@ -4314,6 +4508,7 @@ impl TribeSimulation {
                 .filter(|w| w.status == crate::war::WarStatus::Active)
                 .count(),
             disputed_tile_count,
+            border_pressure_pair_count: self.border_pressure.len(),
             alliance_link_count,
             tombstone_count: self.tombstone.count(),
             lineage_entity_count: self.lineage_registry.total_entity_count(),
@@ -4336,49 +4531,66 @@ impl TribeSimulation {
     // ─── R2: cleanup_tribe — Atomic extinction handler ────────────────────────
 
     /// Atomically record death, cancel wars, transfer territory to heir.
-    fn cleanup_tribe(&mut self, tribe_idx: usize, cause: &str) {
+    fn cleanup_tribe(&mut self, tribe_idx: usize) {
         let tribe_id = self.tribes[tribe_idx].id as u32;
         if self.tombstone.is_dead(tribe_id) {
             return; // Idempotent
         }
 
-        // Record tombstone with snapshot taken before territory removal
-        self.tombstone.record_death(&self.tribes[tribe_idx], self.tick, cause);
-
         // Find the active war enemy as the preferred heir (most likely conqueror).
         // Fall back to the living tribe with the most tiles adjacent to dying territory.
-        let heir_id: Option<u32> = {
-            // Prefer attacker's opponent from active war
-            let war_enemy = self.active_wars.iter().find(|w| {
-                w.status == crate::war::WarStatus::Active
-                    && (w.attacker_id == tribe_id || w.defender_id == tribe_id)
-            }).map(|w| if w.attacker_id == tribe_id { w.defender_id } else { w.attacker_id });
+        // Computed before record_death so we can use it for ExtinctionCause.
+        let war_enemy_id: Option<u32> = self.active_wars.iter().find(|w| {
+            w.status == crate::war::WarStatus::Active
+                && (w.attacker_id == tribe_id || w.defender_id == tribe_id)
+        }).map(|w| if w.attacker_id == tribe_id { w.defender_id } else { w.attacker_id });
 
-            if let Some(enemy_id) = war_enemy {
-                // Confirm enemy is still alive
-                if self.tribes.iter().any(|t| t.alive && t.id as u32 == enemy_id) {
-                    Some(enemy_id)
-                } else {
-                    None
-                }
+        let heir_id: Option<u32> = if let Some(enemy_id) = war_enemy_id {
+            if self.tribes.iter().any(|t| t.alive && t.id as u32 == enemy_id) {
+                Some(enemy_id)
             } else {
-                // Score each living tribe by how many of its tiles neighbour dying territory
-                let mut scores: HashMap<u32, u32> = HashMap::new();
-                for &tile_idx in &self.tribes[tribe_idx].territory {
-                    for &adj in &self.world.hex_adjacent_tiles(tile_idx as usize) {
-                        for occ in &self.world.tile_occupants[adj] {
-                            if occ.tribe_id != tribe_id {
-                                *scores.entry(occ.tribe_id).or_insert(0) += 1;
-                            }
+                None
+            }
+        } else {
+            let mut scores: HashMap<u32, u32> = HashMap::new();
+            for &tile_idx in &self.tribes[tribe_idx].territory {
+                for &adj in &self.world.hex_adjacent_tiles(tile_idx as usize) {
+                    for occ in &self.world.tile_occupants[adj] {
+                        if occ.tribe_id != tribe_id {
+                            *scores.entry(occ.tribe_id).or_insert(0) += 1;
                         }
                     }
                 }
-                scores.into_iter()
-                    .filter(|(id, _)| self.tribes.iter().any(|t| t.alive && t.id as u32 == *id))
-                    .max_by_key(|(_, score)| *score)
-                    .map(|(id, _)| id)
             }
+            scores.into_iter()
+                .filter(|(id, _)| self.tribes.iter().any(|t| t.alive && t.id as u32 == *id))
+                .max_by_key(|(_, score)| *score)
+                .map(|(id, _)| id)
         };
+
+        // Determine structured extinction cause.
+        let extinction_cause = if let Some(enemy_id) = war_enemy_id {
+            if self.tribes.iter().any(|t| t.alive && t.id as u32 == enemy_id) {
+                crate::tombstone::ExtinctionCause::ConqueredByWar { conqueror_id: enemy_id }
+            } else {
+                crate::tombstone::ExtinctionCause::Imploded
+            }
+        } else if let Some(h) = heir_id {
+            let ally_is_heir = self.tribes[tribe_idx].ally_tribe
+                .map(|ally_idx| self.tribes[ally_idx].id as u32 == h)
+                .unwrap_or(false);
+            if ally_is_heir {
+                crate::tombstone::ExtinctionCause::AbsorbedByAlliance { absorber_id: h }
+            } else {
+                crate::tombstone::ExtinctionCause::Imploded
+            }
+        } else {
+            crate::tombstone::ExtinctionCause::Imploded
+        };
+
+        // Record tombstone with snapshot taken before territory removal
+        self.lineage_registry.record_tribe_death(tribe_id, &extinction_cause, self.tick);
+        self.tombstone.record_death(&self.tribes[tribe_idx], self.tick, extinction_cause);
 
         // Cancel all active wars involving this tribe
         for war in self.active_wars.iter_mut() {
@@ -4761,9 +4973,9 @@ mod harness_tests {
             // Pre-register dispute at tick 0 so age will be exactly DISPUTE_GRACE_TICKS when we step
             sim.dispute_registry.insert((0, 1), 0);
 
-            // Jump to one tick before a dispute-resolution cycle (multiple of 30) >= 60
-            // step() → tick=60, 60%30==0 → apply_dispute_resolution runs, age=60 ≥ 60 → expired
-            sim.tick = 59;
+            // Jump to one tick before a dispute-resolution cycle (multiple of 30) >= 180
+            // step() → tick=180, 180%30==0 → apply_dispute_resolution runs, age=180 ≥ 180 → expired
+            sim.tick = 179;
         }
 
         sim_arc.write().step();
@@ -5084,8 +5296,6 @@ mod harness_tests {
 
     #[test]
     fn sim_last_empire_deterministic() {
-        use crate::tribes::PolityTier;
-
         // High-aggression profiles — wars start fast, losers die decisively
         let clusters: Vec<ClusterProfile> = (0..8).map(|i| {
             let combat = (0.72 + (i % 4) as f32 * 0.06).min(1.0);  // 0.72–0.90

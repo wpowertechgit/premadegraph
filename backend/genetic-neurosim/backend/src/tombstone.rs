@@ -9,6 +9,30 @@ pub struct ArtifactSnapshot {
     pub a_team: f32,
 }
 
+// ─── ExtinctionCause ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type")]
+pub enum ExtinctionCause {
+    Starved,
+    ConqueredByWar { conqueror_id: u32 },
+    AbsorbedByAlliance { absorber_id: u32 },
+    Imploded,
+    Unknown,
+}
+
+impl ExtinctionCause {
+    pub fn to_cause_string(&self) -> String {
+        match self {
+            Self::Starved => "starved".into(),
+            Self::ConqueredByWar { conqueror_id } => format!("conquered-by-{}", conqueror_id),
+            Self::AbsorbedByAlliance { absorber_id } => format!("absorbed-by-{}", absorber_id),
+            Self::Imploded => "imploded".into(),
+            Self::Unknown => "unknown".into(),
+        }
+    }
+}
+
 // ─── TombstoneRecord ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -20,6 +44,7 @@ pub struct TombstoneRecord {
     pub population_at_death: u32,
     pub territory_at_death: usize,
     pub cause: String,
+    pub extinction_cause: ExtinctionCause,
     /// Compact lineage summary: seed cluster references and generation milestones.
     pub lineage_summary: Vec<String>,
     pub final_artifacts: ArtifactSnapshot,
@@ -42,7 +67,7 @@ impl TombstoneLedger {
 
     /// Record a tribe's death. Takes snapshot of tribe state at death time.
     /// `lineage` filter: only entries starting with "seed-" or "gen-" for compact summary.
-    pub fn record_death(&mut self, tribe: &crate::tribes::TribeState, tick: u64, cause: &str) {
+    pub fn record_death(&mut self, tribe: &crate::tribes::TribeState, tick: u64, extinction_cause: ExtinctionCause) {
         if self.is_dead(tribe.id as u32) {
             return;
         }
@@ -70,7 +95,8 @@ impl TombstoneLedger {
             generation_died: tribe.generation,
             population_at_death: tribe.population,
             territory_at_death: tribe.territory.len(),
-            cause: cause.to_string(),
+            cause: extinction_cause.to_cause_string(),
+            extinction_cause,
             lineage_summary,
             final_artifacts: ArtifactSnapshot {
                 a_combat: tribe.stats.a_combat,
@@ -149,6 +175,7 @@ mod tests {
             migration_target_tile: u16::MAX,
             fitness_score: 0.0,
             tier_entered_tick: 0,
+            war_exhaustion_ticks: 0,
         };
         t
     }
@@ -161,7 +188,7 @@ mod tests {
             "merged-cluster-beta".to_string(),
             "some-other-entry".to_string(),
         ]);
-        ledger.record_death(&tribe, 150, "extinction");
+        ledger.record_death(&tribe, 150, ExtinctionCause::Unknown);
 
         let rec = ledger.all_records().first().unwrap();
         assert!(rec.lineage_summary.iter().any(|s| s == "merged-cluster-beta"),
@@ -177,7 +204,7 @@ mod tests {
         let mut ledger = TombstoneLedger::new();
         let tribe = make_tribe(7, vec![]);
         assert!(!ledger.is_dead(7));
-        ledger.record_death(&tribe, 10, "starvation");
+        ledger.record_death(&tribe, 10, ExtinctionCause::Starved);
         assert!(ledger.is_dead(7));
         assert_eq!(ledger.count(), 1);
     }
@@ -186,10 +213,41 @@ mod tests {
     fn tombstone_records_cause_and_generation() {
         let mut ledger = TombstoneLedger::new();
         let tribe = make_tribe(3, vec![]);
-        ledger.record_death(&tribe, 500, "war");
+        ledger.record_death(&tribe, 500, ExtinctionCause::ConqueredByWar { conqueror_id: 5 });
         let rec = &ledger.all_records()[0];
-        assert_eq!(rec.cause, "war");
+        assert_eq!(rec.cause, "conquered-by-5");
         assert_eq!(rec.generation_died, 2);
         assert_eq!(rec.tick_died, 500);
+    }
+
+    #[test]
+    fn founder_puuids_captured_in_tombstone() {
+        use crate::tribes::FounderTag;
+        let mut ledger = TombstoneLedger::new();
+        let mut tribe = make_tribe(9, vec![]);
+        tribe.founders = vec![
+            FounderTag { puuid: "puuid-aaa".into(), inherited_at_generation: 0 },
+            FounderTag { puuid: "puuid-bbb".into(), inherited_at_generation: 0 },
+        ];
+        ledger.record_death(&tribe, 100, ExtinctionCause::Starved);
+        let rec = &ledger.all_records()[0];
+        assert_eq!(rec.founder_puuids, vec!["puuid-aaa", "puuid-bbb"]);
+    }
+
+    #[test]
+    fn extinction_cause_serializes_correctly() {
+        let cause = ExtinctionCause::ConqueredByWar { conqueror_id: 42 };
+        let json = serde_json::to_value(&cause).unwrap();
+        assert_eq!(json["type"], "ConqueredByWar");
+        assert_eq!(json["conqueror_id"], 42);
+        assert_eq!(cause.to_cause_string(), "conquered-by-42");
+    }
+
+    #[test]
+    fn extinction_cause_strings() {
+        assert_eq!(ExtinctionCause::Starved.to_cause_string(), "starved");
+        assert_eq!(ExtinctionCause::Imploded.to_cause_string(), "imploded");
+        assert_eq!(ExtinctionCause::Unknown.to_cause_string(), "unknown");
+        assert_eq!(ExtinctionCause::AbsorbedByAlliance { absorber_id: 7 }.to_cause_string(), "absorbed-by-7");
     }
 }

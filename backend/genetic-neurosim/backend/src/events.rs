@@ -46,6 +46,9 @@ pub enum EventType {
     TribeMigrated = 24,
     TileDisputed = 25,
     DisputeResolved = 26,
+    /// BP: Emitted when a border-pressure pair first reaches PRESSURE_WAR_THRESHOLD.
+    /// tribe_id = tribe A, other_tribe_id = tribe B, value_a = pressure at event time.
+    BorderTensionFormed = 27,
 
     // War (30–39)
     WarDeclared = 30,

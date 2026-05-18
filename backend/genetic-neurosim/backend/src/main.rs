@@ -288,6 +288,22 @@ async fn run_cli_validation(config: CliRunConfig) -> Result<(), String> {
         Some(path) => eprintln!("NeuroSim CLI run wrote JSONL log to {}", path.display()),
         None => eprintln!("NeuroSim CLI run wrote JSONL log to stdout"),
     }
+
+    // Write dedicated tombstone report alongside the JSONL log.
+    if let Some(log_path) = &config.log_path {
+        let tombstone_path = log_path.with_extension("tombstones.json");
+        let report = serde_json::json!({
+            "run_seed": config.seed,
+            "run_ticks": config.ticks,
+            "total_tribes": summary.total_tribes,
+            "tombstones": tombstones.records,
+        });
+        if let Ok(content) = serde_json::to_string_pretty(&report) {
+            let _ = std::fs::write(&tombstone_path, content);
+            eprintln!("Tombstone report: {}", tombstone_path.display());
+        }
+    }
+
     Ok(())
 }
 

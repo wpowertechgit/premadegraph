@@ -1,5 +1,16 @@
 use std::collections::HashMap;
 
+// ─── Tribe-level lineage node ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TribeLineageNode {
+    pub tribe_id: u32,
+    pub cluster_id: String,
+    pub tick_born: u64,
+    pub tick_died: Option<u64>,
+    pub extinction_cause: Option<crate::tombstone::ExtinctionCause>,
+}
+
 /// DAG-based entity lineage system.
 ///
 /// Maps every entity to its two parent entities. Seed entities (founded from
@@ -16,6 +27,8 @@ pub struct LineageRegistry {
     next_id: u32,
     /// cluster_id -> Vec of seed entity IDs originating from that cluster.
     seed_to_entity_ids: HashMap<String, Vec<u32>>,
+    /// Tribe-level conquest/absorption DAG.
+    tribe_nodes: HashMap<u32, TribeLineageNode>,
 }
 
 pub const SEED_SENTINEL: u32 = u32::MAX;
@@ -26,6 +39,7 @@ impl LineageRegistry {
             registry: HashMap::new(),
             next_id: 1,
             seed_to_entity_ids: HashMap::new(),
+            tribe_nodes: HashMap::new(),
         }
     }
 
@@ -111,6 +125,33 @@ impl LineageRegistry {
     pub fn parents(&self, entity_id: u32) -> Option<(u32, u32)> {
         self.registry.get(&entity_id).copied()
     }
+
+    // ─── Tribe-level DAG ─────────────────────────────────────────────────────
+
+    pub fn register_tribe(&mut self, tribe_id: u32, cluster_id: &str, tick: u64) {
+        self.tribe_nodes.insert(tribe_id, TribeLineageNode {
+            tribe_id,
+            cluster_id: cluster_id.to_string(),
+            tick_born: tick,
+            tick_died: None,
+            extinction_cause: None,
+        });
+    }
+
+    pub fn record_tribe_death(&mut self, tribe_id: u32, cause: &crate::tombstone::ExtinctionCause, tick: u64) {
+        if let Some(node) = self.tribe_nodes.get_mut(&tribe_id) {
+            node.tick_died = Some(tick);
+            node.extinction_cause = Some(cause.clone());
+        }
+    }
+
+    pub fn tribe_node(&self, tribe_id: u32) -> Option<&TribeLineageNode> {
+        self.tribe_nodes.get(&tribe_id)
+    }
+
+    pub fn all_tribe_nodes(&self) -> impl Iterator<Item = &TribeLineageNode> {
+        self.tribe_nodes.values()
+    }
 }
 
 #[cfg(test)]
@@ -179,6 +220,28 @@ mod tests {
 
         let x_count = clusters.iter().find(|(k, _)| *k == "cluster-x").map(|(_, v)| v.len()).unwrap();
         assert_eq!(x_count, 2);
+    }
+
+    #[test]
+    fn tribe_dag_register_and_death() {
+        let mut reg = LineageRegistry::new();
+        reg.register_tribe(1, "cluster-alpha", 0);
+        reg.register_tribe(2, "cluster-beta", 5);
+
+        let cause = crate::tombstone::ExtinctionCause::ConqueredByWar { conqueror_id: 2 };
+        reg.record_tribe_death(1, &cause, 42);
+
+        let node = reg.tribe_node(1).unwrap();
+        assert_eq!(node.tribe_id, 1);
+        assert_eq!(node.cluster_id, "cluster-alpha");
+        assert_eq!(node.tick_born, 0);
+        assert_eq!(node.tick_died, Some(42));
+        matches!(node.extinction_cause, Some(crate::tombstone::ExtinctionCause::ConqueredByWar { conqueror_id: 2 }));
+
+        let node2 = reg.tribe_node(2).unwrap();
+        assert!(node2.tick_died.is_none());
+
+        assert_eq!(reg.all_tribe_nodes().count(), 2);
     }
 
     #[test]

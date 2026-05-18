@@ -192,6 +192,8 @@ pub struct TribeState {
     pub fitness_score: f32,
     // Tick at which this tribe last changed polity tier (used for time-gate on promotion).
     pub tier_entered_tick: u64,
+    // Post-war cooldown: tribe cannot declare new wars while > 0. Decremented each tick.
+    pub war_exhaustion_ticks: u64,
 }
 
 impl TribeState {
@@ -247,11 +249,12 @@ impl TribeState {
             main_camp_tile: home_tile,
             citizens: vec![],
             last_expansion_tick: 0,
-            expansion_cooldown_ticks: 3,
+            expansion_cooldown_ticks: 20,
             tile_integration: std::collections::HashMap::new(),
             migration_target_tile: u16::MAX, // sentinel: no target
             fitness_score: 0.0,
             tier_entered_tick: 0,
+            war_exhaustion_ticks: 0,
         }
     }
 

@@ -3277,7 +3277,7 @@ async function computeNeurosimClusterProfiles(dataset) {
          c.size AS cluster_size,
          ${artifactSql}
          ${feedscoreSql}
-         0 AS no_raw_player_ids
+         GROUP_CONCAT(DISTINCT cm.puuid) AS member_puuids
        FROM clusters c
        LEFT JOIN cluster_members cm ON c.cluster_id = cm.cluster_id
        LEFT JOIN players p ON cm.puuid = p.puuid
@@ -3329,6 +3329,7 @@ async function computeNeurosimClusterProfiles(dataset) {
         a_resource:      round4(a3),
         a_map_objective: round4(a4),
         a_team:          round4(a5),
+        founder_puuids:  r.member_puuids ? r.member_puuids.split(',') : [],
       };
     });
 
