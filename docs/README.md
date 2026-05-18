@@ -26,6 +26,7 @@ This vault is organized by feature area. Start from the folder hubs below, then 
 | Thesis Planning | [[features/thesis-planning/README]] | Scope reviews and forward-looking thesis planning. |
 | Documentation Status | [[status/README]] | Final vs working docs, plus `mainraw.tex` inclusion tracking. |
 | Workflow Provenance | [[status/workflow-provenance-map]] | Task runs, old versions, executor prompts, archives, and process history. |
+| Modular LaTeX | [[latex/README]] | Active modular thesis build with chapters, references, preamble, and local assets. |
 | Evidence | [[chapter-evidence-map]] | Chapter-to-source provenance map for LaTeX writing. |
 | Database Project | [[databaseproject/README]] | Supplementary database-project docs. |
 
@@ -34,6 +35,7 @@ This vault is organized by feature area. Start from the folder hubs below, then 
 - [[DOCUMENT_MAP]] is the agent-readable global document index.
 - [[chapter-evidence-map]] maps thesis chapters to evidence notes.
 - [[status/mainraw-inclusion-map]] shows which docs are reflected in `mainraw.tex`.
+- [[latex/README]] explains the modular LaTeX build.
 
 ## Writing Rule Of Thumb
 

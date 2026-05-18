@@ -1,0 +1,56 @@
+\documentclass[a4paper,12pt]{report}
+
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{hungarian}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{url}
+
+\titleformat{\chapter}[hang]{\normalfont\bfseries\LARGE}{\thechapter.}{1em}{}
+\setcounter{tocdepth}{2}
+\setlist[itemize]{noitemsep, topsep=4pt}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\graphicspath{{assets/demo_shots/}{assets/diagrams/}}
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Consolas}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+\newcommand{\diagramfigure}[2]{
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{#2}
+\caption{#1}
+\end{figure}
+}
+
+\newcommand{\placeholder}[2]{%
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{2.2cm}%
+\textbf{[PLACEHOLDER]}\par\vspace{0.4em}{\small #1}\vspace{2.2cm}}}%
+\caption{#2}
+\end{figure}%
+}

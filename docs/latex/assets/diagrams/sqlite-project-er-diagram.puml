@@ -1,0 +1,108 @@
+@startuml
+title Premade Graph SQLite Project ER Diagram
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultFontName "Times New Roman"
+skinparam entity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+skinparam note {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+
+entity "players" as players {
+  * puuid : TEXT <<PK>>
+  --
+  display_name : TEXT
+  detected_role : TEXT
+  match_count : INTEGER
+  opscore : REAL
+  feedscore : REAL
+}
+
+entity "clusters" as clusters {
+  * cluster_id : TEXT <<PK>>
+  --
+  cluster_type : TEXT
+  algorithm : TEXT
+  size : INTEGER
+  best_op : TEXT
+  worst_feed : TEXT
+  summary_json : TEXT
+  updated_at : TEXT
+}
+
+entity "cluster_members" as cluster_members {
+  * cluster_id : TEXT <<PK, FK>>
+  * puuid : TEXT <<PK>>
+  --
+  is_bridge : INTEGER
+  is_star : INTEGER
+  is_best_op : INTEGER
+  is_worst_feed : INTEGER
+  role_json : TEXT
+}
+
+entity "pathfinder_replays" as pathfinder_replays {
+  * id : INTEGER <<PK>>
+  --
+  cache_key : TEXT <<UNIQUE>>
+  title : TEXT
+  execution_mode : TEXT
+  source_player_id : TEXT
+  target_player_id : TEXT
+  source_label : TEXT
+  target_label : TEXT
+  dataset_player_count : INTEGER
+  path_mode : TEXT
+  weighted_mode : INTEGER
+  selected_algorithm : TEXT
+  comparison_rows_json : TEXT
+  dataset_id : TEXT
+  dataset_name : TEXT
+  created_at : TEXT
+}
+
+entity "pathfinder_replay_runs" as pathfinder_replay_runs {
+  * id : INTEGER <<PK>>
+  --
+  replay_id : INTEGER <<FK>>
+  algorithm : TEXT
+  runtime_ms : REAL
+  nodes_visited : INTEGER
+  path_length : INTEGER
+  run_json : TEXT
+}
+
+clusters ||--o{ cluster_members : "cluster_id"
+players ||..o{ cluster_members : "puuid"
+
+pathfinder_replays ||--o{ pathfinder_replay_runs : "replay_id"
+players ||..o{ pathfinder_replays : "source_player_id"
+players ||..o{ pathfinder_replays : "target_player_id"
+
+note right of cluster_members
+SQLite project import enforces:
+cluster_members.cluster_id -> clusters.cluster_id
+
+cluster_members.puuid is a logical link
+to players.puuid in the browser model.
+end note
+
+note bottom of pathfinder_replays
+Replay source/target player ids are stored as TEXT
+and connect logically to players.puuid.
+end note
+
+note top of players
+Generated project database:
+Data/premadegraph_project_{dataset}.db
+end note
+
+@enduml

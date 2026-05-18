@@ -1,0 +1,117 @@
+@startuml
+title Simplified Pathfinder Class Diagram
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam stereotypeCBackgroundColor #F4F4F4
+skinparam stereotypeCBorderColor #7A7A7A
+skinparam class {
+  BackgroundColor white
+  BorderColor #4A4A4A
+  ArrowColor #4A4A4A
+  FontColor #222222
+}
+skinparam package {
+  BackgroundColor #FBFBFB
+  BorderColor #777777
+  FontColor #222222
+}
+
+package "Backend" {
+  class "server.js" as Server <<Express API>> {
+    --
+    replayDb
+    rustResponseCache
+    --
+    +GET /api/pathfinder-rust/options
+    +POST /api/pathfinder-rust/run
+    +POST /api/pathfinder-rust/compare
+  }
+
+  class rustBridge <<Node Bridge>> {
+    --
+    rustProjectDir: path
+    --
+    +executeRustCommand()
+  }
+
+  class prototypeEngine <<Legacy Engine>> {
+    --
+    +runSearch()
+    +compareAlgorithms()
+  }
+}
+
+package "Rust Core" {
+  class "main.rs" as MainRs <<CLI Entrypoint>> {
+    --
+    command: String
+    --
+    +main()
+    +read_stdin()
+  }
+
+  class engine <<Orchestrator>> {
+    --
+    +run_search()
+    +compare_algorithms()
+    +options_response()
+  }
+
+  class GraphState <<Domain Model>> {
+    --
+    node_map
+    adjacency
+    pair_relations
+    dataset
+    --
+    +build_graph_state()
+  }
+
+  class Neighbor <<Value Object>> {
+    --
+    id
+    ally_weight
+    total_matches
+    dominant_relation
+  }
+
+  class PairRelation <<Value Object>> {
+    --
+    ally_weight
+    enemy_weight
+    total_matches
+    dominant_relation
+  }
+
+  class SearchResult <<Internal Result>> {
+    --
+    found
+    path_nodes
+    visited_count
+  }
+
+  class "models.rs DTOs" as RustDTOs <<DTO Group>> {
+    --
+    PathfinderRequest
+    PathfinderResponse
+    CompareResponse
+    OptionsResponse
+    GraphSnapshot
+  }
+}
+
+Server "1" --> "1" rustBridge : primary path
+Server "1" --> "0..1" prototypeEngine : legacy path
+rustBridge "1" --> "1" MainRs : executes
+MainRs ..> RustDTOs : parses / serializes
+MainRs "1" --> "1" engine : delegates
+engine "1" --> "1" GraphState : uses
+engine ..> "1" SearchResult : consumes
+engine ..> RustDTOs : returns
+GraphState "1" *-- "*" Neighbor : adjacency
+GraphState "1" *-- "*" PairRelation : pairRelations
+
+@enduml

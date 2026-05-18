@@ -1,0 +1,255 @@
+\chapter{A 3D bird's-eye sphere és globális hálózati vizualizáció}
+
+\section{A frontend szerepe}
+
+A frontend jelenleg már nem egyetlen gráfnézet, hanem több, világosan elkülönített felületből álló mini-rendszer. Ez fontos minőségi ugrás a korábbi állapothoz képest, mert a projekt ekkor vált valóban bemutatható és narratívába rendezhető alkalmazássá.
+
+A fő felületek:
+
+\begin{itemize}
+    \item \textbf{Match Analysis}: adatgyűjtési és mérkőzésellenőrző nézet,
+    \item \textbf{Pathfinder Lab}: útvonalkeresési és algoritmus-összehasonlító nézet,
+    \item \textbf{Full 3D Graph Sphere}: teljes hálózati madártávlat,
+    \item \textbf{Assortativity}: teljesítmény-hasonlóságot vizsgáló analitikai oldal,
+    \item \textbf{Betweenness Centrality}: Brandes-központisági és bridge/broker elemző oldal.
+\end{itemize}
+
+\section{Miért nem egyetlen képernyő?}
+
+A felület több oldalra bontása nem esztétikai döntés volt, hanem használhatósági és védhetőségi kérdés. Egy szakdolgozati demo során sokkal könnyebb végigvezetni a nézőt azon az úton, hogy:
+
+\begin{enumerate}
+    \item adatot gyűjtünk vagy ellenőrzünk,
+    \item gráfot és klasztereket generálunk,
+    \item útvonalakat keresünk,
+    \item globális struktúrát nézünk,
+    \item kutatási jellegű elemzést futtatunk.
+\end{enumerate}
+
+Ha minden ugyanarra a képernyőre kerülne, a projekt inkább eszköztárnak, mintsem koherens rendszernek hatna.
+
+\section{A 3D globális nézet}
+
+A \emph{bird's-eye sphere} oldal a teljes hálózat vizuális áttekintésére szolgál. A legfontosabb tervezési döntés itt az volt, hogy a böngésző ne valós időben számolja a teljes layoutot, hanem a Rust réteg előre exportáljon minden fontos artifaktumot, és a frontend csak rendereljen.
+
+Ennek több előnye van:
+
+\begin{itemize}
+    \item a layout determinisztikusabb,
+    \item a demók megismételhetők,
+    \item a böngésző terhelése kisebb,
+    \item a vizuális réteg jobban elválik a számítási rétegtől.
+\end{itemize}
+
+\section{A bird's-eye manifest technikai tartalma}
+
+Fontos különbséget tenni a teljes bird's-eye gömb-export és a Graph V2 artifact között. A bird's-eye gömb az összes látható játékost és élkapcsolatot rendereli bele a 3D térbe, míg a Graph V2 csak a minimum szövetségesi támaszú, klasztertagságú csomópontokat tárolja elemzésre alkalmas formában. A két struktúra ezért különböző csúcsszámot mutat ugyanarra a datasetre.
+
+A \texttt{flexset} dataset esetében a Graph V2 artifact összefoglalója az alábbi adatokat rögzíti:
+
+\begin{itemize}
+    \item \textbf{5741} látható csúcs (klasztertagok és hozzájuk kapcsolódó csúcsok),
+    \item \textbf{18\,548} látható él,
+    \item \textbf{13\,572} ally-jellegű él (73.17\%),
+    \item \textbf{4976} enemy-jellegű él (26.83\%),
+    \item \textbf{1531} klasztercsoport,
+    \item átlagos klaszterméret \textbf{3.750}, legnagyobb \textbf{20},
+    \item generálási idő: \textbf{87\,472 ms}.
+\end{itemize}
+
+A \texttt{soloq} dataset Graph V2 artifaktuma:
+
+\begin{itemize}
+    \item \textbf{1538} látható csúcs,
+    \item \textbf{4111} látható él,
+    \item \textbf{2682} ally-jellegű él (65.24\%),
+    \item \textbf{1429} enemy-jellegű él (34.76\%),
+    \item \textbf{870} klasztercsoport,
+    \item átlagos klaszterméret \textbf{1.768}, legnagyobb \textbf{20},
+    \item generálási idő: \textbf{55\,674 ms}.
+\end{itemize}
+
+A két dataset ally/enemy arányának különbsége (flexset: 73/27, soloq: 65/35) szintén strukturálisan értelmes. A Flex Queue-ban a csapatonként öt fő játékstílus természetes módon dúsítja az ally-kapcsolatokat, míg a Solo/Duo Queue véletlenszerűbb csapatbeosztása az ellenfél-találkozások arányát növeli. Ez az arány önmagában is módszertani érv amellett, hogy a \texttt{flexset} erősebb asszociatív játékosgráfot hoz létre, de nem bizonyítja, hogy az enemy-élek negatív társas kötésekként értelmezhetők.
+
+\section{A \texttt{flexset} mint asszociatív core-periphery játékosgráf}
+
+A Graph V2 vizualizációt ebben a dolgozatban nem közvetlen barátsági vagy ellenségességi hálóként, hanem asszociatív játékosgráfként értelmezem. A csúcsok játékosokat, az élek pedig ismétlődő meccsbeli együtt- vagy szembekerülési bizonyítékot jelölnek. A legerősebb minta nem az előjeles egyensúly, hanem a core-periphery szerkezet: a központi régióban sok kereszt-klaszter szövetségesi kapcsolatot hordozó csoport jelenik meg, míg a külső gyűrűben sok kis, gyengén kapcsolt vagy teljesen híd nélküli lokális ally-csoport található.
+
+A \texttt{flexset} artifactban \textbf{1531} bounded ally-csoport szerepel, ezek közül \textbf{815} bridge-jelölt klaszter, míg \textbf{716} külső pályára helyezett csoport nem rendelkezik cross-cluster ally híddal. A legfontosabb vizuális jel nem az, hogy egy klaszter balra vagy jobbra esik-e a képen, hanem a radiális pozíció: a kisebb orbit-radius erősebb hídjellegű, visszatérő ally-kapcsolatokra utal, a külső gyűrű pedig gyengén kapcsolt lokális szigeteket jelöl.
+
+Ez az értelmezés módszertanilag erősebb, mint a signed-balance olvasat, mert nem igényli, hogy az ellenfélként való ismételt találkozást negatív társas kötésnek tekintsük. Elég hozzá az óvatosabb állítás: a Flex Queue match history ismétlődő asszociációs mintázatokat termel, amelyekben lokális ally-csoportok és hídgazdag központi régiók különülnek el.
+
+A teljes rendszer bird's-eye gömb-exportja a backend által előre generált bináris és JSON artifaktumokat fogyaszt, és nem valós idejű számítást végez a böngészőben. Ez a tervezési döntés biztosítja, hogy a nagy gráfok megjelenítése is determinisztikus és reprodukálható maradjon.
+
+A \texttt{server.js} és a bird's-eye exportútvonalak alapján a 3D nézet mögött több, külön felelősségű artifaktum áll. A frontend nem egyetlen nagy JSON-fájlt tölt be, hanem manifesztet és bináris tömböket fogyaszt.
+
+\begin{table}[H]
+\centering
+\caption{A bird's-eye export fő artifaktumai}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{4.2cm}X}
+\toprule
+\textbf{Fájl} & \textbf{Szerep} \\
+\midrule
+\texttt{manifest.json} & Metaadatok, darabszámok, skálázási és generálási információk \\
+\texttt{node\_meta.json} & Csomópontszintű leíró metaadatok, frontend-hozzárendelések \\
+\texttt{node\_positions.f32} & Lebegőpontos koordináták tömbje a gyors rendereléshez \\
+\texttt{node\_metrics.u32} & Tömörített numerikus csomóponti mutatók \\
+\texttt{edge\_pairs.u32} & Él-végpontpárok tömbje \\
+\texttt{edge\_props.u32} & Élhez tartozó kódolt tulajdonságok \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Ez a bontás rendszerszinten jól indokolható. A nagy tömegű numerikus adat bináris marad, ami gyorsabb böngészőoldali feldolgozást tesz lehetővé, miközben az emberileg olvasható metaadat külön JSON-rétegben marad. A frontend tehát megjelenít, nem pedig újraszámol.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,keepaspectratio]{graph artifact package dataflow.pdf}
+\caption{A Graph V2 artifaktumcsomag adatfolyama: a Rust-exportőr bináris és JSON-rétegeket ír, az Express API kiszolgálja, a frontend WebGL-renderelőbe és elemzési kontextusba fogyasztja}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{birds-eye-cluster-view.png}
+\caption{A teljes hálózat 3D madártávlati nézete az előre generált Rust-artifaktumokra építve}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{flexset_associative_graph_clusters.png}
+\caption{Sűrűbb klaszterfoltok és a térbeli elkülönítés a globális nézetben}
+\end{figure}
+
+\section{Pathfinder Lab}
+
+A Pathfinder Lab az a felület, ahol a gráf nem elsősorban látványelemként, hanem algoritmikus térként jelenik meg. A felület támogatja:
+
+\begin{itemize}
+    \item forrás- és céljátékos kiválasztását,
+    \item több algoritmus összehasonlítását,
+    \item visszajátszási és léptetési funkciókat,
+    \item súlyozott és nem súlyozott módot,
+    \item többféle útvonalmód közötti váltást.
+\end{itemize}
+
+\section{Assortativity és központisági oldalak}
+
+A kutatás-orientált frontend oldalak közös tulajdonsága, hogy nem elégednek meg egyetlen backend-válasz megjelenítésével. Az asszortativitási és központisági nézetek igyekeznek:
+
+\begin{itemize}
+    \item magyarázni a kontrollok jelentését,
+    \item megmutatni a pipeline-összefüggéseket,
+    \item elkerülni a túl gyors, túl erős társadalmi következtetéseket.
+\end{itemize}
+
+Ez különösen fontos, mert az ilyen típusú analitika könnyen félreértelmezhető. A felület ezért szándékosan tartalmaz interpretációs szövegeket és magyarázó elemeket is. A signed-balance oldal a jelenlegi dolgozati bemutatási útvonalból kikerült: a hozzá tartozó backend/Rust kód megmaradhat kísérleti opcióként, de a fő navigáció és a bemutatási útvonal már az asszortativitásra, a core-periphery gráfolvasatra és a Brandes-központiságra épül.
+
+\section{Betweenness Centrality oldal}
+
+A \texttt{BetweennessCentralityPage} a projekt egyik legkomplexebb analitikai nézetje. A felület nem pusztán indítja a Brandes-algoritmust, hanem eredményinterpretációs panelekkel, timing-összehasonlítással és döntési dokumentációval egészíti ki az analitikai kimenetet.
+
+A oldal négy fő részből áll:
+
+\begin{itemize}
+    \item \textbf{Konfigurációs fejléc}: gráfmód (\texttt{battle-path} / \texttt{social-path}), él-súlyozás, minimum edge support és top-N korlát megadása; négy előre definiált preset (Strong 20, Medium 10, Wide 5, Full 1) gyors paraméterváltáshoz;
+    \item \textbf{Projekcióolvasat}: a felület automatikusan értelmezi a megtartott él arányát - ha az arány 1\% alá esik, ``erős kötésű broker elemzés''; 10\% felett ``teljes gráf közelítő elemzés'';
+    \item \textbf{Párhuzamossági összehasonlító}: ha a serial baseline futás engedélyezett, a felület megmutatja a serial és parallel futásidőt, a sebességarány-értékelést és a serial--parallel maximális abszolút eltérést (nulla kell legyen, ha a párhuzamosítás determinisztikus);
+    \item \textbf{Broker-rangsor}: az első 6 csúcs kártyás nézete (rank, label, klasztercsoport, degree, strength, raw és normalizált BC), majd teljes táblázat.
+\end{itemize}
+
+A ``Dokumentált döntések'' panel (algorithm, parallelization, edge support rule, edge cost rule, normalization rule, graph scope) közvetlenül a Rust motor válaszából érkezik: a frontend nem rekonstruálja, hanem visszatükrözi az analitika által rögzített módszertani döntéseket. Ez azt jelenti, hogy a felületen megjelenő szöveges leírások mindig konzisztensek a tényleges futtatással.
+
+Ez a nézet kulcsszerepet játszik a szakdolgozati bemutathatóság szempontjából: nem feketedoboz-eredményt ad vissza, hanem a futás körülményeivel, korlátaival és időbeli teljesítményével együtt prezentálja az eredményt.
+
+\section{Player Detail oldal}
+
+A \texttt{PlayerDetailPage} egy játékos-centrikus nézet, amely a kollektív analitikáktól eltérően egyetlen játékos profiljára fókuszál. Az oldal URL-paraméterrel (\texttt{?puuid=...}) adresszálható, így a Pathfinder Lab más nézeteiből közvetlenül lehet linkelni egy-egy csomópontra.
+
+A nézet két fő részből áll: a játékoskereső mezőből (\texttt{PlayerLookupField}) és a \texttt{PlayerPerformanceCard} komponensből. Ez utóbbi összesíti az adott játékos pontszámait (opscore, feedscore), meccsadatait, szerepkör-eloszlását és klasztertagságát egy lapozás nélküli, pásztázható kártyanézetben.
+
+Az oldal létjogosultsága a rendszerben az, hogy az aggregált elemzések (betweenness centralitás, asszortativitás, útvonalkeresési eredmények) sokszor néhány konkrét csomópontra irányítják a figyelmet. A Player Detail oldal lehetővé teszi, hogy ezek a csomópontok azonnal kontextusban is megvizsgálhatók legyenek, anélkül hogy az elemzőnek a nyers adatbázishoz kellene visszanyúlni.
+
+\section{A Graph V2 artifaktum-pipeline részletei}
+\label{sec:graph_v2_artifact}
+
+A Graph V2 pipeline nem egyetlen monolitikus JSON-fájlt hoz létre, hanem egy gondosan megtervezett, kétféle formátumú (bináris és JSON) artifaktum-csomagot, amelyből a frontend oldalak és az analitikai motorok is hatékonyan tudnak táplálkozni.
+
+\subsection{Az artifact-csomag összetétele}
+
+A Graph V2 pipeline a \texttt{backend/data/cache/\{datasetId\}/graph-v2/} könyvtárba generálja a következő fájlokat:
+
+\begin{itemize}
+    \item \textbf{manifest.json}: metaadat és méretinformáció - meccszám, csúcsszám, élszám, generálási időbélyeg, verzió;
+    \item \textbf{node\_meta.json}: csomópont-azonosítók és metaadatok - puuid, label, klaszterazonosító, pozíció (x, y), hídjelölő státusz;
+    \item \textbf{node\_metrics.u32}: bináris, packed uint32 formátum - minden csomóponthoz sorrendben tárolja az opscore és feedscore értékeket egész skálán;
+    \item \textbf{edge\_pairs.u32}: bináris élpárok - minden él két csomópont-indexeként tárolva;
+    \item \textbf{edge\_props.u32}: bináris éltulajdonságok - allyWeight, enemyWeight, totalMatches minden élhez;
+    \item \textbf{cluster\_meta.json}: klaszterszintű metaadatok - clusterID, memberCount, crossAllySupport, connectedAllyClusterCount, internalAllyEdges, orbitScore, orbitRadius, representative.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{graph artifact components.pdf}
+\caption{A Graph V2 pipeline bináris és JSON artifact-fájljainak szerkezete. A diagram a \texttt{graph-v2-artifact-structure.puml} forrás alapján különíti el a JSON leírókat (\texttt{manifest.json}, \texttt{node\_meta.json}, \texttt{cluster\_meta.json}) és a little-endian \texttt{.u32} bináris payloadokat (\texttt{edge\_pairs.u32}, \texttt{edge\_props.u32}, \texttt{node\_metrics.u32}). A \texttt{manifest.json} tartalmazza a csúcs-, él- és klaszterszámokat, míg a párhuzamos indexelés biztosítja, hogy az azonos sorszámú metadata- és metric-sor ugyanarra a csúcsra, illetve az azonos sorszámú edge-pair és edge-prop rekord ugyanarra az élre vonatkozzon.}
+\end{figure}
+
+A bináris formátumok (\texttt{.u32}) célja a betöltési teljesítmény: a frontend nem kénytelen JSON-parszolást végezni a csúcs- és élmutatókon; a bináris buffer közvetlenül beolvasható a WebGL renderelési pipeline-ba. Ez különösen a nagyméretű flexset esetén kritikus.
+
+\subsection{A summary.md mint gépi és emberi kontextus}
+
+Minden Graph V2 generálás után a pipeline létrehozza a \texttt{summary.md} fájlt, amely:
+
+\begin{itemize}
+    \item tartalmazza az összes kulcsmutatót (meccszám, csúcsszám, élszám, arányok, átlagos élsúly);
+    \item dokumentálja a konstrukciós szemantikát (support-küszöb, tie-policy, klaszterméret-korlát);
+    \item ML-szempontú feature-térképet biztosít a csomópont-, él- és klaszterszintű elemzési jelöltekhez;
+    \item listázza a top bridge-orbit klasztereket;
+    \item tartalmaz interpretációs korlátokat és javasolt elemzési irányokat.
+\end{itemize}
+
+Ennek a fájlnak kettős szerepe van: egyrészt fejlesztői ellenőrzőpontként működik (újragenerálásnál gyorsan ellenőrizhető, hogy a számok konzisztensek-e), másrészt gépi kontextusként is felhasználható - pontosan az a célba vett felhasználási mód, amelynek keretében a jelen dolgozat analitikai fejezetei is készültek.
+
+\subsection{Verziókezelés és cache-érvénytelenítés}
+
+A \texttt{graphBuilderVersion} mező (\texttt{graph-builder-v2.2}) explicit jelölője az artifaktum-csomag kompatibilitásának. Ha az algoritmus vagy a séma változik, a verzió frissítése egyértelműen jelzi, hogy a korábban generált artifact-csomagok nem felelnek meg az új elvárásoknak, és újra kell generálni azokat.
+
+A \texttt{generatedAtUnixMs} Unix-időbélyeg lehetővé teszi a dataset-változás utáni automatikus érvénytelenítés detektálását: ha a meccs-JSON fájlok újabbak, mint a generálási időbélyeg, a rendszer tudja, hogy az artifact elavult.
+
+\section{A backend API-szerződés}
+
+A Rust motor és a frontend közötti kommunikáció a Node.js Express szerver (\texttt{backend/server.js}) által közvetített HTTP-végpontokon keresztül zajlik. A szerver nem saját maga végzi a számításokat, hanem a Rust folyamat stdin/stdout csatornáján továbbítja a kéréseket.
+
+\subsection{Az aktuális főbb végpontok}
+
+\begin{table}[H]
+\centering
+\caption{A backend API főbb végpontjai és szerepük}
+\small
+\begin{tabularx}{\textwidth}{>{\ttfamily\raggedright\arraybackslash}p{5.5cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Végpont} & \textbf{Funkció} \\
+\midrule
+POST /api/pathfinder & Útvonalkeresési kérés (BFS/Dijkstra/A*/kétirányú) \\
+POST /api/signed-balance & Kísérleti strukturális egyensúly-elemzés, nem fő felhasználói útvonal \\
+POST /api/assortativity & Asszortativitás számítás \\
+POST /api/betweenness-centrality & Brandes-betweenness futtatás \\
+POST /api/balance-sweep & Kísérleti előjelprojekciós érzékenységi sweep \\
+POST /api/assortativity-significance & Permutációs szignifikanciateszt \\
+GET /api/graph-snapshot & Futásidejű gráfállapot-összefoglalás \\
+GET /api/engine-spec & A Rust motor specifikációjának lekérése \\
+GET /api/datasets & Elérhető datasetek listája \\
+POST /api/switch-dataset & Dataset-váltás (Rust réteg újraindítással) \\
+\bottomrule
+\end{tabularx}
+\normalsize
+\end{table}
+
+\subsection{Dataset-propagáció}
+
+A dataset-váltás (\texttt{/api/switch-dataset}) nem csupán egy konfigurációs bit megváltoztatása. A Rust motor a dataset-specifikáció alapján teljes újraépítést végez: betölti az adott dataset meccs-JSON-jait, klasztereit és játékosprofilját, majd újraszámolja a landmark-távolságokat és a min-cost táblát. Ez az operáció jellemzően néhány másodpercig tart (a flexset esetén a futásidejű gráfépítés a teljes 4980 meccssel és 5741 csúccsal dolgozik).
+
+Ez a közvetlen következménye annak az architektúrális döntésnek, hogy a Rust motor \emph{stateful}: nem minden kérésre, hanem beinduláskor (vagy dataset-váltáskor) tölti be a gráfot. Ez teljesítményi szempontból hasznos - nem kell minden egyes kérés előtt újraépíteni a gráfot -, de azt is jelenti, hogy a gráfállapot egy adott dataset-pillanathoz van kötve.
+
+\subsection{A JSON-alapú kérés-válasz protokoll}
+
+A Rust motor stdin-ről olvas egy JSON-objektumot (a kérés), majd stdout-ra ír egy JSON-objektumot (a válasz). A Node.js szerveroldal ezt a kommunikációt aszinkron Promisként kezeli. Ez a prototokol-tervzés egyszerű és debuggolható: a Rust motor tesztelható önállóan is, CLI eszközként, anélkül hogy a HTTP-szerver futna. A Node.js kizárólag a hálózati integrációért és a dataset-kezelésért felel.

@@ -44,7 +44,18 @@
       "PowerShell($resp = Invoke-RestMethod \"http://localhost:3001/api/datasets\"; $resp | ForEach-Object { Write-Host \"$\\($_.id\\) -> $\\($_.refinedDbAbsolutePath\\)\" })",
       "Bash(docker exec premadegraph-backend-1 *)",
       "Bash(node export-neurosim-clusters.js)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(Get-ChildItem C:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\backend\\\\genetic-neurosim\\\\docs *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\karol\\\\OneDrive\\\\Dokumentumok\\\\Dolgozat\\\\premadegraph\\\\backend\\\\genetic-neurosim\\\\docs\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName)",
+      "Bash(./target/release/neurosim-backend sim-run *)",
+      "Bash(ls target/release/*.exe)",
+      "Bash(ls target/release/neurosim*)",
+      "Bash(./target/release/neurosim-backend.exe --help)",
+      "Bash(./target/release/neurosim-backend.exe --cli-run --ticks 2000 --seed 7777 --clusters 599 --log -)",
+      "Bash(./target/release/neurosim-backend.exe --cli-run --ticks 2000 --seed 7777 --clusters 599)",
+      "Bash(./target/release/neurosim-backend.exe --cli-run --ticks 2000 --seed 7777 --clusters 599 --checkpoint-interval 250)",
+      "Bash(pkill -f \"neurosim-backend\")",
+      "PowerShell(Stop-Process *)"
     ]
   }
 }

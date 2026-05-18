@@ -1,0 +1,130 @@
+@startuml
+title Rust Analytical Command Pipeline - Node Backend and Rust CLI
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontColor black
+skinparam linetype ortho
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  StartColor black
+  EndColor black
+  BarColor black
+}
+skinparam note {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+
+start
+
+partition "Frontend" {
+  :Send HTTP/JSON request;
+  note right
+  Examples:
+  /api/pathfinder-rust/run
+  /api/pathfinder-rust/assortativity
+  /api/pathfinder-rust/betweenness-centrality
+  end note
+}
+
+partition "Node.js backend\nbackend/server.js" {
+  :Match Express route;
+  :Validate request body;
+  :Resolve selected dataset;
+  :Build Rust environment;
+  note right
+  DATASET_ID
+  GRAPH_DB_PATH
+  PATHFINDER_MATCH_DIR
+  GRAPH_V2_CACHE_DIR
+  BIRDSEYE_CACHE_DIR
+  end note
+  :Map endpoint to Rust command;
+}
+
+partition "Rust bridge\npathfinder/rustBridge.js" {
+  if (Command uses daemon?) then (yes)
+    :Ensure pathfinder_rust serve process;
+    :Assign request id;
+    :Store Promise resolver in pending map;
+    :Write newline-delimited JSON envelope to stdin;
+    note right
+    { id, command, payload }
+    end note
+  else (one-shot)
+    :Start pathfinder_rust <command> with execFile;
+    :Write JSON payload to stdin;
+    :Close stdin;
+  endif
+}
+
+partition "Rust CLI\nbackend/pathfinder-rust" {
+  :Read JSON from stdin;
+  :Deserialize command payload;
+  if (Runtime graph loaded?) then (yes)
+    :Reuse GraphState;
+  else (no)
+    :Load SQLite player data;
+    :Load match JSON files;
+    :Build GraphState and caches;
+  endif
+
+  :Run selected analytical command;
+  note right
+  Search / compare
+  signed balance
+  assortativity
+  balance sweep
+  significance test
+  betweenness centrality
+  artifact export
+  end note
+
+  if (Command succeeded?) then (yes)
+    :Serialize success JSON;
+    note right
+    daemon:
+    { id, ok: true, result }
+
+    one-shot:
+    result JSON
+    end note
+  else (no)
+    :Serialize error JSON;
+    note right
+    { id, ok: false, error }
+    end note
+  endif
+
+  :Write response to stdout;
+  :Write diagnostics to stderr if needed;
+}
+
+partition "Rust bridge\npathfinder/rustBridge.js" {
+  :Read stdout;
+  :Parse JSON response;
+  if (ok == true?) then (yes)
+    :Resolve Promise with result;
+  else (no)
+    :Reject Promise with error;
+  endif
+}
+
+partition "Node.js backend\nbackend/server.js" {
+  :Shape HTTP status and JSON contract;
+  :Return response to frontend;
+}
+
+partition "Frontend" {
+  :Render analytical result or error state;
+}
+
+stop
+
+@enduml

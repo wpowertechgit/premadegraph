@@ -1,0 +1,71 @@
+\chapter{A rendszer korai változata és az eredeti pipeline}
+
+\section{A korai projekt jellege}
+
+A repository története alapján a rendszer első változata jóval közelebb állt egy adatvezérelt játékosnézőhöz és kísérleti gráf-exportáló eszközhöz, mint a jelenlegi, több rétegre bontott kutatási platformhoz. Ebben a szakaszban a cél elsősorban az volt, hogy:
+
+\begin{itemize}
+    \item a Riot API-ból érkező nyers mérkőzésadatok egy helyre kerüljenek;
+    \item a játékosokhoz legalább alapvető pontszámok rendelődjenek;
+    \item a kapcsolatokból egyszerű gráf és klaszterkimenet szülessen;
+    \item a projekt vizuálisan is megmutatható legyen.
+\end{itemize}
+
+Ez a korai szakasz nem eldobandó előtörténet, hanem a jelenlegi rendszer kiindulópontja. A dolgozatban azért tartom meg hangsúlyosan, mert ebből érthető meg, miért alakult ki később a többnyelvű architektúra és a szigorúbb perzisztenciamodell.
+
+\section{Az első pontozási logika}
+
+Az eredeti \texttt{add\_new\_players.js} egyszerűbb, kézzel összeállított képletekkel dolgozott. A korai \texttt{feedscore} lényegében a halálokat büntette a kill és assist mennyiségéhez képest, míg az első \texttt{opscore} főként a következő komponensekre támaszkodott:
+
+\begin{itemize}
+    \item ölések,
+    \item asszisztok,
+    \item arany,
+    \item vision score.
+\end{itemize}
+
+Ez a kezdeti modell nyers volt, de fontos előnye volt: gyorsan megmutatta, hogy a tiszta KDA-logikán túl is lehet értelmes, legalább részben kompozit teljesítménymutatót számolni. Később ebből nőtt ki az artifact-szintű és szerepkörérzékeny rendszer.
+
+\section{A korai gráfépítés és export}
+
+A korai \texttt{build\_graph.py} és a hozzá kapcsolódó exportlépések alapvetően Python-központúak voltak. A hangsúly ekkor még a gyors láthatóságon és nem a perzisztens újrafelhasználhatóságon volt. A pipeline:
+
+\begin{itemize}
+    \item meccsekből kapcsolati gráfot épített,
+    \item összefüggő komponenseket és részgráfokat vizsgált,
+    \item HTML és PyVis exportokat készített,
+    \item gyors vizuális ellenőrzést tett lehetővé.
+\end{itemize}
+
+Ez a megközelítés jó prototípus volt, de rövid időn belül látszott a korlátja: a klaszterek és gráfnézetek csak exportként éltek tovább, és nem váltak a rendszer belső, lekérdezhető objektumaivá.
+
+\section{A korábbi régiós és ország-alapú ág kialakulása}
+
+A projekt korai időszakában erősebb szerepet kapott az a gondolat is, hogy a klaszterekből ország- vagy régiószintű következtetések szülessenek. Ennek nyomai ma is megtalálhatók a \texttt{fetch\_clusters.py}, \texttt{assign\_countries.py} és \texttt{conclude.py} szkriptekben. A megközelítés lényege az volt, hogy a klaszterek tagneveiből valamilyen földrajzi címke becsülhető, majd ehhez aggregált teljesítményadatok rendelhetők.
+
+Ez a gondolat önmagában izgalmas, de a dolgozat mostani állapotában már világos, hogy módszertanilag bizonytalanabb, mint a közvetlenül a gráfstruktúrára és a meccsadatokra támaszkodó elemzések. Emiatt ezt a vonalat nem törlöm ki a történetből, hanem kifejezetten korábbi, exploratív modulként kezelem.
+
+\section{Miért kellett a rendszert továbbépíteni?}
+
+A korai változat legfontosabb korlátai a következők voltak:
+
+\begin{itemize}
+    \item egyetlen adatbázis és egyetlen meccskönyvtár köré szerveződött;
+    \item a klaszterek és exportok nem voltak igazán első osztályú perzisztens objektumok;
+    \item a pontozás még nem volt kellően szerepkörérzékeny;
+    \item a futásidejű útvonalkeresés és a nehezebb gráfanalitika nem vált el élesen a frontend-logikától.
+\end{itemize}
+
+Ezek a hiányok nem kudarcot jeleztek, hanem természetes érési pontokat. A jelenlegi rendszer legjobban akkor érthető, ha nem egyetlen pillanatfelvételként, hanem ilyen fokozatos evolúció eredményeként nézzük.
+
+Visszatekintve a projekt korai szakaszának legtermészetesebb csapdája az \emph{akkumulatív script-architectúra} lett volna, amelyben minden új feature egy újabb script formájában kerül be, és az egész rendszer globális állapottól függ. Ez a minta sok hasonló méretű adat-kutatási projektben megfigyelhető. Azzal, hogy a projekt tudatosan bevezette a dataset-absztrakciót, a Rust-szintű analitikai elválasztást és a perzisztens klasztermodellt, elkerülte ezt a csapdát.
+
+Különösen fontos fordulópontot jelentett az a felismerés, hogy \emph{a kutatási analitikának nem szabad a frontend-állapottól függenie}. Ha az asszortativitás kiszámítása frontend-kérésre, a böngészőben lévő adatokból történne, akkor egyrészt nem lenne reprodukálható, másrészt nagyon érzékeny lenne a felhasználói interakcióra. A Rust-oldali, parancssori futtathatóság ezt a problémát gyökeresen oldja meg.
+
+\section{Miért kellett a régi szövegréteget is megtartani?}
+
+Szakdolgozatírás közben könnyű lenne azt a hibát elkövetni, hogy a projekt korábbi állapotát egyszerűen ``lecserélem'' a jelenlegi, erősebb verzióra. Ezt tudatosan nem teszem. A korai pipeline, a \texttt{conclude.py}-szerű ág és a régi klaszterértelmezések azért maradnak a dolgozatban, mert ezek adják meg a fejlődés irányát. A mostani rendszer nem légüres térben született, hanem ezekből nőtt ki.
+
+A country-alapú ágat (a \texttt{assign\_countries.py} és a \texttt{conclude.py} modulokat) jelenleg elavultnak tekintem: az ország-hozzárendelés megbízhatósága nem elegendő ahhoz, hogy a projekt fő állításait erre épüljenek, és a kód aktív karbantartás nélkül is a repositoryban marad mint történeti dokumentum. Ugyanakkor az a gondolat, hogy a klasztereket értelmezési egységként kezeljük - és ne csak vizuális exportként -, ebből az ágból nőtt ki. Ebben az értelemben az ott szerzett tapasztalat a jelenlegi klasztermodel egyik alapköve.
+
+\diagramfigure{A korai Python-alapú adatgyűjtő és gráfépítő pipeline adatáramlása}{old python graph dataflow diagram.pdf}

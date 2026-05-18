@@ -1,0 +1,164 @@
+\chapter{Párhuzamos Brandes-féle betweenness centralitás}
+
+\section{Miért szükséges a betweenness centralitás ebben a kontextusban?}
+
+A bridge-orbit vizualizáció már a Graph V2 pipeline-ból is meghatároz egyes csomópontokat és klasztereket „hidaknak" az \texttt{orbitScore} és \texttt{orbitRadius} mezők alapján. Ezek a mezők azonban vizuális heurisztikák: a kereszt-klaszter szövetségesi támasz, az összekötött klasztercsoport-szám és a tagszám kombinációján alapulnak, de nem ellenőrzik, hogy a jelölt csomópontok valóban a legtöbb legrövidebb útvonal metszéspontján helyezkednek-e el. Az igazi Brandes-féle közöttiség centralitás (betweenness centrality) éppen ezt az ellenőrzést teszi lehetővé: megméri, hogy egy csomópont hány legrövidebb út mentén helyezkedik el a gráfban, és ezért nem becslésen, hanem teljes gráfbejáráson alapul.
+
+A projektben a betweenness centralitás a \texttt{backend/pathfinder-rust/src/engine/centrality.rs} modulban van implementálva. Az implementáció több fontos döntést tartalmaz, amelyek mindegyike önálló módszertani állítás.
+
+\section{Az algoritmus: Brandes 2001}
+
+A Brandes-algoritmus \cite{brandes2001} a hagyományos $O(n^3)$ komplexitású betweenness-számítást $O(nm)$-re csökkenti (irányítatlan gráfra, ahol $n$ a csomópontok és $m$ az élek száma). Az ötlet az, hogy a csomópontonkénti legrövidebb-út fákat nem kell külön-külön tárolni: a forráscsomópontból induló BFS/Dijkstra-futtatás eredményéből egy visszaterjesztési lépésben kiszámítható az összes közötti wt-részleges járulék.
+
+A Brandes-algoritmus lépései forráscsomópontonként:
+
+\begin{enumerate}
+    \item Dijkstra/BFS futtatás a forrásból: kiszámolja a $\sigma[s][v]$ értéket (legrövidebb utak száma $s$-től $v$-ig) és az $dist[s][v]$ távolságokat.
+    \item A feltehetős csomópontok fordított sorrendben kerülnek feldolgozásra (a stack-ból): minden $w$-re, amelynek előde $v$ a legrövidebb úton, a $\delta[s][v]$ függőségi mutató a következőképpen frissül:
+    \begin{equation}
+    \delta[s][v] \mathrel{+}= \frac{\sigma[s][v]}{\sigma[s][w]} \cdot (1 + \delta[s][w])
+    \end{equation}
+    \item A forrást kivéve minden csomóponthoz hozzáadódik a $\delta[s][v]$ érték a globális betweenness-számlálóhoz.
+\end{enumerate}
+
+Irányítatlan gráfra az összes forrás feldolgozása után az eredmény felezése szükséges, mert minden $(s, t)$ és $(t, s)$ pár kétszer volt megszámlálva. A normalizálás az $(n-1)(n-2)/2$ maximális útvonalszámra vetít. Az implementáció pontosan ezt a logikát követi a \texttt{source\_dependencies()} és a \texttt{finalize\_undirected\_scores()} függvényekben.
+
+\section{A súlyozott mód és a költségmodell}
+
+A centralitás-modulban a súlyozott módban az él költsége az \texttt{edge\_cost()} függvény alapján:
+
+\begin{equation}
+c(u,v) = \left\lceil \frac{10^6}{\max(1, w(u,v))} \right\rceil
+\end{equation}
+
+ahol $w(u,v)$ az adott gráfmódnak megfelelő kapcsolaterősség (\texttt{allyWeight} social-path módban, \texttt{total\_matches} battle-path módban). Az \texttt{1\_000\_000}-os skálázási konstans (\texttt{COST\_SCALE}) integeraritmetikai pontosságot biztosít: az egészre kerekített reciprok kis élsúlyoknál nagy, erős kapcsolatoknál kis költséget ad, és az egész aritmetika determinisztikus rendezési viselkedést biztosít a prioritásos sorban.
+
+Súlyozatlan módban az összes él ára \texttt{COST\_SCALE} = $10^6$, ami egyenértékű az eredeti, súlyozatlan Brandes-bejárással.
+
+Ez a kettős mód (súlyozott/súlyozatlan) közvetlenül összemérhető a Pathfinder-modulban alkalmazott \texttt{traversal\_cost()} képlettel, ahol a skálázási konstans 1000. A centralitás-modul pontosabb integer-aritmetikát használ a nagyobb összegek miatt.
+
+\section{Párhuzamos végrehajtás Rayonnal}
+
+A Rust \texttt{rayon} könyvtára automatikus munkalopásos (work-stealing) párhuzamosságot tesz lehetővé. A centralitás-modul ezt a következő stratégiával alkalmazza:
+
+\begin{enumerate}
+    \item A forráscsomópontok halmazát $k$ egyenlő méretű csomóponthalmazra osztja, ahol $k = \min(n, 4 \cdot \text{szálak száma})$.
+    \item Minden halmazt egy párhuzamos rayon-feladatban dolgoz fel: a lokális $\delta$ vektor független a többi résztől.
+    \item Az összegzés után a részeredmény-vektorok deterministikusan összeadódnak.
+    \item A párhuzamos eredményt a soros eredménnyel összevethető maximális abszolút eltérés (\texttt{max\_abs\_delta}) jellemzi.
+\end{enumerate}
+
+A determinizmus biztosítása kulcsfontosságú: a forráscsomópontok rendezése és a chunk-határok rögzítése garantálja, hogy azonos input esetén mindig ugyanaz a kimenet. A tesztcsomag (\texttt{parallel\_matches\_serial}) ezt explicit módon ellenőrzi.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{parallel brandes activity diagram.pdf}
+\caption{A párhuzamos Brandes-futtatás aktivitásdiagramja a \texttt{parallel-brandes.puml} forrás alapján. A folyamat a \texttt{GraphState} betöltésével és a forráscsomópontok determinisztikus rendezésével indul, majd párhuzamos módban fix chunkokra bontja a forrásokat. Minden Rayon worker saját lokális tömbökkel futtat súlyozott Brandes-bejárást, \texttt{1/strength} élköltséggel; a lokális centralitásvektorok chunk-sorrendben, determinisztikusan redukálódnak globális eredménnyé. Ha soros baseline is készül, a rendszer \texttt{max\_abs\_delta} értékkel ellenőrzi a párhuzamos és soros kimenet egyezését, majd normalizál, rangsorol és JSON választ ad vissza a Node.js hídnak.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.52\textheight,keepaspectratio]{brandes-config.png}
+\caption{A Brandes betweenness centralitás frontend konfigurációs felülete. A képen a \texttt{battle-path} gráfolvasat, az \texttt{1/strength} élköltség, a soros és párhuzamos baseline összehasonlítás, az 5-ös minimum éltámogatás, a top 20 játékos kérése, valamint a súlyozott, Rayon-párhuzamos és soros baseline opciók láthatók.}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{A betweenness centralitás-modul főbb konfigurációs dimenzióinak összefoglalója}
+\begin{tabular}{lll}
+\toprule
+\textbf{Dimenzió} & \textbf{Lehetséges értékek} & \textbf{Hatás} \\
+\midrule
+Gráfmód & social-path, battle-path & Melyik élhalmazon fut \\
+Súlyozás & igen / nem & \texttt{edge\_cost()} visszaadott értéke \\
+Párhuzamos & igen / nem & rayon vs. soros Brandes \\
+Soros baseline & igen / nem & Delta-ellenőrzés a kimenetben \\
+Min. élsúly & $\geq 1$ & Gyenge élek kizárása \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{A projection felépítése}
+
+A \texttt{build\_projection()} függvény a \texttt{GraphState} pair\_relations térképéből iterál. Az élek sorrend szerint rendezve kerülnek feldolgozásra, így a projekció determinisztikus. Kizárt élek:
+
+\begin{itemize}
+    \item nulla \texttt{support} értékűek az adott gráfmódban;
+    \item minimum élsúly alatt lévők (\texttt{skipped\_low\_support\_edges});
+    \item rossz formátumú kulcsok (\texttt{skipped\_invalid\_edges}).
+\end{itemize}
+
+A csomópontok $\alpha$-betű sorrendben indexelődnek (\texttt{BTreeSet}), és a szomszédsági lista minden csúcsnál szintén rendezett. Ez garantálja a determinizmust akkor is, ha a \texttt{HashMap}-ben tárolt pair\_relations bejárási sorrendje változó.
+
+\section{Normalizálás és eredményinterpretálás}
+
+A normalizált betweenness érték egy $[0, 1]$ intervallumba esik, ahol az 1.0 értékű csomópont minden lehetséges $s \to t$ legrövidebb úton rajta van. A maximálisan normalizált érték ritka: csak csillag-topológia centerének normalizált betweenness értéke pontosan 1.0.
+
+Az egységtesztek ezt a három alapesetet explicit ellenőrzik:
+
+\begin{enumerate}
+    \item \textbf{Lánc-topológia} (path graph): a belső csomópontok magasabb betweenness-t kapnak, mint a végpontok.
+    \item \textbf{Csillag-topológia} (star graph): a center normalizált értéke pontosan 1.0.
+    \item \textbf{Dumbbell-topológia}: a hidat képező csomópont rangsorolódik legelőre.
+    \item \textbf{Súlyozási teszt}: erős parellelút esetén a súlyozatlan mód a közvetlen élt preferálja, a súlyozott mód az erősebb közvetett utat.
+    \item \textbf{Soros-párhuzamos egyezés}: determinisztikus azonosság bizonyítva (\texttt{max\_abs\_delta == 0}).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.68\textheight,keepaspectratio]{brandes-result.png}
+\caption{Brandes betweenness centralitás eredményképernyő. A futás 15\,421 runtime csomópontból 1\,716 projektált csomópontot és 2\,766 elemzett élt tartott meg, ami 1.54\%-os megtartott élhányadot jelent. A párhuzamos futás 6.38 ms alatt, a soros baseline 60.85 ms alatt futott, így a képernyő 9.54-szeres gyorsulást, 16 Rayon szálat és 0.000000 soros-párhuzamos deltát mutat; alul a top broker játékosok rangsora látható raw és normalizált centralitási értékekkel.}
+\end{figure}
+
+A képernyő alapján a kiválasztott, 5-ös minimum supporttal szűrt \texttt{battle-path} projekció már elég nagy ahhoz, hogy a Rayon-párhuzamosítás mérhetően hasznos legyen, miközben a \texttt{serial delta} nulla marad. Ez egyszerre fontos teljesítmény- és validációs jel: a párhuzamos futás nem csak gyorsabb, hanem a soros baseline-nal numerikusan egyező eredményt ad ezen a futtatáson.
+
+\section{Centralitás a bridge-orbit hipotézis tesztelésére}
+
+A bridge-orbit layout ($\S$\ref{sec:graph_v2_artifact}) az \texttt{orbitScore} és \texttt{orbitRadius} mezőkkel azonosítja a kiemelten összekötő klasztereket. Ezeket a heurisztikus pontszámokat egyelőre nem vetítettük össze Brandes-betweenness értékekkel, de a modul elkészültével ez a validálás elvégezhető.
+
+A várható hipotézis: a legmagasabb \texttt{crossAllySupport} és \texttt{connectedAllyClusterCount} értékű klaszterek átlagos Brandes-betweenness értéke szignifikánsan magasabb az alacsony orbit-score-úakénál. Ha ez teljesül, az megerősíti, hogy az orbit-heurisztika jó előszűrője a valódi topológiai hidat képező csomópontoknak. Ha nem teljesül, az a heurisztika korlátaira világít rá és pontosítja a vizualizáció értelmezési keretét.
+
+Ez a jövőbeli vizsgálat pontosan az a fajta módszertanilag indokolt bővítés, amelyről a \texttt{research-workflow} szemlélet szól: a meglévő adatból egy explicit, megcáfolható hipotézis tesztelhető, és az eredmény akár megerősíti, akár megcáfolja a korábbi vizuális heurisztikát.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{graph-brandes-brokerinyellow.png}
+\caption{A betweenness centralitás alapján azonosított broker játékosok a gráfban, sárgával kiemelve. A kiemelés azokat a csomópontokat jelöli, amelyek a Brandes-algoritmus szerinti normalizált \texttt{betweenness} értéke a legmagasabb — vagyis ezek a csomópontok helyezkednek el a legtöbb legrövidebb út mentén. Ezek a bridge-jelöltek az \texttt{orbitScore}-alapú vizuális heurisztika és a tényleges topológiai centralitás összevetésének szemléletes kiindulópontja.}
+\end{figure}
+
+\section{Kísérletfuttató infrastruktúra és nullmodellek}
+
+A Rust motor nem csak egyedi analitikai kéréseket tud kiszolgálni, hanem strukturált kísérleteket is tud futtatni a \texttt{backend/pathfinder-rust/src/engine/experiments.rs} modulon keresztül.
+
+\subsection{Signed-balance sweep mint módszertani diagnosztika}
+
+A \texttt{SignedBalanceSweepRequest} egy kötegelt futási kérés, amely egyszerre több minimum-élsúly és döntetlen-kezelési politika kombinációt futtat le, és az összes eredményt egységes \texttt{SignedBalanceSweepResponse} válaszban adja vissza. A sweep sémaverziója (\texttt{signed-balance-sweep-v1}) az eredmények jövőbeli összehasonlíthatóságát biztosítja.
+
+Minden egyes sweep-futás az alapfuttatással azonos Rust kódon megy keresztül, így az összes kombinált eredmény egységes implementációs alapra támaszkodik. A sweep főbb paraméterei:
+
+\begin{itemize}
+    \item \texttt{min\_support\_values}: vizsgált minimális élsúlyok listája;
+    \item \texttt{tie\_policies}: vizsgált döntetlen-kezelési politikák listája (\texttt{exclude}, \texttt{ally}, \texttt{enemy});
+    \item \texttt{graph\_modes}: \texttt{social-path} és/vagy \texttt{battle-path}.
+\end{itemize}
+
+Ez lehetővé teszi, hogy egy kérésben teljes érzékenységi mátrix készüljön, például: minden min\_support × tie\_policy kombinációra megkapjuk az analizált triádok számát és az egyensúlyi arányt. A dolgozatban ezt már nem fő eredményként használom, hanem annak ellenőrzésére, hogy mennyire erősen függ a formális signed-balance kimenet a projekciós döntésektől. A sweep így a módszertani határ dokumentálására szolgál.
+
+\subsection{Asszortativitási szignifikanciateszt}
+
+Az \texttt{AssortativitySignificanceRequest} permutációs nullmodellt futtat: véletlenszerűen kever össze játékos--score párokat az éleken, és az így kapott nulldisztribúcióval veti össze a megfigyelt korrelációt. A determinisztikus RNG-mag (\texttt{SystemTime::UNIX\_EPOCH} alapú, de rögzíthető) garantálja a reprodukálhatóságot.
+
+A nullmodell-futtatás főbb jellemzői:
+
+\begin{itemize}
+    \item permutáció-szám konfigurálható (\texttt{num\_permutations});
+    \item a figyelt korreláció ($r_\mathrm{obs}$) összehasonlítható a null-eloszlás átlagával és szórásával;
+    \item a $p$-érték az $r_\mathrm{null} \geq r_\mathrm{obs}$ arányból becsülhető;
+    \item a sémaverziójú kimenet (\texttt{assortativity-significance-v1}) az eredményeket önmagukon belül értelmezhetővé teszi.
+\end{itemize}
+
+A jelen dolgozatban a szignifikanciafuttatások megléte a rendszerben dokumentált, de az összes kombinációra kiterjedő, végleges nullmodell-kísérletsorozat a jövőbeli fejlesztések közé tartozik. A hangsúly egyelőre az asszortativitás leíró korrelációin és a dataset-összehasonlításon van, amelyek önmagukban is érvényes empirikus eredmények.
+
+\subsection{A kísérletfuttató infrastruktúra módszertani értéke}
+
+A sweep és a szignifikanciateszt léte nem csak technikai kényelmi funkció. Módszertanilag azt jelenti, hogy a dolgozatban közölt eredmények reprodukálhatók és bővíthetők: ugyanazon infrastruktúrán egy jövőbeli vizsgálat egyre finomabb paraméterekkel futhat le, anélkül hogy az alapimplementációt módosítani kellene. Ez összhangban van a reprodukálható kutatás alapelvével \cite{sandve2013}: a szoftver, nem csak a szöveg hordozza a módszertani döntéseket.

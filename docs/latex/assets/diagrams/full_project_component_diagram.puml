@@ -1,0 +1,115 @@
+@startuml
+left to right direction
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 85
+skinparam ranksep 120
+skinparam wrapWidth 150
+skinparam maxMessageSize 70
+skinparam defaultTextAlignment left
+
+title Premade Graph Thesis Project - Component Diagram
+
+actor "User" as USER
+
+package "Client" {
+  component "React/Vite Frontend\n<<React>>\n\nMain views:\n- Match Collector\n- Graph V2 / Graph Sphere\n- Pathfinder Lab\n- Signed Balance\n- Assortativity\n- Betweenness Centrality\n- Player Detail / Leaderboards\n\nUses HTTP/JSON and loads binary\nGraph V2 artifacts" as FE
+}
+
+package "Node Backend" {
+  component "Node.js / Express API Server\n<<Express>>\n\nMain orchestration API\n\nKey API groups:\n- Dataset registry + selected dataset\n- Riot proxy + player lookup\n- Match collector control\n- Player scores + leaderboards\n- Graph build + normalization\n- Rust pathfinder bridge\n- Rust analytics endpoints\n- Graph artifact streaming\n- Pathfinder replay persistence" as API
+
+  component "Rust Invocation Context\n\nDATASET_ID\nGRAPH_DB_PATH\nPATHFINDER_MATCH_DIR\nGRAPH_V2_CACHE_DIR\nBIRDSEYE_CACHE_DIR" as ENV
+}
+
+package "Data Collection / Processing Workers" {
+  component "match_collector.py\n<<Python>>\n\nCalls Riot API\nobeys rate limits\nwrites match JSON\nwrites players.db" as MATCH_COLLECTOR
+
+  component "normalize_players_by_puuid.js\n<<Node.js Script>>\n\nNormalizes by PUUID\ncomputes opscore/feedscore\nwrites playersrefined.db" as NORMALIZER
+
+  component "build_graph.py\n+ cluster_persistence.py\n<<Python>>\n\nBuilds early graph/clusters\ncreates clusters + members\nreplaces rows deterministically" as BUILD_GRAPH
+}
+
+package "Rust Analytics Runtime" {
+  component "Premade Graph Rust CLI\n<<Rust CLI>>\n\nCore commands/modules:\n- build_graph_state()\n- pathfinder run / compare\n- graph-v2-export\n- birdseye-3d-export\n- signed-balance\n- assortativity\n- balance-sweep\n- assortativity-significance\n- betweenness-centrality" as RUST
+}
+
+package "Storage" {
+  artifact "backend/data/datasets.json" as DATASETS
+
+  database "players.db\nbackend/data/databases/{dataset}/players.db" as PLAYERS <<SQLite>>
+
+  database "playersrefined.db\nbackend/data/databases/{dataset}/playersrefined.db\n\nplayers, scores, clusters,\ncluster_members" as REFINED <<SQLite>>
+
+  artifact "match JSON folder\nbackend/data/matches/{dataset}/" as MATCH_JSON
+
+  artifact "Graph V2 cache\nbackend/data/cache/{dataset}/graph-v2\n\nmanifest, node_meta, edge_pairs,\nedge_props, node_metrics, cluster_meta" as GRAPH_CACHE
+
+  artifact "Birdseye 3D cache\nbackend/data/cache/{dataset}/birdseye-3d-v2" as BIRD_CACHE
+
+  database "backend/pathfinder_replays.db" as REPLAYS <<SQLite>>
+
+  database "simple browser DB\ndocs/databaseproject/simple-interface/Data/\npremadegraph_project_{dataset}.db" as SIMPLE_DB <<SQLite>>
+}
+
+package "C# Database Browser" {
+  component "ASP.NET Core DB Browser\n<<ASP.NET Core>>\n\nSeparate server-rendered thesis/demo UI\n\nFeatures:\n- dataset selector\n- table browser\n- global search\n- column filters\n- sorting + pagination\n- full JSON value page" as CS_BROWSER
+}
+
+package "External Services" {
+  cloud "Riot Games API\n<<External API>>" as RIOT
+}
+
+USER --> FE : analytics UI
+USER --> CS_BROWSER : DB inspection UI
+
+FE --> API : HTTP/JSON\nartifact requests
+
+API --> ENV : prepare selected\ndataset paths
+ENV --> RUST : invoke CLI
+
+API --> MATCH_COLLECTOR : start/stop collection
+API --> NORMALIZER : normalize players
+API --> BUILD_GRAPH : generate graph
+API --> RIOT : proxy lookup/match calls
+
+MATCH_COLLECTOR --> RIOT : collect match data
+RUST --> API : JSON analytics results\nexport status
+CS_BROWSER --> USER : server-rendered HTML
+
+API ..> DATASETS : read/write registry
+API ..> REFINED : scores + player data
+API ..> GRAPH_CACHE : stream graph artifacts
+API ..> BIRD_CACHE : stream 3D artifacts
+API ..> REPLAYS : replay persistence
+
+MATCH_COLLECTOR ..> MATCH_JSON : write raw matches
+MATCH_COLLECTOR ..> PLAYERS : write players
+
+NORMALIZER ..> PLAYERS : read raw players
+NORMALIZER ..> MATCH_JSON : read matches
+NORMALIZER ..> REFINED : write refined scores
+
+BUILD_GRAPH ..> MATCH_JSON : read matches
+BUILD_GRAPH ..> REFINED : write clusters
+
+RUST ..> REFINED : read graph DB\nwrite cluster rows
+RUST ..> MATCH_JSON : read match folder
+RUST ..> GRAPH_CACHE : Graph V2 cache R/W
+RUST ..> BIRD_CACHE : Birdseye cache R/W
+
+CS_BROWSER ..> DATASETS : read registry
+CS_BROWSER ..> PLAYERS : import
+CS_BROWSER ..> REFINED : import
+CS_BROWSER ..> REPLAYS : import
+CS_BROWSER ..> SIMPLE_DB : write/read simplified DB
+
+legend bottom
+  Solid arrows = HTTP/API call or process invocation
+  Dashed arrows = file/database read or write
+endlegend
+
+@enduml

@@ -1,0 +1,49 @@
+\chapter{A strukturális egyensúly mint módszertani határeset}
+
+\section{Miért került le a fő eredmények közül?}
+
+A projektben elkészült signed-balance implementáció nem hibás algoritmus. A \texttt{signed\_balance.rs} modul determinisztikusan előállít egy előjeles egyszerű gráfot, teljesen összekapcsolt triádokat enumerál, majd a Heider--Cartwright--Harary-féle szabály szerint osztályozza őket. A visszaminősítés oka nem technikai, hanem szemantikai: a League of Legends matchmaking adataiban az ellenfélként való ismételt találkozás nem elég erős bizonyíték negatív társas kötésre.
+
+Formálisan a projekció működik:
+
+\begin{itemize}
+    \item az \texttt{allyWeight} dominanciája pozitív élként kezelhető, mert a Flex Queue-ban a visszatérő csapattársi viszony részben szándékolt együttjátszást is tükrözhet;
+    \item az \texttt{enemyWeight} dominanciája technikailag negatív élként jelölhető, de ez nem azonos ellenségességgel, rivalizálással vagy elutasítással;
+    \item a döntetlen-kezelés, a minimum support és a triádenumerálás auditálható és újrafuttatható;
+    \item a kapott arányok ezért inkább a választott projekció viselkedését mutatják, nem pedig bizonyított társas egyensúlyt.
+\end{itemize}
+
+\section{Az enemy-él szemantikai problémája}
+
+A strukturális egyensúlyelmélet eredeti közege pozitív és negatív társas viszonyokra épül: barátságra, ellenszenvre, bizalomra, elutasításra vagy hasonló relációkra. A jelen projektben azonban egy enemy-él csak azt jelenti, hogy két játékos többször került egymással szembe, mint egy csapatba.
+
+Ez sokféle okból történhet:
+
+\begin{itemize}
+    \item hasonló MMR-sávban játszanak;
+    \item hasonló napszakban queue-znak;
+    \item a Master$+$ Flex Queue aktív játékospoolja kicsi;
+    \item a matchmaking ismételten ugyanazokat a játékosokat osztja ellenkező oldalra;
+    \item a stabil premade-csoportok miatt a külső játékosok gyakrabban ellenfélként jelennek meg;
+    \item az adatgyűjtési stratégia felerősítheti az ismétlődő találkozásokat.
+\end{itemize}
+
+Ezek közül egyik sem követeli meg, hogy a két játékos között negatív társas kapcsolat legyen. Ezért az \texttt{enemyWeight} negatív signed-network élként való kezelése túl erős állítás lenne a dolgozat fő empirikus narratívájához.
+
+\section{Mit őriz meg a dolgozat?}
+
+A signed-balance modul a repositoryban kísérleti opcióként megmaradhat, mert hasznos módszertani tanulságot ad: megmutatja, hogy egy formálisan elegáns gráfelméleti módszer hogyan válhat interpretációs szempontból gyengévé, ha az él szemantikája nem felel meg az elmélet előfeltevéseinek. A magas balance-ratio ezért legfeljebb óvatossági példaként használható: a szám lehet stabil a választott projekció alatt, de önmagában nem bizonyít társas harmóniát vagy strukturális stabilitást.
+
+A dolgozati termékből és a fő frontend bemutatási útvonalból ezért kikerül a Signed Balance oldal és a kombinált Signed Balance + Assortativity futtató. A backend/Rust implementáció megtartható, de a dolgozat fő pillérei a következők:
+
+\begin{itemize}
+    \item a \texttt{flexset} asszociatív core-periphery játékosgráfként való értelmezése;
+    \item a \texttt{flexset} és \texttt{soloq} datasetek kontrollált összehasonlítása;
+    \item az \texttt{opscore} és \texttt{feedscore} asszortativitási eredményei;
+    \item a Graph V2 konstrukciós és vizualizációs pipeline;
+    \item a Rust útvonalkeresés és Brandes-betweenness központiság.
+\end{itemize}
+
+\section{Módszertani tanulság}
+
+A visszaminősítés erősíti, nem gyengíti a dolgozatot. A dolgozat így nem azt állítja, hogy minden elegáns gráfelméleti modell automatikusan átültethető játékos-telemetriára, hanem azt, hogy az adatkeletkezési mechanizmust minden esetben össze kell vetni a választott modell előfeltevéseivel. A signed-balance esetben a formális számítás helyes, de a negatív él jelentése nem elég erős. Emiatt az elemzés határesetként marad: implementált, dokumentált, de nem fő bizonyíték.

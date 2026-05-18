@@ -12,6 +12,8 @@ aliases:
 
 Ez a térkép azt jelöli, mely dokumentumok tartalma épült be a `docs/mainraw.tex` aktuális szakdolgozati narratívájába.
 
+Megjegyzés: a monolit `docs/mainraw.tex` mellé létrejött a moduláris LaTeX workspace is: [[../latex/README]]. Az aktív moduláris build ugyanennek a szakdolgozati narratívának a fejezetekre bontott változata.
+
 ## Beépült, Stabil Források
 
 | Dokumentum | Fejezetek | Szerep |

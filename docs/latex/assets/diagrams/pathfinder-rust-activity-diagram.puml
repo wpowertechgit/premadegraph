@@ -1,0 +1,72 @@
+@startuml
+title Rust Pathfinder Activity Diagram
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontColor black
+skinparam activity {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+  DiamondBackgroundColor white
+  DiamondBorderColor black
+  StartColor black
+  EndColor black
+  BarColor black
+}
+skinparam note {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+
+start
+note right
+initial node
+end note
+
+:Receive Rust pathfinder request;
+:Read stdin payload;
+:Deserialize request JSON;
+
+if (Execution mode?) then (runtime)
+  fork
+    :run;
+    :Build or reuse GraphState;
+    :Run selected search algorithm;
+    note right
+    selected algorithm options:
+    bfs
+    dijkstra
+    astar
+    bidirectional
+    end note
+
+    if (Path found?) then (yes)
+      :Build resolved path;
+      :Build PathfinderResponse;
+    else (no)
+      :Build not-found response;
+      :Build PathfinderResponse;
+    endif
+  fork again
+    :compare;
+    :Run remaining algorithms;
+    :Build CompareResponse;
+  end fork
+
+  :Build runtime result;
+else (spec)
+  :Build EngineSpecResponse;
+endif
+
+=== Session finished ===
+:Serialize JSON output;
+:Print stdout response;
+note right
+activity final
+end note
+
+stop
+
+@enduml

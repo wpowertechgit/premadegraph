@@ -1,0 +1,77 @@
+\chapter{Szakirodalmi háttér}
+
+\section{Hálózatkutatás és közösségszerkezet}
+
+A gráfok társas kapcsolatok modellezésében régóta központi szerepet játszanak. A videojátékos közösségek esetében különösen izgalmas kérdés, hogy a játékosok közötti ismétlődő interakciók mennyiben alkotnak felismerhető struktúrákat, szubközösségeket, hidakat és lokális mintázatokat. Girvan és Newman klasszikus munkája rámutatott arra, hogy a hálózat élei nem pusztán kapcsolódási elemek, hanem közösségszerkezetet leíró, eltérő fontosságú viszonyok is lehetnek \cite{girvannewman}. Fortunato átfogó áttekintése pedig jól összefoglalja, miért központi probléma a közösségdetektálás a modern hálózatelemzésben \cite{fortunato2010}.
+
+A jelen projektben a közösségfogalom nem öncélú. Azért fontos, mert a többször ismétlődő kapcsolatokra épülő játékoscsoportok:
+
+\begin{itemize}
+    \item értelmezhetőbbé teszik a nagyméretű hálózatot,
+    \item segítenek elkülöníteni a valós kapcsolati magokat a zajtól,
+    \item támaszt nyújtanak a későbbi útvonal- és analitikai számításoknak.
+\end{itemize}
+
+\section{Közösségdetektálás és modularitás}
+
+A korai Python oldali populációs klaszterezés a NetworkX \texttt{greedy\_modularity\_communities} eljárását használta, amely a Clauset--Newman--Moore féle mohó modularitásmaximalizálási megközelítésre épül \cite{clauset2004,networkx_greedy}. Ez a választás prototípusként tudatos kompromisszum volt: nem a leglátványosabb, hanem gyorsan magyarázható és reprodukálható megoldás. Fontos megjegyezni, hogy a jelenlegi futásidejű gráfállapotot -- amelyen az útvonalkeresés és az analitikák futnak -- a Rust motor önállóan, a meccs-JSON fájlokból és az SQLite-adatbázisból építi fel; a Python pipeline szerepe ezért legacy/populációs közösségek és kompatibilitási exportok előállítása, nem a teljes gráfreprezentáció előállítása.
+
+A dolgozatban ezért nem azt állítom, hogy ez az egyetlen vagy minden helyzetben legjobb közösségdetektáló eljárás, hanem azt, hogy a jelenlegi rendszerben ez adja a legvédhetőbb kiindulópontot a közösségek strukturált tárolására és vizsgálatára.
+
+Ugyanakkor módszertanilag fontos kimondani a modularitás-optimalizáció ismert korlátait is. Fortunato és Barthelemy klasszikus eredménye szerint a modularitásra építő közösségdetektálás felbontási korlátba ütközhet, vagyis a kisebb, de valós szerkezetek egy része a globális optimum érdekében összeolvadhat \cite{fortunato_barthelemy2007}. Ez a jelen projektben azért releváns, mert a \texttt{python\_population} klasztereket nem szabad ontológiai „igazi közösségként” kezelni. Sokkal pontosabb azt mondani, hogy a választott gráf, súlymodell és heurisztika mellett ezek adják a legjobb, reprodukálható populációs közösségképet.
+
+Ez a szakirodalmi háttér azt is megvilágítja, miért védhető a két klasztercsalád együttélése. Ha a közösségdetektálás eleve input- és célfüggő feladat, akkor nem meglepő, hogy a populációs Python-klaszterek és a futásidejű Rust-komponensek nem esnek egybe. A dolgozat szempontjából ez nem hiba, hanem annak jele, hogy a rendszer külön optimalizálja a népességi értelmezhetőséget és a keresési használhatóságot.
+
+\section{Strukturális egyensúly és előjeles gráfok}
+
+Az előjeles kapcsolatok vizsgálatának klasszikus alapját Heider egyensúlyelmélete \cite{heider1946}, illetve Cartwright és Harary gráfelméleti általánosítása adja \cite{cartwright1956}. Az alapgondolat intuitív: a pozitív és negatív kapcsolatokból felépülő triádok egy része stabilabb, más része feszültebb szerkezetet jelez.
+
+Ez a dolgozat szempontjából háttérként fontos, mert a projekt adatmodellje nemcsak azt tudja megmondani, hogy két játékos hányszor került kapcsolatba, hanem azt is, hogy ez a kapcsolat inkább szövetségesi vagy inkább ellenfél-jellegű volt. Így a gráf formálisan projektálható egy előjeles hálóvá, ahol:
+
+\begin{itemize}
+    \item a domináns \texttt{ally} kapcsolat pozitív élként,
+    \item a domináns \texttt{enemy} kapcsolat negatív élként
+\end{itemize}
+
+jelenik meg.
+
+A modern signed-network irodalom azért is hasznos háttér, mert rámutat: az előjeles hálók viselkedése nem csak elméleti játék. Leskovec és munkatársai nagyméretű online hálózatokon mutatták meg, hogy a pozitív és negatív élek kombinációja valódi szerkezeti mintázatokat hoz létre \cite{leskovec2010}, míg későbbi összefoglalók és empirikus vizsgálatok azt hangsúlyozzák, hogy a strukturális egyensúlyt mindig a konkrét projekciós szabályok és adatkeletkezési mód fényében kell értelmezni \cite{lerner2016,facchetti2011}. A jelen dolgozatban éppen ez a korlát vált döntővé: az \texttt{enemyWeight} nem elég megbízható negatív társas kötés, ezért a strukturális egyensúly nem fő empirikus eredményként, hanem módszertani határesetként jelenik meg.
+
+\section{Asszortativitás}
+
+Newman munkája az asszortatív keveredést olyan hálózati jelenségként írja le, amikor a kapcsolódó csomópontok hasonló vagy éppen eltérő tulajdonságúak \cite{newman2003}. A jelen projektben ezt a gondolatot a játékosok teljesítménymutatóira alkalmazom: nem azt kérdezem, hogy a magas fokszámú csúcsok kapcsolódnak-e egymáshoz, hanem azt, hogy a gráfban összekapcsolt játékosok hasonló \texttt{opscore} vagy \texttt{feedscore} értékeket hordoznak-e.
+
+Ez azért különösen hasznos, mert:
+
+\begin{itemize}
+    \item könnyen értelmezhető,
+    \item számszerűsíthető,
+    \item a gráf jelentésétől függően más és más eredményt adhat.
+\end{itemize}
+
+Éppen ezért a dolgozatban két gráfmódot is megkülönböztetek:
+
+\begin{itemize}
+    \item \texttt{social-path}: csak a pozitív, szövetségesi támaszú kapcsolatokra épít,
+    \item \texttt{battle-path}: az összes ismétlődő együtt- vagy egymás ellen játszást figyelembe veszi.
+\end{itemize}
+
+\section{Esport-analitika és játékos-teljesítménymérés}
+
+A League of Legends és az általánosabb MOBA-játékok esport-analitikája önálló kutatási területté vált. Mora-Cantallops és Sicilia átfogó irodalmi áttekintése megmutatja, hogy a MOBA-játékok egyedi kombinációt kínálnak verseny, együttműködés, játékosélmény és társas interakció között, és ez a kombináció különlegesen gazdag adatforrást teremt empirikus vizsgálatokhoz \cite{moracantallops2019}.
+
+A játékos-teljesítmény modellezése Novak és munkatársai munkájában is megjelenik: profi League of Legends meccsekre kidolgozott teljesítménymodellek rámutatnak, hogy a domainspecifikus változók és a strukturált adatfeldolgozás fontosabb, mint az általános statisztikai modellek \cite{novak2022}. Ez erősíti a jelen projekt szerepkörérzékeny pontozási megközelítésének indokoltságát.
+
+Bahrololloomi és munkatársai a hasonló adatgyűjtési stratégiát, amelyet a jelen projekt is alkalmaz - kiindulópontból való mintavétel és ismétlődő meccskapcsolatok felderítése - gépi tanulásos keretben vizsgálják \cite{bahrololloomi2021}.
+
+A csapathálózat és teljesítmény összefüggése Sánchez-González és González-Bailón munkájában is megjelenik, ahol profi LoL csapatok hálózati struktúráját kapcsolják össze a csapathatékonysággal \cite{sanchezgonzalezBailon2023}. Ez megalapozza azt a nézetet, hogy a jelen projektben használt klaszter- és kapcsolatstruktúra nem puszta vizualizáció, hanem potenciálisan prediktív erejű analitikai egység.
+
+Mindezek alapján a jelen projekt a meglévő esport-analitikai irodalom egy természetes empirikus kiterjesztése: nem profi, hanem amatőr/félprofesszionális rangsorolt játékos-hálózatokat vizsgál, és nem egyetlen meccsre, hanem ismétlődő kapcsolatokra épít.
+
+\section{Legrövidebb utak és heurisztikus keresés}
+
+A gráfok másik természetes vizsgálati iránya az útvonalak keresése. A klasszikus legrövidebb út problémát Dijkstra alapozta meg \cite{dijkstra1959}, míg az A* keresés formális alapját Hart, Nilsson és Raphael adták meg \cite{hart1968}. A jelen projektben azért vált ez fontos kérdéssé, mert a játékosháló nemcsak statikus objektumként érdekes, hanem úgy is, mint egy olyan kapcsolati tér, ahol két játékos között különböző „ismeretségi láncok” húzódhatnak.
+
+A Rust rétegben bevezetett egzakt A* implementációhoz a rendszer ALT-szerű alsó becsléseket is használ, amelyeket a Goldberg--Harrelson-féle irány tovább inspirált \cite{goldberg2005}. A lényeg itt sem az, hogy a dolgozat egy új legrövidebb út algoritmust találna fel, hanem az, hogy a játékosháló nagyságrendjéhez és a demo-igényekhez illeszkedően stabil, védhető és gyors futtatókörnyezetet alakítson ki.
+
+Szakdolgozati szempontból itt különösen fontos különbséget tenni „gyorsnak tűnő” és valóban helyes heurisztikus keresés között. Sok gyakorlati rendszer a képernyőn látható távolságot is heurisztikaként használja, ami látványos lehet, de nem feltétlenül admisszibilis. A jelen projektben a helyességi garancia nem a layoutból, hanem a gráfra illesztett alsó becslésekből származik. A térbeli távolság legfeljebb tie-break szerepet kap. Ezzel a rendszer jobban igazodik a klasszikus A* elméleti követelményeihez, és elkerüli, hogy a vizualizációs koordináták összekeveredjenek a kapcsolati költséggel.

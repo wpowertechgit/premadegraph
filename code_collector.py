@@ -8,6 +8,7 @@ ALLOWED_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.sql', '.css', '.txt
 
 INCLUDE_MARKDOWN = False
 INCLUDE_LATEX = False
+MARKDOWN_ONLY = True
 
 # Ezeket mindenképp KIZÁRJA (Blacklist - biztonsági háló)
 IGNORED_EXTENSIONS = {'.json', '.log', '.html', '.pyc','.txt','.css'}
@@ -19,6 +20,10 @@ EXCLUDE_DIRS = {
     'clusters', 'data' # Feltételezem, itt vannak az adatmentések
 }
 
+EXCLUDE_PATHS = {
+    "frontend/public/documentation",
+}
+
 # A script saját magát és a kimeneti fájlt is kihagyja
 EXCLUDE_FILES = {'package-lock.json', 'yarn.lock', OUTPUT_FILE, os.path.basename(__file__)}
 
@@ -28,17 +33,34 @@ def collect_code():
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as outfile:
         # Végigsétál a mappákon
         for root, dirs, files in os.walk("."):
+            relative_root = os.path.relpath(root, ".")
+            clean_root = relative_root.replace("\\", "/")
+            if clean_root == ".":
+                clean_root = ""
+
+            if clean_root in EXCLUDE_PATHS:
+                dirs[:] = []
+                continue
+
             # Helyben módosítjuk a dirs listát, hogy a tiltott mappákba be se lépjen
             dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+            dirs[:] = [
+                d for d in dirs
+                if (f"{clean_root}/{d}" if clean_root else d).replace("\\", "/") not in EXCLUDE_PATHS
+            ]
             
             for file in files:
                 file_ext = os.path.splitext(file)[1].lower()
                 
                 # Szűrés
-                if not INCLUDE_MARKDOWN and file_ext == '.md':
-                    continue
-                if not INCLUDE_LATEX and file_ext == '.tex':
-                    continue
+                if MARKDOWN_ONLY:
+                    if file_ext != '.md':
+                        continue
+                else:
+                    if not INCLUDE_MARKDOWN and file_ext == '.md':
+                        continue
+                    if not INCLUDE_LATEX and file_ext == '.tex':
+                        continue
 
                 # Csak akkor dolgozza fel, ha engedélyezett ÉS nem tiltott
                 if file_ext in ALLOWED_EXTENSIONS and file_ext not in IGNORED_EXTENSIONS and file not in EXCLUDE_FILES:

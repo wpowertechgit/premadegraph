@@ -1,0 +1,54 @@
+@startuml graph_v2_artifact_structure
+skinparam monochrome true
+skinparam shadowing false
+skinparam DefaultFontName "Courier New"
+skinparam ArrowColor black
+skinparam ComponentBorderColor black
+skinparam ComponentBackgroundColor white
+skinparam PackageBorderColor black
+skinparam PackageBackgroundColor white
+skinparam PackageFontStyle bold
+skinparam TitleFontStyle bold
+skinparam TitleFontSize 13
+skinparam ComponentFontSize 10
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+
+title 14.5. ábra — Graph V2 artifact-csomag szerkezete
+
+package "Graph V2 Artifact Package" as pkg {
+
+  package "JSON leírók" as jdesc {
+    [**manifest.json**\n//format_version, node_count//\n//edge_count, dataset_id//] as manifest
+    [**node_meta.json**\n//puuid[], summoner_name[]//\n//cluster_id[]//] as node_meta
+    [**cluster_meta.json**\n//cluster_id[], label[]//\n//member_count[]//] as cluster_meta
+  }
+
+  package "Bináris payload (.u32, little-endian)" as bpay {
+    [**edge_pairs.u32**\n//(src_idx, dst_idx)//\n//× edge_count//] as edge_pairs
+    [**edge_props.u32**\n//(ally_w, enemy_w, total)//\n//× edge_count//] as edge_props
+    [**node_metrics.u32**\n//(opscore, feedscore,//\n//betweenness) × node_count//] as node_metrics
+  }
+
+}
+
+manifest -down-> node_meta    : node_count
+manifest -down-> cluster_meta : cluster_count
+manifest -down-> edge_pairs   : edge_count
+manifest -down-> edge_props   : edge_count
+manifest -down-> node_metrics : node_count
+
+edge_pairs  .right.> edge_props   : párhuzamos index
+node_meta   .right.> node_metrics : párhuzamos index
+
+note bottom of edge_pairs
+  sor i  →  edge_pairs[i]  és  edge_props[i]
+  azonos élt ír le
+end note
+
+note bottom of node_meta
+  sor j  →  node_meta[j]  és  node_metrics[j]
+  azonos csúcsot ír le
+end note
+
+@enduml

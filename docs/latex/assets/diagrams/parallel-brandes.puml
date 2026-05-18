@@ -1,0 +1,108 @@
+@startuml parallel-brandes
+skinparam monochrome true
+skinparam shadowing false
+skinparam DefaultFontName "Courier New"
+skinparam DefaultFontSize 11
+skinparam ArrowColor black
+skinparam ActivityBorderColor black
+skinparam ActivityBackgroundColor white
+skinparam ActivityDiamondBorderColor black
+skinparam ActivityDiamondBackgroundColor white
+skinparam PartitionBorderColor black
+skinparam PartitionBackgroundColor white
+skinparam NoteBackgroundColor white
+skinparam NoteBorderColor black
+
+title Parallel Brandes Betweenness Centrality — Rust + Rayon
+
+start
+
+:Load **GraphState**\n(adjacency map, player rows, edge weights);
+
+:Collect and sort source nodes\n(deterministic order by node id);
+
+note right
+  Sorting ensures reproducible
+  chunk boundaries across runs.
+end note
+
+if (parallel mode requested?) then (yes)
+  :Split sources into **N chunks**\n(chunk size = ceil(sources / rayon_threads));
+  note right
+    Chunk boundaries fixed before
+    any thread starts — no work stealing
+    across chunk boundaries.
+  end note
+
+  partition "**Rayon Parallel Workers** (one per chunk)" {
+    fork
+      :Worker A — chunk [0..k);
+    fork again
+      :Worker B — chunk [k..2k);
+    fork again
+      :Worker C — chunk [2k..3k);
+    fork again
+      :... Worker N — remaining sources;
+    end fork
+
+    note right
+      Each worker is fully independent.\n
+      No shared mutable state.\n
+      All use local arrays only.
+    end note
+  }
+
+  partition "**Per-Worker Weighted Brandes** (inner loop)" {
+    :For each source **s** in chunk:;
+    repeat
+      :Initialize local arrays:\n  sigma[s] = 1, dist[s] = 0\n  all other dist = INF\n  pred[] = empty lists\n  delta[] = 0.0;
+
+      :Push s onto **priority queue** (Dijkstra-style);
+
+      :FORWARD PASS — single-source\nshortest paths from s:\n  relax edges using cost **1 / strength**\n  (stronger edge = cheaper traversal)\n  update sigma, dist, pred;
+
+      :BACKWARD PASS — accumulate\ndependency scores:\n  pop nodes in reverse dist order\n  delta[v] += (sigma[v]/sigma[w]) * (1 + delta[w])\n  if v != s: CB_local[v] += delta[v];
+    repeat while (more sources in chunk?) is (yes)
+    ->no;
+
+    :Worker returns **local_CB vector**\n(length = num_nodes, f64 per node);
+  }
+
+  :Collect all local_CB vectors\nfrom finished workers;
+
+  :DETERMINISTIC REDUCE:\n  sort vectors by chunk index\n  sum element-wise into **global_CB**;
+
+  note right
+    Reduction order is fixed (chunk order),
+    so floating-point sum is reproducible.
+  end note
+
+else (no — serial baseline requested)
+  partition "**Serial Brandes Baseline**" {
+    :Run identical weighted Brandes\nover ALL sources sequentially\n(single-threaded, same edge cost);
+
+    :Produce **serial_CB vector**;
+  }
+endif
+
+if (serial baseline available AND parallel result available?) then (yes)
+  :Compute **max_abs_delta**:\n  max |global_CB[v] - serial_CB[v]|\n  over all nodes v;
+
+  if (max_abs_delta > threshold?) then (yes, flag)
+    :Attach **validation warning** to result\n(delta value + offending node id);
+  else (ok)
+    :Validation passed — attach delta = 0.0\nto result metadata;
+  endif
+endif
+
+:Normalize global_CB:\n  divide each score by\n  (n-1)(n-2) [directed]\n  or 0.5*(n-1)(n-2) [undirected];
+
+:Sort players by normalized score DESC\nSelect **top N** (configurable);
+
+:Build JSON result:\n  top_players[ {id, name, score, rank} ]\n  metadata { node_count, edge_count,\n    source_count, chunk_count,\n    parallel_ms, serial_ms (if run),\n    max_abs_delta, mode };
+
+:Emit JSON to stdout\n(captured by Node rustBridge.js);
+
+stop
+
+@enduml

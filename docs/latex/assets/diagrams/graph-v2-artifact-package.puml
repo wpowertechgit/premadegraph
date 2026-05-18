@@ -1,0 +1,79 @@
+@startuml
+title Graph V2 Artifact Package — Data Flow
+
+top to bottom direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontColor black
+skinparam defaultFontSize 11
+
+skinparam package {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+skinparam rectangle {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+skinparam component {
+  BackgroundColor white
+  BorderColor black
+  FontColor black
+}
+skinparam arrow {
+  Color black
+  FontColor black
+}
+
+' ── Rust exporter ───────────────────────────────────────────────
+package "Rust Runtime" as rust {
+  component [engine/graph_v2.rs\ngraph_v2_export()] as exporter
+}
+
+' ── Artifact cache on disk ──────────────────────────────────────
+package "backend/data/cache/{datasetId}/graph-v2/" as cache {
+
+  rectangle "JSON / text" as jgroup {
+    component [manifest.json\ncounts · scale · timestamp] as manifest
+    component [node_meta.json\npuuid · name · cluster · relation] as nodemeta
+    component [cluster_meta.json\nid · label · bridge · orbit] as clustermeta
+    component [summary.md\nstats · interpretation] as summary
+  }
+
+  rectangle "Binary buffers" as bgroup {
+    component [node_positions.f32\nx, y, z per node] as positions
+    component [node_metrics.u32\nally_weight · opscore] as metrics
+    component [edge_pairs.u32\n(src_idx, dst_idx)] as edgepairs
+    component [edge_props.u32\nflag · weight (scaled)] as edgeprops
+  }
+
+}
+
+' ── Express API ─────────────────────────────────────────────────
+component [Express API  ·  server.js\n/api/pathfinder-rust/graph-v2-export\n/api/pathfinder-rust/graph-v2/*] as api
+
+' ── Frontend consumers ──────────────────────────────────────────
+package "Frontend" as fe {
+  component [GraphV2Scene.tsx\nThree.js · WebGL\nFloat32Array / Uint32Array\n→ BufferGeometry] as webgl
+  component [GraphSpherePage.tsx\ndataset selector · controls] as sphere
+  component [Analytics context\ninterpretation · export] as analytics
+}
+
+' ── Write ───────────────────────────────────────────────────────
+exporter --> jgroup  : writes JSON + markdown
+exporter --> bgroup  : writes binary buffers
+
+' ── Serve ───────────────────────────────────────────────────────
+cache --> api : filesystem cache
+
+' ── Consume ─────────────────────────────────────────────────────
+api --> webgl     : binary buffers\n(ArrayBuffer fetch)
+api --> sphere    : manifest.json\nnode_meta.json
+api --> analytics : summary.md\nmanifest.json
+
+webgl --> sphere : rendered canvas
+
+@enduml

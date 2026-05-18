@@ -1,0 +1,60 @@
+\chapter{Problémafelvetés és motiváció}
+
+\section{Miért nem elég egy hagyományos statisztikai oldal?}
+
+A legtöbb, játékosoknak szánt statisztikai felület egyetlen mérkőzésre, egyetlen rangsorra vagy néhány alapmutatóra szűkíti le az értelmezést. Ez önmagában hasznos lehet, de nem válaszolja meg azt a kérdést, amely engem a projekt elejétől fogva érdekelt: vajon a mérkőzések mögött kirajzolódik-e egy tartós társas szerkezet, és ha igen, ez a szerkezet hogyan kapcsolódik a teljesítményhez?
+
+Ebből a szempontból a \emph{Premade Graph} lényegében két problémát kezel egyszerre. Az első probléma adatmérnöki: hogyan lehet nyers Riot API válaszokból olyan hosszabb élettartamú adatkorpuszt felépíteni, amelyben a játékosok azonosítása, a meccsek tárolása, a pontszámítás és a gráfprojekció újrafuttatható módon történik. A második probléma kutatási: hogyan lehet ebből a korpuszból olyan állításokat megfogalmazni, amelyek nem csak látványosak, hanem meg is védhetők.
+
+Ez az oka annak, hogy a dolgozat fókusza tudatosan nem egyetlen UI-oldal vagy egyetlen algoritmus. A projekt értéke éppen abban áll, hogy az adatgyűjtés, a tisztítás, a pontszámítás, a gráfépítés, a klaszterezés, a futásidejű analitika és a vizualizáció ugyanannak a rendszernek az egymásra épülő rétegei.
+
+\section{A projekt szokatlan és érdekes volta}
+
+A szakdolgozat témája azért különösen érdekes, mert a kiinduló adathalmaz nem egyszerű játékoslista, hanem ismétlődő interakciós háló. A rendszer ugyanazt a két játékost nemcsak egyszeri ellenfelekként látja, hanem potenciális visszatérő szövetségesként, visszatérő ellenfélként, klasztertagként, hídcsúcsként vagy egy nagyobb globális hálózat részeként is.
+
+Ez több okból ad erős szakdolgozati alapot:
+
+\begin{itemize}
+    \item a League of Legends mérkőzésadatai elég gazdagok ahhoz, hogy valódi teljesítményprofilok legyenek számíthatók;
+    \item a visszatérő együttjátszás és egymás elleni előfordulás gráfelméleti szempontból értelmezhető kapcsolatokat hoz létre;
+    \item a szövetségesi és ellenfél-jelleg együttese miatt a projekt nem csak súlyozott, hanem többféle kapcsolatprojekcióként is vizsgálható;
+    \item a rendszer implementációs oldalon is érdekes, mert több nyelv és futtatókörnyezet közötti felelősségmegosztást kell megindokolni.
+\end{itemize}
+
+Ez a kombináció ritkább, mint elsőre látszik. Sok játékelemző projekt vagy a vizuális oldalnál áll meg, vagy csak egy-egy táblázatos mutatóig jut el. Itt viszont ugyanannak a rendszernek része a nyers adatgyűjtés, a szerepkörérzékeny score-réteg, a klaszterezés, az útvonalkeresés, az asszortativitási analitika, a Brandes-központiság és a 3D globális megjelenítés.
+
+\section{A központi szakdolgozati állítás}
+
+A dolgozat fő tézise az, hogy \emph{a valós mérkőzéstörténetből felépített League of Legends játékosháló egyszerre kezelhető mint asszociatív játékosgráf, mint teljesítményprofilokkal dúsított adatstruktúra, és mint rendszertechnikai szempontból komoly, többnyelvű analitikai platform}. Ennek a tézisnek három pillére van.
+
+\subsection{Hálózati pillér}
+
+A meccsekből olyan gráf építhető, amelyben a játékosok közötti ismétlődő együttjátszás és egymás elleni előfordulás már nem véletlenszerű zajként, hanem mérhető szerkezeti mintázatként jelenik meg. A \texttt{flexset} esetében ennek legerősebb olvasata az asszociatív core-periphery szerkezet: a központi régióban hídgazdag, visszatérő ally-csoportok, a periférián pedig sok kis, gyengén kapcsolt lokális csoport jelenik meg. Ez teszi lehetővé a klaszterezést, az útvonalkeresést, az asszortativitást és a későbbi centralitási validálást.
+
+\subsection{Metrikai pillér}
+
+A játékosokhoz rendelhető olyan \texttt{feedscore} és \texttt{opscore}, amely nem tökéletes vagy végleges igazság, de elég értelmezhető és következetes ahhoz, hogy későbbi gráfanalitikai bemenet legyen. A szerepkörérzékeny súlyozás és a percentilis-alapú normalizáció itt nem kozmetikai döntés, hanem a teljes későbbi elemzés előfeltétele.
+
+\subsection{Rendszertechnikai pillér}
+
+A projekt a jelenlegi állapotában már túlmutat azon, amit egyetlen script vagy egyetlen technológia kényelmesen elbírna. A Python, az SQLite, a Node/Express, a Rust és a React együttese nem véletlen felhalmozódás, hanem olyan architekturális válasz, amely a különböző részfeladatok eltérő természetéből következik. Ezt a dolgozatban külön, döntési és kompromisszum-alapú szemlélettel fogom indokolni.
+
+\section{Hatókör, nem-célok és őszinteségi szabályok}
+
+A projekt mérete könnyen csábíthatna arra, hogy minden meglévő ötletet kész eredményként mutassak be. Ezt a dolgozatban tudatosan kerülöm. Három szabályt tekintek fontosnak.
+
+\begin{itemize}
+    \item Amit a kódbázisban jelenleg ténylegesen megvalósultnak és ellenőrizhetőnek találtam, azt kész állapotként írom le.
+    \item Amit a repository megőriz korábbi kísérleti ágként, de a jelenlegi adatsnapshotban nincs érdemi kimenete, azt korábbi vagy kiegészítő modulként kezelem.
+    \item Amit a fejlesztési dokumentáció csak jövőbeli célként fogalmaz meg, azt nem nevezem kész feature-nek.
+\end{itemize}
+
+Ennek a szabálynak különösen nagy jelentősége van a következő területeken:
+
+\begin{itemize}
+    \item a klaszterekhez kötött ország- és régióelemzés kódja megvan, de a jelenlegi ellenőrzött adatbázis-pillanatképben nem tartalmaz kitöltött országcímkéket.
+\end{itemize}
+
+\section{A dolgozat szerkezete}
+
+A dolgozat logikája a projekt fejlődését követi. Előbb bemutatom a problémafelvetést és a szakirodalmi hátteret, majd a Riot API-ra épülő adatforrásokat és a korai pipeline-t. Ezután térek rá a pontozási rendszerre, a gráfépítésre és a régi ország-alapú elemzési ágra. A középső fejezetek az architektúra evolúcióját, a több-adatkészletes modellt, az SQLite perzisztenciát és a Rust futtatókörnyezetet tárgyalják. Végül külön fejezetekben mutatom be a Pathfinder Labot, a 3D bird's-eye sphere nézetet, az asszortativitási és központisági elemzéseket, valamint a strukturális egyensúly módszertani visszaminősítését, majd a validációt, a rendszerszintű értékelést és a jövőbeli fejlesztéseket.

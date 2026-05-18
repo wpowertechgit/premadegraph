@@ -1,0 +1,62 @@
+\chapter{Bevezetés}
+
+\section{Problémafelvetés}
+
+A kompetitív online játékok egyik visszatérő problémája, hogy a résztvevők nagyon erős véleményeket fogalmaznak meg egymás teljesítményéről, miközben ehhez rendszerint csak részleges, szubjektív és rövid távú benyomások állnak rendelkezésre. Egy elveszített mérkőzés után gyorsan megjelenik a bűnbakkeresés, de sokkal ritkábban történik meg az, hogy a játékosok valóban adatalapon próbálják megérteni, mi történt a meccsben, hogyan teljesítettek ők maguk, és hogyan helyezhető el ez a teljesítmény egy tágabb közösségi hálózatban.
+
+A \emph{League of Legends} különösen érdekes terep ehhez, mert egyszerre tartalmaz rendkívül gazdag mérkőzésadatokat, ismétlődő csapattársi és ellenfél-kapcsolatokat, valamint olyan társas mintázatokat, amelyek gráfként ábrázolhatók és elemezhetők. Ha egy játékos hosszabb időn keresztül ugyanazokkal az emberekkel kerül egy meccsbe -- akár szövetségesként, akár ellenfélként --, akkor ebből egy olyan kapcsolati háló építhető fel, amely túlmutat az egyetlen mérkőzés pillanatnyi statisztikáin.
+
+Ebből a felismerésből indult a dolgozat: nem egyszerűen egy újabb meccsnéző vagy statisztikai felületet akartam készíteni, hanem egy olyan rendszert, amely a valós mérkőzéstörténetből játékoshálót épít, ezt a hálót gráfelméleti és rendszerszintű szemlélettel elemzi, majd az eredményeket egy vizuálisan erős, ugyanakkor védhető frontend felületen mutatja meg.
+
+\section{Motiváció}
+
+A projekt eredeti motivációja személyes és technikai egyszerre. Játékosként újra és újra felmerült bennem a kérdés, hogy vajon a visszatérő negatív tapasztalatok mennyire egyediek, mennyire mintázatszerűek, és egyáltalán látszik-e valami abból a hálózatból, amelynek részeként ezek a meccsek zajlanak. Informatikai oldalról pedig kifejezetten vonzott az a gondolat, hogy a Riot API által biztosított részletes meccsadatokból nemcsak táblázatokat, hanem gráfokat, klasztereket, útvonalakat és teljesítményalapú hálózati mutatókat is lehessen kinyerni.
+
+A projekt időközben jóval nagyobb rendszerré nőtt, mint egy egyszerű adatvizualizáció. A jelenlegi állapotban már külön adatgyűjtő réteg, normalizált pontszámítási pipeline, SQLite perzisztencia, Rust-alapú gráfépítés és futtatókörnyezet, többoldalas React frontend, valamint kutatási jellegű gráfanalitikai modulok dolgoznak együtt. A Python réteg elsősorban adatgyűjtési, prototípus- és legacy-kompatibilitási szerepben maradt meg.
+
+\section{A dolgozat célja}
+
+A dolgozat célja egy olyan, valós mérkőzésadatokra épülő, többkomponensű rendszer bemutatása, amely:
+
+\begin{itemize}
+    \item League of Legends meccsekből játékosok közötti kapcsolatokat gyűjt és tisztít,
+    \item a játékosokhoz szerepkör-érzékeny teljesítménymutatókat rendel,
+    \item az ismétlődő együtt- és egymás ellen játszásból gráfot épít,
+    \item a gráfot klaszterekre, útvonalakra, core-periphery mintázatokra és kutatási célú metrikus kapcsolatokra bontja,
+    \item a számításigényes részeket determinisztikus, exportálható és újrafuttatható módon kezeli,
+    \item az eredményeket interaktív, de nem UI-első szemlélettel mutatja meg.
+\end{itemize}
+
+A hangsúly tudatosan azon van, hogy a rendszer ne csak érdekes látvány legyen, hanem szakdolgozati szempontból is védhető legyen: világos adatútvonalakkal, expliciten dokumentált döntésekkel, reprodukálható kimenetekkel és óvatos interpretációval.
+
+\section{Kutatási kérdések}
+
+A jelen dolgozatban a következő kutatási kérdésekre keresem a választ:
+
+\begin{itemize}
+    \item Hogyan építhető fel valós League of Legends mérkőzéstörténetből egy olyan játékosháló, amely nem pusztán az együtt játszást, hanem az ellenfél-kapcsolatokat is megőrzi?
+    \item Milyen módon lehet a játékosok teljesítményét úgy pontozni, hogy az figyelembe vegye a tényleges szerepkört, de közben megmaradjon értelmezhetőnek?
+    \item Mennyiben indokolt a rendszer különböző rétegeit Python, SQLite, Node.js, Rust és React komponensekre bontani?
+    \item Mutat-e a jelenlegi gráf pozitív asszortativitást a \texttt{opscore} és \texttt{feedscore} tekintetében?
+    \item Miben különbözik a \texttt{flexset} és a \texttt{soloq} kapcsolati szerkezete, és mennyiben írható le a \texttt{flexset} asszociatív core-periphery játékosgráfként?
+\end{itemize}
+
+\section{A dolgozat hozzájárulása}
+
+A dolgozat gyakorlati és szakmai hozzájárulásai a jelenlegi implementáció alapján a következők:
+
+\begin{itemize}
+    \item több-adatkészletes, regiszter-alapú mérkőzésgyűjtési és feldolgozási architektúra;
+    \item szerepkörérzékeny, adatbázis-alapú \texttt{opscore}/\texttt{feedscore} normalizáció;
+    \item Rust-központú Graph V2 gráfépítés, klaszterezés és artifact-export SQLite perzisztenciával;
+    \item Rust oldali útvonalkeresés BFS, Dijkstra, kétirányú keresés, egzakt A*, asszortativitás és Brandes-központisági támogatással;
+    \item \texttt{flexset} és \texttt{soloq} dataset-összehasonlítás asszociatív gráfértelmezéssel;
+    \item játékosteljesítményre számolt asszortativitási elemzés több gráfmódban;
+    \item előre kiszámított 3D globális gráfnézet és többoldalas, kutatásbarát frontend.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{match-analysis-page.png}
+    \caption{A jelenlegi frontend egyik belépési pontja: meccselemzési és adatgyűjtési felület}
+\end{figure}

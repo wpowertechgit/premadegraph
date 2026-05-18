@@ -1,0 +1,104 @@
+\chapter{Kísérleti futtatások, validáció és eredmények}
+
+\section{Verifikációs lépések}
+
+A dolgozat elkészítésekor a rendszer aktuális állapotát nemcsak a dokumentáció, hanem közvetlen futtatás alapján is ellenőriztem. A főbb helyi ellenőrzések:
+
+\begin{itemize}
+    \item a Rust futtatókörnyezet sikeresen lefuttatta az \texttt{assortativity} parancsot;
+    \item a Rust futtatókörnyezetben a \texttt{signed-balance} parancs kísérleti modulként továbbra is futtatható volt;
+    \item a fő adatbázis és dataset-nyilvántartás elérhető és olvasható volt;
+    \item a dolgozati frontend útvonalak közül az asszortativitási és központisági oldalak maradtak a fő analitikai folyamat részei.
+\end{itemize}
+
+Ez azért lényeges, mert a dolgozat ezen a ponton már nem csak tervekről, hanem ténylegesen végrehajtható modulokról számol be.
+
+A verifikációs lépések tudatosan nem teljes funkcionalitástesztek voltak, hanem tézisszintű ellenőrzések. A cél itt az volt, hogy minden olyan rétegről legyen közvetlen bizonyíték, amelyre a dolgozat állításokat épít: a dataset-regiszter olvashatósága, a Rust analitikai parancsok futtathatósága, valamint a frontendoldalak fizikai jelenléte. Ez összhangban van a reprodukálható kutatási gyakorlat logikájával is: a szöveg és az alátámasztó futások között legyen világos kapcsolat \cite{sandve2013}.
+
+\section{Az aktív állapot összefoglalása}
+
+A 2026. április 28-án ellenőrzött aktív állapotban a rendszer az \texttt{soloq} datasetre épül, a \texttt{flexset} dataset a fő kutatási korpusz. Az adatkészletek és a gráfállapot összefoglalása:
+
+\begin{table}[H]
+\centering
+\caption{A jelenlegi rendszerállapot fő mennyiségi mutatói - \texttt{flexset} és \texttt{soloq}}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Mutató} & \textbf{flexset} & \textbf{soloq} \\
+\midrule
+Meccs-JSON állományok & 4981 & 2001 \\
+Graph V2 meccsszám & 4980 & 2000 \\
+Nyers játékosok (\texttt{players.db}) & 15\,147 & 2822 \\
+Finomított játékosok (\texttt{playersrefined.db}) & 15\,421 & 6768 \\
+Klaszterek (\texttt{playersrefined.db}) & 599 & 140 \\
+Klasztertagok & 5741 & 1538 \\
+Látható Graph V2 csúcsok & 5741 & 1538 \\
+Látható Graph V2 élek & 18\,548 & 4111 \\
+Átlagos élsúly (Graph V2) & 3.405 & 2.364 \\
+Graph V2 klaszterek & 1531 & 870 \\
+Átlagos klaszterméret & 3.750 & 1.768 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Ezeket a számokat lépcsőzetesen kell olvasni. A finomított játékosszám a teljes score-réteg kiterjedése. A Graph V2 látható csúcsok száma már csak az érvényes klasztertagsággal rendelkező játékosokat tartalmazza. Minden réteg a saját, a megelőzőből leszűkített univerzumán számol, ezért a gráf- és score-alapú eredményeknél mindig ki kell mondani, hogy pontosan melyik populáción készültek.
+
+A két dataset összehasonlítása megerősíti, hogy a \texttt{flexset} és a \texttt{soloq} lényegesen eltérő karakterű korpuszok, és ez az eltérés minden analitikai szinten mérhető.
+
+\section{A korpusz összetétele mint értelmezési háttér}
+
+Az eredmények értékeléséhez fontos hozzárakni, hogy a vizsgált korpusz nem homogén. A queue-eloszlás alapján a ranked módok dominálnak, de a rendszerben ARAM és normál meccsek is jelen vannak. Ez két következménnyel jár:
+
+\begin{itemize}
+    \item a gráf egy része erősen kompetitív, ismétlődő társas térből származik;
+    \item egy másik része lazább, zajosabb kapcsolatokkal terhelt.
+\end{itemize}
+
+Éppen ezért a küszöbölés, az erős és gyenge kapcsolatok bontása, valamint a \texttt{social-path} és \texttt{battle-path} megkülönböztetése nem puszta technikai részlet, hanem az adatkorpuszból fakadó szükségszerűség.
+
+Ez a felismerés a teljes eredményfejezetet meghatározza. Ha a korpusz heterogén, akkor a gráfmodellt sem lehet úgy kezelni, mintha egyetlen társas mechanizmust mérne. A \texttt{social-path} és \texttt{battle-path} különválasztása nem csupán algoritmus-beállítás, hanem módszertani védekezés a túlzó interpretáció ellen.
+
+\section{A két klasztercsalád gyakorlati különbsége}
+
+A perzisztált klasztereknél az is ellenőrizhető volt, hogy a Python és a Rust család eltérő karakterű. A \texttt{python\_population} klaszterek kicsit kisebb maximális méretűek és inkább populációs közösségképet adnak, míg a \texttt{rust\_pathfinding} klaszterek futásidejű szempontokhoz igazodnak, és jóval nagyobb maximumklasztert is tartalmaznak.
+
+Ez összhangban van a rendszertervvel. A két klasztercsalád nem egymás hibás duplikátuma, hanem eltérő feladatokra optimalizált nézet.
+
+\section{Analitikai eredmények}
+
+Az asszortativitási eredmények részletes táblái és módszertani kifejtése a dedikált fejezetben kapott helyet. A strukturális egyensúly külön fejezetben csak módszertani határesetként szerepel: a formális implementáció megvan, de az enemy-élek szemantikája miatt nem használom fő empirikus eredményként. A két dataset összesített, szintetikus összehasonlítása a rákövetkező összehasonlító fejezetben található.
+
+\section{A frontend és a rendszerkoherencia értékelése}
+
+A projekt egyik fontos eredménye nem kizárólag a számszerű analitikában áll, hanem abban is, hogy a rendszer ma már koherens egészként működik. A jelenlegi állapotban:
+
+\begin{itemize}
+    \item az adatgyűjtés és dataset-kezelés külön rétegben történik;
+    \item a pontszámítás explicit, ellenőrizhető képletekre épül;
+    \item a gráfépítés és klaszterezés nem ad hoc frontend-logika;
+    \item a futásidejű Rust réteg a gráfanalitikát külön kezeli;
+    \item a frontend több specializált felületen, eltérő célok mentén mutatja meg az eredményeket.
+\end{itemize}
+
+Ez azért fontos, mert a dolgozat nem egyszerűen egy algoritmus vagy egy látványos oldal bemutatása, hanem annak dokumentálása, hogy ezek a részek együtt már egy kutatásképes rendszerként viselkednek.
+
+A koherencia egyik kézzelfogható jele, hogy a frontend route-struktúrája és a backend végpontstruktúrája egymásra illeszkedik. A \texttt{frontend/src/App.tsx} külön oldalakat tart fenn a collectorhoz, a graph sphere-höz, az assortativity-hez, a betweenness-központisághoz és a Pathfinder Labhoz, vagyis a felület nem egyetlen „mindent bele” dashboard. A Signed Balance route a dolgozati termékből kikerült, mert a fő narratíva már nem erre az értelmezésre épül.
+
+\section{A korábbi ország-elemzési ág helye a jelenlegi rendszerben}
+
+A korábbi \texttt{assign\_countries.py} és \texttt{conclude.py} ág továbbra is a projekt része. Ez megőrzi azt a lehetőséget, hogy a klaszterekből származó országcímkézést összekapcsoljuk aggregált teljesítményelemzéssel. Ugyanakkor a jelenlegi dolgozat fő tudományos súlypontja már nem ez, hanem a gráf mint kutatási objektum.
+
+Védhetőnek azt tartom, ha ezt az ország-elemzési vonalat \emph{kiegészítő, exploratív} modulnak nevezzük:
+
+\begin{itemize}
+    \item implementált,
+    \item hasznos lehet,
+    \item de bizonytalansága nagyobb,
+    \item ezért a dolgozat központi állításait nem erre építem.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{validation_pipeline.pdf}
+\caption{A dolgozati bizonyítékok validációs pipeline-ja a \texttt{thesis-validation-pipeline.puml} forrás alapján. A diagram először a validációs bemeneteket mutatja: dataset-regiszter, meccs-JSON állományok, \texttt{playersrefined.db} és Graph V2 artifactok. Ezután párhuzamos ellenőrzési parancsokra bontja a folyamatot: Rust \texttt{cargo check}/\texttt{cargo test}, asszortativitás, Brandes-betweenness, Graph V2 export, frontend build és dolgozati PDF-fordítás. A kimeneti csoportok külön ellenőrzik a dataset-készültséget, a gráfartifactok érvényességét, a Rust analitikák tartomány- és deltafeltételeit, a frontend útvonalak jelenlétét és a PDF build sikerét.}
+\end{figure}

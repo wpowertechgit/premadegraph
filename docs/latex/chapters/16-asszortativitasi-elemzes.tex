@@ -1,0 +1,237 @@
+\chapter{Asszortativitási elemzés}
+
+\section{Az asszortativitás szerepe a dolgozatban}
+
+Az asszortativitás azért lett külön kiemelt analitikai irány, mert egyszerre könnyen magyarázható és módszertanilag tiszta. A kérdés itt nem az, hogy ki ``jobb'' játékos, hanem az, hogy az összekapcsolt játékosok hajlamosak-e hasonló teljesítményprofilhoz tartozni.
+
+A projektben ez különösen jó illeszkedés, mert a gráf és a játékosprofil már korábban is létezett. Nem kellett új, bizonytalan címkét bevezetni; elég volt a meglévő \texttt{opscore} és \texttt{feedscore} metrikákat a gráfél-végpontokra vetíteni.
+
+\section{A számítási definíció}
+
+A jelenlegi implementáció numerikus asszortativitást számol Pearson-korreláció formájában. Ha az él egyik végpontján mért értékeket $x_i$, a másik végpontén mért értékeket pedig $y_i$ jelöli, akkor az együttható a szokásos formában írható fel:
+
+\begin{equation}
+r = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum_i (x_i-\bar{x})^2}\sqrt{\sum_i (y_i-\bar{y})^2}}
+\end{equation}
+
+A projekt ezt két fontos kiterjesztéssel használja:
+
+\begin{itemize}
+    \item külön kezeli a \texttt{social-path} és \texttt{battle-path} gráfmódot;
+    \item a globális együttható mellett külön bontásokat is képez klaszteren belüli, klaszterek közötti, illetve erős és gyenge kapcsolatok szerint.
+\end{itemize}
+
+A \texttt{backend/pathfinder-rust/src/engine/assortativity.rs} egyik lényeges technikai döntése, hogy az irányítatlan éleket mindkét endpoint-orientációval figyelembe veszi a Pearson-akkumulációban. Ez azért védhető, mert az élnek nincs természetes iránya, ugyanakkor a két végpont tulajdonságpárja szimmetrikusan járul hozzá a korrelációhoz. A modul emellett külön számlálja az alacsony támogatás, a hiányzó score és a túl rövid játékostörténet miatt kihagyott éleket is. Így az asszortativitási eredmény nem egy feketedoboz-korreláció, hanem egy jól dokumentált mintaképzési folyamat eredménye.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.30\textheight,keepaspectratio]{assortavity-controls.png}
+\caption{Az asszortativitási kísérlet frontend kontrolljai. A képen a minimum éltámogatás, a minimum játékos-meccsszám és az erős kapcsolat küszöbe látható; a bemutatott futtatásokban ezek rendre 1, 1 és 3 értékkel szerepelnek.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.48\textheight,keepaspectratio]{assortavity-documented-desicions.png}
+\caption{A frontend által megjelenített dokumentált módszertani döntések. A képernyő rögzíti, hogy Pearson endpoint-korrelációt használunk, a \texttt{social-path} és \texttt{battle-path} módokat külön kezeljük, a metrikák az \texttt{opscore} és \texttt{feedscore}, és csak azok a végpontok maradnak a mintában, amelyekhez érvényes metrika és elegendő meccstörténet tartozik.}
+\end{figure}
+
+\subsection{Él-végponti minta kiválasztása}
+
+A Pearson-korreláció az élek között számítódik. Az asszortativitási implementáció az alábbiak szerint készíti elő az $(x_i, y_i)$ párokat:
+
+\begin{enumerate}
+    \item Az összes él végigmegy az aktuális gráfmódnak megfelelő szűrőn (social-path vagy battle-path).
+    \item Minden élhez lekérdezésre kerül az egyik végpont score-ja (\texttt{opscore} vagy \texttt{feedscore}).
+    \item Lekérdezésre kerül a másik végpont ugyanolyan score-ja.
+    \item Ha bármelyik score hiányzik, vagy ha valamelyik játékos túl rövid játékostörténettel rendelkezik (\texttt{match\_count < minMatches}), az él kiesik.
+    \item A maradék élek score-párjai a $(x_i, y_i)$ sor-párokkal képezik az akkumulált vektorokat.
+\end{enumerate}
+
+Ez a szűrés olyan mintahalmazt eredményez, amely az erős kapcsolatok körül tömörödik: ha egy él alacsony támogatás miatt nem tekinthető az elemzésre alkalmasnak, az kiesik az asszortativitás-számításból is. Ez módszertanilag erős, mert az asszortativitás nem egy ``mindent figyelembe vevő'' globális mérőszám, hanem a releváns kapcsolathálózat szerkezeti tulajdonsága.
+
+\subsection{Gráfmód-specifikus él-súlyozás}
+
+Az \texttt{edge\_support()} függvény a gráfmód alapján különbözően súlyozza az éleket:
+
+\begin{equation}
+w(u,v) = \begin{cases}
+\texttt{ally\_weight} & \text{ha } \text{social-path} \\
+\texttt{total\_matches} & \text{ha } \text{battle-path}
+\end{cases}
+\end{equation}
+
+A social-path módban csak a szövetségesi kapcsolatok sugallják az él meglétét. A battle-path módban az összes ismétlődés (szövetséges és ellenséges) beszámít. Ez a különbség azt fejezi ki, hogy a két mód eltérő társas szerkezeti hipotéziseket tesztel:
+
+- \textbf{Social-path}: ``A szövetségesi hálózatban a hasonló teljesítmények csoportosulnak?''
+- \textbf{Battle-path}: ``Az összes ismétlődő kapcsolaton hasonló teljesítmények korrelálnak?''
+
+Az asszortativitás e két módban eltérő értékeket mutat, mert a korrelálni kívánt edge-halmazok geometriai szerkezetileg különböznek.
+
+\subsection{Klaszteren belüli és klaszterek közötti bontások}
+
+Az implementáció nem csak globális korrelációt számol. Az eredmény az alábbi bontásokat is tartalmazza:
+
+\begin{itemize}
+    \item \textbf{Within-cluster}: csak az ugyanabban a klaszterben lévő csomópont-párokat tartalmazó élek;
+    \item \textbf{Between-cluster}: az eltérő klaszterekbe tartozó végpontú élek;
+    \item \textbf{Strong-tie}: magas support értékű élek (>= küszöb);
+    \item \textbf{Weak-tie}: alacsony support értékű élek (< küszöb).
+\end{itemize}
+
+Ezek a bontások felvilágosítanak arról, hogy az asszortativitás a klaszteren belül vagy klaszterek között koncentrálódik-e. Ha a within-cluster érték magasabb, az azt jelzi, hogy az előre-klaszterezett csomópontok valóban hasonló score-ral rendelkeznek. Ha a between-cluster érték is magas, az azt mutatja, hogy az asszortativitás klaszter-független tulajdonság.
+
+\subsection{Missing value policy}
+
+A modul három lehetséges stratégiát támogat a hiányzó score-okkal szemben:
+
+\begin{table}[H]
+\centering
+\caption{Hiányzó score-kezelési politikák}
+\begin{tabular}{ll}
+\toprule
+\textbf{Politika} & \textbf{Hatás} \\
+\midrule
+\texttt{skip} & Az él kiesik az asszortativitás-számításból \\
+\texttt{zero} & Az él meglétét 0.0-val helyettesíti \\
+\texttt{mean} & Az él a dataset átlag-score-ját kapja \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Az alapértelmezett \texttt{skip} politika az óvatos választás: nem extrapolálunk hiányzó adatokra. Ezáltal az asszortativitás-érték az aktualista ``mit tudunk ténylegesen'' alapon számítódik, nem a feltételezéseken.
+
+\section{Asszortativitási eredmények - flexset}
+
+Az alábbi eredmények a percentilis-alapú \texttt{opscore}/\texttt{feedscore} értékeken alapulnak, amelyek az adatgyűjtés idején kerültek az adatbázisba (ld. \S\ref{sec:opscore_empirikus}). A következtetések ezen a modellen belül érvényesek.
+
+A \texttt{flexset} dataseten elvégzett asszortativitási elemzés összesített eredményei:
+
+\begin{table}[H]
+\centering
+\caption{Asszortativitás - \texttt{flexset}}
+\begin{tabular}{llrr}
+\toprule
+\textbf{Gráfmód} & \textbf{Metrika} & \textbf{Korreláció} & \textbf{Mintaszám} \\
+\midrule
+\texttt{social-path} & \texttt{opscore} & 0.2346 & 61\,938 \\
+\texttt{social-path} & \texttt{feedscore} & 0.1816 & 61\,938 \\
+\texttt{battle-path} & \texttt{opscore} & 0.1461 & 179\,492 \\
+\texttt{battle-path} & \texttt{feedscore} & $-0.0108$ & 179\,492 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{f-assortavity-social-path-opfeedscore.png}
+\caption{\texttt{flexset} social-path asszortativitás \texttt{opscore} és \texttt{feedscore} szerint. A képen 15\,421 jogosult csomópont és 61\,938 elemzett él szerepel; a globális együttható \texttt{opscore} esetén 0.235, \texttt{feedscore} esetén 0.182. A bontások azt mutatják, hogy a kereszt-klaszter élek erősebb pozitív jelet adnak, mint a klaszteren belüli élek, miközben a gyenge kapcsolatok nagy mintaszámmal hordozzák a pozitív mintázatot.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.52\textheight,keepaspectratio]{f-assortavity-socialpath-readout.png}
+\caption{\texttt{flexset} social-path technikai readout. A sávos összehasonlítás a globális, within-cluster, cross-cluster, strong-tie és weak-tie bontásokat teszi egymás mellé; látható, hogy az \texttt{opscore} minden bontásban pozitív, a \texttt{feedscore} pedig social-path módban szintén pozitív marad.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{f-assortavity-battle-path-opfeedscore.png}
+\caption{\texttt{flexset} battle-path asszortativitás \texttt{opscore} és \texttt{feedscore} szerint. A képen ugyanaz a 15\,421 jogosult csomópont, de már 179\,492 elemzett él látható; a \texttt{battle-path} mód több kapcsolatot vesz be, ezért a \texttt{opscore} jel 0.146-ra gyengül, a \texttt{feedscore} pedig gyakorlatilag nullára esik ($-0.011$).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.36\textheight,keepaspectratio]{f-assortavity-battlepath-readout.png}
+\caption{\texttt{flexset} battle-path technikai readout. A képernyőn az látszik, hogy a battle-path \texttt{opscore} pozitív, de mérsékeltebb hasonlósági jelet ad, míg a \texttt{feedscore} globálisan és a gyenge kapcsolatokon közel nulla vagy enyhén negatív.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.38\textheight,keepaspectratio]{f-assortavity-layman-takeaways.png}
+\caption{\texttt{flexset} közérthető frontend-összegzés. A képernyő azt emeli ki, hogy a kapcsolt játékosok \texttt{opscore} szerint mindkét gráfmódban hasonlóbbak, a \texttt{feedscore} viszont erősen gráfmód-függő; a következtetés leíró hálózati szerkezetről szól, nem oksági vagy pszichológiai állításról.}
+\end{figure}
+
+A \texttt{flexset} eredményeinek legfontosabb tanulsága az, hogy a szövetségesi kapcsolatokra épülő social-path gráfban jelenik meg a legerősebb teljesítményhasonlósági jel. Ez illeszkedik ahhoz az értelmezéshez, hogy a Flex Queue nem pusztán véletlen matchmaking-minta: a visszatérő csapattársi kapcsolatok egy része olyan asszociatív szerkezetet ad, amelyben a hasonló \texttt{opscore}-ral rendelkező játékosok gyakrabban kapcsolódnak egymáshoz.
+
+A bontások ugyanakkor finomítják ezt a képet. A \texttt{flexset} social-path képernyőn a cross-cluster \texttt{opscore} érték magasabb, mint a within-cluster érték. Ez arra utal, hogy a hasonló teljesítményprofil nem csak zárt, sűrű klasztereken belül jelenik meg, hanem klaszterhatárokon átívelő kapcsolatokon is. Emiatt az asszortativitás nem egyszerűen a klaszterezés mellékterméke: a határkapcsolatokban is mérhető, és ezért jól kiegészíti a core-periphery értelmezést.
+
+\section{Asszortativitási eredmények - soloq}
+
+A \texttt{soloq} dataseten ugyanolyan paraméterekkel:
+
+\begin{table}[H]
+\centering
+\caption{Asszortativitás - \texttt{soloq}}
+\begin{tabular}{llrr}
+\toprule
+\textbf{Gráfmód} & \textbf{Metrika} & \textbf{Korreláció} & \textbf{Mintaszám} \\
+\midrule
+\texttt{social-path} & \texttt{opscore} & 0.1750 & 37\,976 \\
+\texttt{social-path} & \texttt{feedscore} & 0.1012 & 37\,976 \\
+\texttt{battle-path} & \texttt{opscore} & 0.1625 & 84\,393 \\
+\texttt{battle-path} & \texttt{feedscore} & $-0.0366$ & 84\,393 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{sq-assortavity-social-path-opfeedscore.png}
+\caption{\texttt{soloq} social-path asszortativitás \texttt{opscore} és \texttt{feedscore} szerint. A képen 6\,768 jogosult csomópont és 37\,976 elemzett él szerepel; a globális együttható \texttt{opscore} esetén 0.175, \texttt{feedscore} esetén 0.101. A pozitív értékek megmaradnak, de gyengébbek, mint a \texttt{flexset} social-path eredményei.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.36\textheight,keepaspectratio]{sq-assortavity-socialpath-readout.png}
+\caption{\texttt{soloq} social-path technikai readout. A sávos nézet azt mutatja, hogy a cross-cluster bontás adja a legerősebb pozitív jelet, míg a within-cluster értékek közel semlegesek; a strong-tie minta különösen kicsi, ezért ebben a datasetben óvatosan értelmezendő.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{sq-assortavity-battle-path-opfeedscore.png}
+\caption{\texttt{soloq} battle-path asszortativitás \texttt{opscore} és \texttt{feedscore} szerint. A képen 84\,393 elemzett él látható; az \texttt{opscore} globálisan 0.163 marad, a \texttt{feedscore} viszont $-0.037$ értékre fordul, ami gyakorlatilag kapcsolat nélküli vagy enyhén ellentétes mintázatot jelez.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.36\textheight,keepaspectratio]{sq-assortavity-battlepath-readout.png}
+\caption{\texttt{soloq} battle-path technikai readout. A képernyőn az \texttt{opscore} pozitív, de mérsékelt értékei látszanak, míg a \texttt{feedscore} globálisan, within-cluster és cross-cluster bontásban is negatív közeli értékeket vesz fel.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.58\textheight,keepaspectratio]{sq-assortavity-layman-takeaways.png}
+\caption{\texttt{soloq} közérthető frontend-összegzés. A képernyő azt foglalja össze, hogy az \texttt{opscore} hasonlóság mindkét gráfmódban megmarad, de a \texttt{feedscore} jelentősen változik; a módszertani panel külön jelzi, hogy a minimum support, a minimum meccsszám és az erős kapcsolat küszöbe befolyásolja, mennyire konzervatív a futtatás.}
+\end{figure}
+
+A \texttt{soloq} dataset kontrollszerepe itt látszik igazán. A pozitív \texttt{opscore} asszortativitás nem tűnik el, tehát a teljesítményhasonlósági jel nem kizárólag Flex Queue sajátosság. Ugyanakkor a social-path érték alacsonyabb, a strong-tie minták kicsik, és a \texttt{feedscore} battle-path módban negatív közeli eredményt ad. Ez azt támasztja alá, hogy a SoloQ inkább egyéni teljesítmény- és matchmaking-rekurrencia kontrollként értelmezhető, nem pedig stabil premade-kapcsolati hálóként.
+
+\section{Mit mondanak ezek a számok?}
+
+Mindkét datasetben egyértelműen pozitív asszortativitás jelenik meg az \texttt{opscore} mentén a \texttt{social-path} módban. Ez azt jelzi, hogy a szövetségesi kapcsolatokra épülő gráfban az összekapcsolt játékosok teljesítményprofilja nem véletlenszerűen keveredik.
+
+A \texttt{feedscore} viselkedése jóval érzékenyebb a gráfmódra. A \texttt{social-path} módban mindkét dataseten mérsékelt pozitív jel látható, de a \texttt{battle-path} módban szinte nullára esik (flexset: $-0.0108$, soloq: $-0.0366$), a soloq esetén negatívba fordul. Ez azt mutatja, hogy az ellenfélkapcsolatok bevonásával a halálokon alapuló hibamutató elveszíti a társas-kapcsolati hasonlósági szerkezetet.
+
+A két dataset közötti különbség: a flexset \texttt{social-path opscore} asszortativitása (0.2346) magasabb, mint a soloq-é (0.1750). Ez összhangban van azzal az értelmezési kerettel, hogy a Flex Queue erősebb visszatérő csapattársi szignált hoz létre, és ezért a gráf jobban tükrözi a hasonló teljesítményű játékosok összecsoportosulását.
+
+Fontos különbség az is, hogy a battle-path mód mindkét datasetben lényegesen több élt vizsgál, de ez nem feltétlenül erősíti a korrelációt. A \texttt{flexset} esetén az élminta 61\,938-ról 179\,492-re nő, mégis csökken az \texttt{opscore} asszortativitás, és eltűnik a \texttt{feedscore} jel. A \texttt{soloq} esetén ugyanez a minta 37\,976-ról 84\,393-ra bővül, miközben a \texttt{feedscore} negatív közeli értéket vesz fel. Ez módszertanilag fontos: több él nem automatikusan jobb bizonyíték, ha az élhalmaz szemantikája kevertebb.
+
+\subsection{Az \texttt{opscore} robusztusabb mint a \texttt{feedscore}}
+
+Az \texttt{opscore} asszortativitása minden vizsgált módban pozitív marad. Ez az összetett, nyolc artifaktból súlyozott kompozit mutató erőssége: szemben a \texttt{feedscore} egyszerűbb halálközpontú képletével, az \texttt{opscore} több dimenzióból integrálja a teljesítményt, és ezért gráfprojekció-robusztusabb jelet ad. Nem azt állítjuk, hogy az \texttt{opscore} ``objektív igazság'' - a súlyok kézi tervezésűek és nem statisztikailag kalibráltak - de empirikusan megmutatja, hogy a gráf és a score-réteg között érdemi kapcsolat van, és ez a kapcsolat nem tűnik el gráfmódváltáskor.
+
+\subsection{Gráfmód-érzékenység mint módszertani eredmény}
+
+Ha mindkét metrika minden gráfmódban azonos értéket adna, akkor a gráfdefiníció nem hordozna önálló tartalmat. A jelen esetben az \texttt{opscore} csökkenése (flexset: 0.2346 → 0.1461, soloq: 0.1750 → 0.1625) a \texttt{battle-path} módban és a \texttt{feedscore} nullára esése azt mutatja, hogy a kapcsolatok szemantikája valóban meghatározza a teljesítményhasonlóság mérhetőségét. Ez megerősíti, hogy a projekt két gráfmódjának megkülönböztetése empirikusan indokolt módszertani döntés.
+
+\subsection{Következtetés}
+
+Az asszortativitási fejezet fő következtetése az, hogy a teljesítményhasonlóság mérhető, de nem univerzális tulajdonsága a játékosgráfnak. A legerősebb és legjobban értelmezhető jel a \texttt{flexset} social-path \texttt{opscore} futtatásában jelenik meg. Ez támogatja azt az állítást, hogy a Flex Queue szövetségesi hálózata alkalmas asszociatív játékosgráfként való elemzésre.
+
+Ezzel szemben a \texttt{feedscore} eredmények azt mutatják, hogy az egyszerűbb, halálközpontú teljesítménymutató kevésbé stabil gráfanalitikai attribútum. Social-path módban még hordoz pozitív jelet, battle-path módban azonban a kapcsolat közel semlegessé vagy enyhén negatívvá válik. A dolgozat ezért az \texttt{opscore}-t kezeli robusztusabb teljesítményprofilként, miközben nyíltan rögzíti, hogy ez kézi súlyozású kompozit mutató, nem végleges statisztikai kalibráció.
+
+A Flex--SoloQ összehasonlítás szintén a fejezet módszertani eredménye. A SoloQ pozitív, de gyengébb \texttt{opscore} jele arra utal, hogy a magasabb teljesítményű játékosok matchmaking-környezetében is keletkezik hasonlósági szerkezet. A Flex Queue erősebb social-path eredménye viszont azt jelzi, hogy a visszatérő csapattársi kapcsolatok külön, jobban interpretálható asszociatív réteget képeznek. Ebből nem következik, hogy a játékosok okozzák egymás teljesítményét; a helyes állítás az, hogy az adott gráfprojekcióban az összekapcsolt játékosok mérhetően hasonlóbb teljesítményprofilokat mutatnak.
+
+\section{A randomizációs infrastruktúra helye}
+
+A kódbázisban az asszortativitáshoz randomizációs szignifikanciateszt is tartozik. Ez fontos fejlesztési irány, mert a leíró korrelációt nullmodellel is érdemes összevetni. A jelen dolgozatban azonban a fő eredményeket a közvetlenül ellenőrzött leíró és bontott futtatásokra alapozom. Így a szöveg őszinte marad: a szignifikanciakeret jelen van a rendszerben, de a hangsúly még nem a teljes permutációs kísérletsorozaton van.

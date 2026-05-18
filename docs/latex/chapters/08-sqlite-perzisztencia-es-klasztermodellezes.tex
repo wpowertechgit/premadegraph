@@ -1,0 +1,140 @@
+\chapter{SQLite perzisztencia és klasztermodellezés}
+
+\section{Miért maradt központi elem az SQLite?}
+
+A projekt mérete és célja szempontjából az SQLite továbbra is kifejezetten jó kompromisszum. Nem igényel külön adatbázisszerver-felügyeletet, könnyen verziózható a séma, gyors a lokális fejlesztésben, és a demo közben sincs szükség külön infrastruktúrára. Ennél is fontosabb, hogy a perzisztens modell egyszerűen ellenőrizhető: a játékos-, klaszter- és tagsági sorok közvetlenül lekérdezhetők.
+
+Egy szakdolgozatban ez külön előny. Nem csak a frontend JSON-kimeneteit lehet megmutatni, hanem az alapul szolgáló relációs tárolást is.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{sqlite-project-er-diagram.png}
+\caption{A fő SQLite adatbázis egyedkapcsolati diagramja}
+\end{figure}
+
+\section{A \texttt{players} tábla mint gazdagított játékosprofil}
+
+A jelenlegi \texttt{players} tábla már jóval több egy egyszerű névjegyzéknél. A fő mezőcsoportok:
+
+\begin{itemize}
+    \item azonosítók és névmezők;
+    \item aggregált teljesítménymutatók (\texttt{feedscore}, \texttt{opscore});
+    \item mintanagyságot leíró mezők (\texttt{match\_count}, \texttt{matches\_processed});
+    \item szerepkör és szerepkör-bizonyosság;
+    \item artifact-szintű komponensek.
+\end{itemize}
+
+A 2026. április 24-én vizsgált állapotban a tábla \textbf{25\,618} játékost tartalmazott. A szerepkör-eloszlás közel kiegyensúlyozott képet mutatott a fő lane-szerepkörök között, miközben \texttt{UNKNOWN} kategóriába is került \textbf{3120} játékos. Ez a gyakorlatban azt jelenti, hogy a rendszer nem próbál mindenáron erőltetett lane-hozzárendelést végezni ott, ahol a nyers adat nem kellően megbízható.
+
+\begin{table}[H]
+\centering
+\caption{Szerepkör-eloszlás a vizsgált \texttt{players} állapotban}
+\begin{tabular}{lr}
+\toprule
+\textbf{Szerepkör} & \textbf{Játékosok száma} \\
+\midrule
+TOP & 4571 \\
+MIDDLE & 4517 \\
+JUNGLE & 4484 \\
+BOTTOM & 4471 \\
+UTILITY & 4455 \\
+UNKNOWN & 3120 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sémanormalizáció és visszafelé kompatibilitás}
+
+A \texttt{backend/normalize\_players\_by\_puuid.js} egyik fontos, de könnyen rejtve maradó tulajdonsága, hogy nem tiszta, egyszer létrehozott sémával számol. A modul deklarálja a \texttt{players} tábla kanonikus oszlopkészletét, és szükség esetén a történetileg felhalmozott eltérésekhez is alkalmazkodik. Ez a projekt evolúciós természetéből következik: a score-réteg, a szerepkörmezők és az artifact-szintű komponensek nem egyszerre, hanem fokozatosan kerültek be a modellbe.
+
+Ennek szakdolgozati jelentősége is van. A rendszer nem laboratóriumi körülmények között egyszer megtervezett és lezárt adatbázissal dolgozik, hanem olyan struktúrával, amely a fejlesztés közben bővült. A normalizáló modul ezért egyben migrációs réteg is: megőrzi a régebbi állapotok használhatóságát, miközben előkészíti az újabb analitikai mezőket.
+
+\subsection{SQLite pragmák és írási kompromisszumok}
+
+A normalizáló pipeline az SQLite-ot nem alapbeállításokkal használja. A kód explicit módon \texttt{WAL} naplózást, \texttt{NORMAL} szinkronizációt, memóriabeli ideiglenes tárolást és foreign key támogatást állít be. Ez a választás jól mutatja, hogy az SQLite jelenléte nem „egyszerűségi lustaság”, hanem tudatos kompromisszum. A rendszernek lokálisan futó, ismételten újraíró, de nem többszáz egyidejű felhasználót kiszolgáló analitikai adattárra van szüksége; erre a célra ez a konfiguráció kifejezetten jó arányt ad a sebesség, a stabilitás és a hordozhatóság között.
+
+\section{A klasztermodell és a két fő tábla szerepe}
+
+A klaszterek perzisztenciáját a \texttt{clusters} és \texttt{cluster\_members} páros adja. A \texttt{clusters} tábla főbb elemei:
+
+\begin{itemize}
+    \item \texttt{cluster\_id},
+    \item \texttt{cluster\_type},
+    \item \texttt{algorithm},
+    \item \texttt{size},
+    \item \texttt{summary\_json},
+    \item térbeli koordináták,
+    \item build-verzió és frissítési idő.
+\end{itemize}
+
+A \texttt{cluster\_members} tábla ezzel szemben tagsági és szerepkörjellegű információt tárol:
+
+\begin{itemize}
+    \item a klaszter és játékos összerendelését;
+    \item \texttt{is\_bridge}, \texttt{is\_star}, \texttt{is\_best\_op}, \texttt{is\_worst\_feed} jelzőket;
+    \item szerepköri összegzést \texttt{role\_json} formában.
+\end{itemize}
+
+Ez a modell azért erős, mert a klaszter nem puszta név vagy címke, hanem lekérdezhető objektum, amelyhez külön metaadatok és tagsági szerepek kötődnek.
+
+A \texttt{backend/cluster\_persistence.py} további fontos döntése, hogy a klaszterek cseréjét \texttt{cluster\_type} szerint végzi. Vagyis egy új \texttt{python\_population} build felülírja a régi Python-klasztereket, de nem nyúl a \texttt{rust\_pathfinding} családhoz. A művelet előbb törli az adott típushoz tartozó régi tagsági sorokat, majd a klasztermetaadatokat, és ezután írja be az új eredményt. Ez a szemantika nagyon hasznos, mert ugyanazon adatbázisban több klasztercsalád élhet együtt anélkül, hogy egy újrafuttatás mindent elsöpörne.
+
+A \texttt{summary\_json}, \texttt{role\_json}, \texttt{build\_version} és \texttt{updated\_at} mezők a kutatási visszakövethetőséget is javítják. A klaszter így nem pusztán tagsági halmaz, hanem olyan objektum, amelynek eredete, típusa és részleges összefoglaló állapota is megmarad.
+
+\section{A perzisztált klaszterek aktuális nagyságrendje}
+
+A két fő kutatási dataset finomított adatbázisainak ellenőrzött állapota alapján a klaszterstruktúra lényegesen eltér a két korpuszban:
+
+\textbf{Flexset} (\texttt{playersrefined.db}):
+\begin{itemize}
+    \item \textbf{599} klaszter a \texttt{clusters} táblában;
+    \item \textbf{5741} klasztertagsági rekord a \texttt{cluster\_members} táblában;
+    \item a Graph V2 artfaktumban \textbf{1531} látható klaszter, átlagos méret \textbf{3.750}, legnagyobb \textbf{20}.
+\end{itemize}
+
+\textbf{SoloQ} (\texttt{playersrefined.db}):
+\begin{itemize}
+    \item \textbf{140} klaszter a \texttt{clusters} táblában;
+    \item \textbf{1538} klasztertagsági rekord a \texttt{cluster\_members} táblában;
+    \item a Graph V2 artfaktumban \textbf{870} látható klaszter, átlagos méret \textbf{1.768}, legnagyobb \textbf{20}.
+\end{itemize}
+
+A két szám közötti különbség metodikailag fontos. A \texttt{clusters} táblában tárolt klaszterek a Python pipeline által meghatározott, populációs alapú közösségek. A Graph V2 látható klasztereinek száma magasabb, mert a Graph V2 külön, kötetlen ally-csoportként kezeli azokat a csomópontokat is, amelyek csak vizualizációs szempontból alkotnak csoportot. A flexset lényegesen sűrűbb klaszterstruktúrát mutat: az átlagos klaszterméret (3.750) a soloq-hoz képest (1.768) közel duplája, ami empirikusan is alátámasztja, hogy a Flex Queue erősebb ismétlődő csoportkapcsolatokat termel.
+
+Ez önmagában is fontos rendszerszintű eredmény, mert mutatja, hogy a többdataset-architektúra valódi különbséget fog meg, nem csupán méretbeli eltérést.
+
+\section{A két klasztercsalád részletes összehasonlítása}
+
+A rendszerben két klasztercsalád él párhuzamosan, amelyek különböző módszerrel és célra épülnek:
+
+\subsection{python\_population}
+
+A \texttt{python\_population} típusú klaszterek a korai Python gráfépítési pipeline kimenetei. Ezeket a \texttt{backend/build\_graph.py} jellegű modulok és NetworkX-alapú modularitási közösségdetektálás hozzák létre a nyers meccsadatok alapján. Főbb jellemzők:
+
+\begin{itemize}
+    \item a klaszterméret nincs kemény korláthoz kötve (a moduláris detektálás saját maga dönt a méretekről);
+    \item az algoritmus a globális moduláris optimalizáció szempontjából határozza meg a csoportokat;
+    \item a flexset dataseten például közepes méretű, $\sim$10--15 fős klaszterek is keletkezhetnek, ha a moduláris struktúra azt indokolja;
+    \item a Python klaszterek inkább \emph{közösségdetektálási} perspektívát tükröznek.
+\end{itemize}
+
+\subsection{rust\_pathfinding}
+
+A \texttt{rust\_pathfinding} típusú klaszterek a Rust motor futásidejű klaszterezési logikájából jönnek. Az implementáció az ally-kapcsolatokon alapuló erős-összefüggési szegmensekre bontja a gráfot, kemény méretkorláttal (maximum 20 tag). Főbb jellemzők:
+
+\begin{itemize}
+    \item a 20 tagos korlát garantálja a klaszterek áttekinthetőségét a frontend vizualizációban;
+    \item az oversized összefüggő komponensek determinisztikusan kerülnek szétvágásra;
+    \item a Rust klaszterek főként \emph{pathfinding és vizualizációs} célra optimalizáltak;
+    \item az \texttt{orbitScore} és \texttt{orbitRadius} értékek kizárólag a Rust klaszterekre értelmezhetők.
+\end{itemize}
+
+\subsection{A két csomád koegzisztenciájának módszertani értéke}
+
+A két klasztercsalád nem egymást helyettesíti, hanem egymást kiegészíti. A Python klaszterek adnak egy moduláris alapú közösségstruktúrát; a Rust klaszterek ennek futásidejű, vizualizáció-kompatibilis változatát. Az a tény, hogy mindkét klaszter-nézet egyszerre létezik az adatbázisban, lehetővé teszi, hogy például az asszortativitási bontásoknál explicit módon megkérdezhetjük: a Python-közösségek belső éleire vagy a Rust-vizualizációs csoportok belső éleire mért asszortativitás-e erősebb?
+
+\section{Miért fontos a perzisztencia a kutatási fejezetekhez?}
+
+Az asszortativitási, központisági és kísérleti signed-balance számítások látszólag a Rust oldalon történnek, de valójában a korábban kialakított perzisztens modell nélkül sokkal nehezebben lennének értelmezhetők. A klaszterekhez kötött bontások, a játékosprofilokhoz rendelt score-ok és a későbbi exportok mind arra támaszkodnak, hogy a játékos és a közösségi kontextus ugyanabban a perzisztens rendszerben elérhető.
+
+Ez jó példa arra, hogy az adatbázistervezés nem csak kiszolgáló infrastruktúra, hanem a kutatási érték egyik feltétele.

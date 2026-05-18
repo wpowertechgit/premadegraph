@@ -1,0 +1,107 @@
+\chapter{Gráfépítés, klaszterezés és perzisztencia}
+
+\section{A jelenlegi gráfépítés szereposztása}
+
+A rendszer alapgráfja továbbra is meccsekből épül, de a jelenlegi architektúrában már nem a Python/PyVis export a fő gráfépítő út. A korai Python pipeline fontos prototípus- és kompatibilitási réteg maradt, de a dolgozat szempontjából az elsődleges, kutatható gráfállapotot a Rust réteg állítja elő. Ez a váltás azért lényeges, mert a projekt mára nem egyszerű HTML-gráfot akar generálni, hanem datasethez kötött, újrafuttatható, analitikai és vizualizációs célra is felhasználható gráf-artifaktumokat.
+
+A jelenlegi rendszerben a fő felelősségek így válnak szét:
+
+\begin{itemize}
+    \item a Python oldal megőrzi az adatgyűjtés, gyors prototipizálás, régi co-presence export és kompatibilitási gráfgenerálás szerepét;
+    \item az SQLite adatbázis tartja a normalizált játékosprofilokat, score-okat és a perzisztált klasztertagságokat;
+    \item a Rust motor építi fel a futásidejű \texttt{GraphState}-et a meccs-JSON állományokból és az adatbázisból;
+    \item a Graph V2 Rust pipeline állítja elő a datasethez kötött, cache-elhető gráf-artifaktumokat, amelyeket a frontend már nem böngészőoldali gráfépítéssel, hanem előkészített bináris és JSON állományokként fogyaszt.
+\end{itemize}
+
+Ez a pontosítás fontos módszertani korrekció: a fejezet nem állíthatja azt, hogy a Python pipeline a klaszterezés és gráfépítés fő útja. A Python út történeti és debug-szerepe megmarad, de a \texttt{flexset} és \texttt{soloq} összehasonlítás, az asszortativitás, a központisági elemzés és a Graph V2 vizualizáció már Rust-központú gráfmodellre támaszkodik.
+
+\section{Kapcsolataggregáció a Rust gráfmodellben}
+
+A Rust gráfmodell minden játékospárra külön őrzi a szövetségesi és ellenfél-oldali bizonyítékot. Ha a mérkőzések halmazát $M$, egy mérkőzés két csapatát pedig $T_{m,1}$ és $T_{m,2}$ jelöli, akkor egy játékospárra a két fő súly a következőképpen írható le:
+
+\begin{equation}
+w_{ally}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \in \{1,2\}: u \in T_{m,i} \land v \in T_{m,i}]
+\end{equation}
+
+\begin{equation}
+w_{enemy}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \neq j: u \in T_{m,i} \land v \in T_{m,j}]
+\end{equation}
+
+Ebből a rendszer három alapmezőt képez:
+
+\begin{itemize}
+    \item \texttt{allyWeight}: hányszor szerepelt a két játékos ugyanazon az oldalon;
+    \item \texttt{enemyWeight}: hányszor szerepelt a két játékos egymással szemben;
+    \item \texttt{totalMatches}: a két előző mennyiség összege.
+\end{itemize}
+
+A domináns reláció \texttt{ally}, ha \texttt{allyWeight >= enemyWeight}, különben \texttt{enemy}. A dolgozat fő olvasata szempontjából ez nem azt jelenti, hogy az enemy él társadalmi ellenségességet bizonyít. Sokkal óvatosabb és pontosabb úgy fogalmazni, hogy a Rust modell ismétlődő meccsbeli együtt- és szembekerülési bizonyítékot tárol. Ezért a Graph V2 eredményeit elsősorban asszociatív játékosgráfként, nem szó szerinti barátsági vagy ellenségességi hálóként értelmezem.
+
+\section{Szűrés, Graph V2 és bounded ally csoportok}
+
+A zajcsökkentés továbbra is központi döntés. A Graph V2 alapvető láthatósági küszöbe \texttt{totalMatches >= 2}: egyetlen közös mérkőzés még nem elég ahhoz, hogy egy kapcsolat a populációs renderben vagy a kutatási artifact-rétegben stabil élként jelenjen meg. Ez a küszöb nem abszolút igazság, hanem interpretálhatósági kompromisszum:
+
+\begin{itemize}
+    \item magasabb küszöb esetén a háló tisztább, de sok gyengébb szerkezet eltűnik;
+    \item alacsonyabb küszöb esetén több kapcsolat marad, de nő a véletlenszerű queue-találkozások zaja.
+\end{itemize}
+
+A Graph V2 klaszterezés fő iránya nem a régi, teljes co-presence Python közösségdetektálás, hanem a Rust oldali, determinisztikus \texttt{bounded-ally-groups-v2} logika. Ennek alapja az \texttt{allyWeight >= 2} típusú ismétlődő szövetségesi kapcsolat. Az enemy-only élek nem olvasztanak össze klasztereket, mert ezzel a közösségértelmezés túl agresszíven és túl gyengén védhetően terjedne szét. Az enemy információ megmarad az élmodellben és megjeleníthető külön rétegként, de nem ez határozza meg az ally-csoportok alapját.
+
+A vizuális klaszterek mérete szándékosan korlátozott. A Graph V2 jelenlegi szabálya szerint egy látható ally-csoport legfeljebb körülbelül húsz játékost tartalmazhat. Ez megakadályozza, hogy hosszú tranzitív teammate-láncok egyetlen, hamisan értelmezhető óriásklaszterré olvadjanak. A nagyobb összefüggő régiók így nem egyetlen premade csapatként, hanem több, hídélekkel összekötött bounded ally csoportként jelennek meg.
+
+\section{Graph V2 artifaktumok mint igazságforrás}
+
+A jelenlegi gráfépítés egyik legfontosabb különbsége a korai Python/PyVis exporthoz képest az, hogy a böngésző már nem kap egy nagy, önmagában layoutolt HTML-gráfot. A Rust Graph V2 pipeline előkészített, datasethez kötött cache-artifaktumokat ír ki, például:
+
+\begin{itemize}
+    \item \texttt{manifest.json};
+    \item \texttt{summary.md};
+    \item \texttt{node\_meta.json};
+    \item \texttt{node\_positions.f32};
+    \item \texttt{node\_metrics.u32};
+    \item \texttt{edge\_pairs.u32};
+    \item \texttt{edge\_props.u32};
+    \item \texttt{cluster\_meta.json}.
+\end{itemize}
+
+Ezek együtt adják azt a szerződéses adatréteget, amelyből a frontend WebGL/Three.js oldalon megjeleníti a gráfot. A \texttt{manifest.json} rögzíti a datasetet, a gráfépítő verziót, a klaszterezési verziót, a layout verziót, a csúcs- és élszámokat, valamint az artifact-méreteket. A \texttt{summary.md} nem pusztán emberi leírás, hanem reprodukálhatósági és későbbi elemzési kontextus: kimondja, milyen adathalmazon, milyen küszöbökkel, milyen konstrukciós szabállyal készült az adott gráf.
+
+Ezért a jelen dolgozatban a Graph V2 artifact-réteg tekintendő a kutatási vizualizáció fő igazságforrásának. A Python HTML-export legfeljebb történeti, debug- vagy kompatibilitási nézet.
+
+\section{Klaszterek mint első osztályú adatok}
+
+A jelenlegi rendszerben a klaszterek önálló, lekérdezhető adatbázis-objektumok. A \texttt{clusters} tábla a klaszter metaadatait, a \texttt{cluster\_members} pedig a tagsági sorokat tárolja. Ez több okból fontos:
+
+\begin{itemize}
+    \item a frontendnek nem kell minden alkalommal újragenerálnia a klaszterlogikát;
+    \item a Rust futtatókörnyezet és a Python pipeline ugyanazt a perzisztens modellt tudja használni;
+    \item a későbbi analitikai kiterjesztésekhez már rendelkezésre áll a közösséginformáció.
+\end{itemize}
+
+\diagramfigure{A Pathfinder osztálydiagramja - a gráf- és klaszterobjektumok tárolási modellje}{path finder class diagram.pdf}
+
+\section{Két klasztercsalád együttélése}
+
+A projekt jelenlegi állapotának egyik fontos sajátossága, hogy két külön klasztercsalád létezhet egymás mellett, de ezek súlya és szerepe nem azonos:
+
+\begin{itemize}
+    \item \texttt{python\_population}: történeti, populációs vagy kompatibilitási célú Python-közösségek;
+    \item \texttt{rust\_pathfinding}: a futásidejű útvonalkereséshez, Graph V2 nézethez és Rust analitikához közelebb álló klaszterek.
+\end{itemize}
+
+Ez első ránézésre redundánsnak tűnhet, de valójában funkcionális szétválasztás. A Python klaszterek a projekt korai populációs és ország-alapú irányából maradtak meg, és továbbra is hasznosak lehetnek összehasonlító vagy debug szerepben. A Rust klaszterek viszont a jelenlegi dolgozati főútvonalhoz igazodnak: ezek kapcsolódnak a datasetváltáshoz, az útvonalkereséshez, a Graph V2 artifactokhoz, az asszortativitási bontásokhoz és a későbbi Brandes-központisági validáláshoz. Mivel eltérő célokat szolgálnak, nem célszerű erőből egyetlen univerzális klaszterfogalomba gyömöszölni őket, de a fő empirikus értelmezésnél egyértelművé kell tenni, melyik klasztercsaládra támaszkodik az adott állítás.
+
+\section{A Python pipeline jelenlegi státusza}
+
+A \texttt{backend/build\_graph.py} és a hozzá hasonló Python gráfépítő modulok tehát nem törlendők ki a dolgozat történetéből. Ezek mutatják meg, honnan indult a projekt: gyors NetworkX/PyVis alapú prototípusként, amely súlyozott co-presence gráfot épített, HTML/JSON exportokat készített, majd fokozatosan adatbázis-perzisztenciával egészült ki \cite{networkx_greedy,pyvis}. A jelenlegi fejezetben azonban ezt már nem fő kutatási pipeline-ként, hanem visszaminősített, legacy-kompatibilitási útként kell kezelni.
+
+Ez a megfogalmazás illeszkedik a projekt jelenlegi scope-jához:
+
+\begin{itemize}
+    \item a \texttt{flexset} az elsődleges asszociatív core-periphery játékosgráf;
+    \item a \texttt{soloq} kontroll-adatkészletként szerepel, nem ugyanazzal a társas jelentéssel;
+    \item a signed balance csak módszertani határeset, nem fő empirikus pillér;
+    \item az asszortativitás és a Brandes-féle betweenness centralitás Rust oldali gráfanalitikai eredményként értelmezendő;
+    \item a frontend csak validált, dokumentált artifactokra és API-válaszokra építhet, nem önálló gráfépítő igazságforrás.
+\end{itemize}
