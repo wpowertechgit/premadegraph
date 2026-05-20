@@ -33,6 +33,7 @@ public sealed class KeyboardCommandController
             TombstoneScrollDown: KeyPressedOnce(keyboard, previousKeyboard, Keys.OemCloseBrackets),
             ForceDispute: KeyPressedOnce(keyboard, previousKeyboard, Keys.F),
             TogglePostProcess: KeyPressedOnce(keyboard, previousKeyboard, Keys.P),
+            ExportSimulation: KeyPressedOnce(keyboard, previousKeyboard, Keys.E),
             SelectAtScreenPosition: selectAtScreenPosition,
             SelectionScreenPosition: selectAtScreenPosition ? new Vector2(mouse.X, mouse.Y) : null);
     }
@@ -87,5 +88,6 @@ public sealed record PlayableCommandSet(
     bool TombstoneScrollDown,
     bool ForceDispute,
     bool TogglePostProcess,
+    bool ExportSimulation,
     bool SelectAtScreenPosition,
     Vector2? SelectionScreenPosition);

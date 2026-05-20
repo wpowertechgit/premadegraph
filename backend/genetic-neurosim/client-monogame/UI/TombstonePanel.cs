@@ -42,6 +42,11 @@ public sealed class TombstonePanel
     private Rectangle _scrollDownRect = Rectangle.Empty;
     private Rectangle _sortRect = Rectangle.Empty;
 
+    // Row hit testing for obituary popup
+    private readonly List<(Rectangle Rect, int TribeId)> _rowRects = new();
+    public int? SelectedTombstoneTribeId { get; private set; }
+    public bool ObituaryRequested { get; private set; }
+
     private Texture2D? _pixel;
     private FontRenderer? _font;
     private GraphicsDevice? _graphicsDevice;
@@ -49,13 +54,38 @@ public sealed class TombstonePanel
 
     public void HandleMouseClick(int mx, int my)
     {
+        ObituaryRequested = false;
+
         if (_scrollUpRect != Rectangle.Empty && _scrollUpRect.Contains(mx, my) && _scrollOffset > 0)
+        {
             _scrollOffset--;
-        else if (_scrollDownRect != Rectangle.Empty && _scrollDownRect.Contains(mx, my)
+            return;
+        }
+        if (_scrollDownRect != Rectangle.Empty && _scrollDownRect.Contains(mx, my)
                  && _scrollOffset + MaxVisibleRows < _totalRows)
+        {
             _scrollOffset++;
-        else if (_sortRect != Rectangle.Empty && _sortRect.Contains(mx, my))
+            return;
+        }
+        if (_sortRect != Rectangle.Empty && _sortRect.Contains(mx, my))
+        {
             CycleSortMode();
+            return;
+        }
+
+        // Check row clicks — open obituary for the clicked tribe
+        foreach (var (rect, tribeId) in _rowRects)
+        {
+            if (!rect.Contains(mx, my)) continue;
+            SelectedTombstoneTribeId = tribeId;
+            ObituaryRequested = true;
+            return;
+        }
+    }
+
+    public void ConsumeObituaryRequest()
+    {
+        ObituaryRequested = false;
     }
 
     private void CycleSortMode()
@@ -237,10 +267,12 @@ public sealed class TombstonePanel
         y += 4;
 
         // Visible rows
+        _rowRects.Clear();
         var endIdx = Math.Min(_scrollOffset + MaxVisibleRows, tombstones.Count);
         for (var i = _scrollOffset; i < endIdx; i++)
         {
             var (tombstone, tribeName) = tombstones[i];
+            var rowStartY = y;
             DrawTombstoneRow(spriteBatch, x, y, lineHeight, panel.Right - PanelMargin, tombstone, tribeName);
             y += lineHeight;
 
@@ -252,6 +284,14 @@ public sealed class TombstonePanel
             var founderColor = founders is { Count: > 0 } ? AccentColor : MutedColor;
             _font!.DrawString(spriteBatch, founderText, new Vector2(x + 12, y), FontSize.Small, founderColor);
             y += smallHeight + 2;
+
+            // Register clickable row rect (covers name line + founder line)
+            var rowH = y - rowStartY;
+            _rowRects.Add((new Rectangle(x, rowStartY, PanelWidth - PanelMargin * 2, rowH), tombstone.TribeId));
+
+            // Hover highlight hint — subtle tint so rows look clickable
+            FillRect(spriteBatch, new Rectangle(x, rowStartY, PanelWidth - PanelMargin * 2 - 8, rowH),
+                new Color(255, 255, 255, 6));
 
             // Light separator between rows
             if (i < endIdx - 1)

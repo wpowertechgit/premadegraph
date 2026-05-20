@@ -51,12 +51,23 @@ public sealed class PlayableSimulation
     private const int PopKingdomThreshold = 10_000;
     private const int PopEmpireThreshold  = 20_000;
 
+    // BP patch constants (mirrors Rust simulation.rs)
+    private const int PressureWarThreshold    = 80;
+    private const int PressureCap             = 200;
+    private const int PressureDecayPerTick    = 2;
+    private const int PostWarExhaustionTicks  = 150;
+    // Intimidation: combat ratio and risk threshold for tile-level retreat (v3 §5)
+    private const float IntimidationCombatRatio    = 1.5f;
+    private const float IntimidationRiskThreshold  = 0.45f;
+
     private readonly Random _random;
     private readonly int _centerTileId;
     private readonly int _initialTribeCount;
     private readonly DemoMode _demoMode;
     private readonly Dictionary<(int FirstTribeId, int SecondTribeId), int> _disputeCounts = new();
     private readonly HashSet<int> _thisTickClaims = new();
+    // Border pressure accumulates while two tribes share adjacent territory (v4 BP patch)
+    private readonly Dictionary<(int A, int B), int> _borderPressure = new();
 
     private PlayableSimulation(int seed, int width, int height, int tribeCount, DemoMode mode = DemoMode.Normal)
     {
@@ -101,6 +112,8 @@ public sealed class PlayableSimulation
     public int SelectedTribeId { get; set; } = -1;
 
     public int SelectedTileId { get; set; } = -1;
+
+    public bool IsSimulationComplete => _initialTribeCount > 1 && Tribes.Count(t => t.IsAlive) == 1;
 
     public static PlayableSimulation CreateDemo(int seed = 1337, int? width = null, int? height = null, int tribeCount = 12)
     {
@@ -165,6 +178,7 @@ public sealed class PlayableSimulation
         ActiveMergeCount = 0;
         SelectedTileId = -1;
         _disputeCounts.Clear();
+        _borderPressure.Clear();
         GenerateTiles();
         GenerateTribes(_initialTribeCount, _demoMode);
     }
@@ -188,7 +202,12 @@ public sealed class PlayableSimulation
         UpdateTierTracking();
         CheckTierPromotions();
 
-        if (Tick % 10 == 0) CheckImperialisticWar();
+        // BP patch: update border pressure and decrement war exhaustion each tick
+        UpdateBorderPressure();
+        DecrementWarExhaustion();
+
+        // BP patch: opportunity war now fires every 60 ticks (was 10) — mirrors Rust
+        if (Tick % 60 == 0) CheckImperialisticWar();
         ApplyWars();
         if (Tick % 50 == 0) ApplyVeterancyXp();
 
@@ -382,6 +401,8 @@ public sealed class PlayableSimulation
         {
             tribe.Population += Math.Max(1, (int)(tribe.Artifacts.Resource * 2f));
             tribe.FoodStores *= 0.94f;
+            if (tribe.Population > tribe.MaxPopulationReached)
+                tribe.MaxPopulationReached = tribe.Population;
             RecordGrowthIfMajor(tribe);
             return;
         }
@@ -640,6 +661,8 @@ public sealed class PlayableSimulation
 
         NormalizeControls(tile);
         tribe.Territory.Add(tileId);
+        if (tribe.Territory.Count > tribe.MaxTilesReached)
+            tribe.MaxTilesReached = tribe.Territory.Count;
 
         if (emitEvents && outcome is PlayableClaimOutcome.DisputeCreated or PlayableClaimOutcome.DisputeJoined)
         {
@@ -724,6 +747,13 @@ public sealed class PlayableSimulation
             ? (FirstTribeId: tribeId, SecondTribeId: otherTribeId)
             : (FirstTribeId: otherTribeId, SecondTribeId: tribeId);
 
+        // v3 §5: Try military intimidation before escalating to merge/war
+        if (TryIntimidateRetreat(key.FirstTribeId, key.SecondTribeId, tileId))
+        {
+            _disputeCounts.Remove(key);
+            return;
+        }
+
         _disputeCounts.TryGetValue(key, out var count);
         _disputeCounts[key] = count + 1;
 
@@ -784,7 +814,7 @@ public sealed class PlayableSimulation
 
         absorbed.Population = 0;
         absorbed.IsAlive = false;
-        RecordExtinction(absorbed, PlayableExtinctionReason.Merger);
+        RecordExtinction(absorbed, PlayableExtinctionReason.Merger, absorbedBy: survivor);
         AddEvent(new PlayableEvent(
             Tick,
             PlayableEventKind.Merger,
@@ -915,11 +945,17 @@ public sealed class PlayableSimulation
         return -1;
     }
 
-    private void RecordExtinction(PlayableTribe tribe, PlayableExtinctionReason reason)
+    private void RecordExtinction(PlayableTribe tribe, PlayableExtinctionReason reason, PlayableTribe? absorbedBy = null)
     {
         if (Tombstones.Any(tombstone => tombstone.TribeId == tribe.Id))
         {
             return;
+        }
+
+        var warCause = PlayableWarCause.None;
+        if (reason == PlayableExtinctionReason.Combat)
+        {
+            warCause = absorbedBy?.LastWarCause ?? tribe.LastWarCause;
         }
 
         Tombstones.Add(new PlayableTribeTombstone(
@@ -928,7 +964,14 @@ public sealed class PlayableSimulation
             reason,
             tribe.MainCampTileId,
             PopulationAtDeath: tribe.Population,
-            TerritoryAtDeath: tribe.Territory.Count));
+            TerritoryAtDeath: tribe.Territory.Count,
+            InitialArtifacts: tribe.InitialArtifacts,
+            ArtifactsAtDeath: tribe.Artifacts,
+            MaxPopulationReached: tribe.MaxPopulationReached,
+            MaxTilesReached: tribe.MaxTilesReached,
+            PolityTierReached: tribe.Tier,
+            WarCause: warCause,
+            AbsorbedByTribeId: absorbedBy?.Id));
 
         AddEvent(new PlayableEvent(
             Tick,
@@ -958,6 +1001,87 @@ public sealed class PlayableSimulation
         _                => int.MaxValue,
     };
 
+    /// <summary>
+    /// BP patch: accumulates border pressure for adjacent tribe pairs each tick.
+    /// Decays pressure for pairs that no longer share an adjacent hex edge.
+    /// </summary>
+    private void UpdateBorderPressure()
+    {
+        var activePairs = new HashSet<(int A, int B)>();
+
+        foreach (var tile in Tiles)
+        {
+            if (tile.Controls.Count == 0) continue;
+            var ownerA = tile.Controls[0].TribeId;
+            foreach (var neighborId in NeighborTileIds(tile.Id))
+            {
+                if (neighborId >= Tiles.Count) continue;
+                var neighbor = Tiles[neighborId];
+                if (neighbor.Controls.Count == 0) continue;
+                var ownerB = neighbor.Controls[0].TribeId;
+                if (ownerA == ownerB) continue;
+                var key = ownerA < ownerB ? (ownerA, ownerB) : (ownerB, ownerA);
+                activePairs.Add(key);
+            }
+        }
+
+        foreach (var pair in activePairs)
+        {
+            _borderPressure.TryGetValue(pair, out var current);
+            _borderPressure[pair] = Math.Min(PressureCap, current + 1);
+        }
+
+        var toRemove = new List<(int, int)>();
+        foreach (var (pair, pressure) in _borderPressure)
+        {
+            if (activePairs.Contains(pair)) continue;
+            var decayed = pressure - PressureDecayPerTick;
+            if (decayed <= 0) toRemove.Add(pair);
+            else _borderPressure[pair] = decayed;
+        }
+        foreach (var key in toRemove) _borderPressure.Remove(key);
+    }
+
+    private void DecrementWarExhaustion()
+    {
+        foreach (var tribe in Tribes)
+        {
+            if (tribe.IsAlive && tribe.WarExhaustionTicks > 0)
+                tribe.WarExhaustionTicks--;
+        }
+    }
+
+    /// <summary>
+    /// v3 §5 Military Intimidation: if one tribe has a dominant Combat advantage
+    /// and the weaker tribe has low Risk tolerance, the weaker tribe retreats
+    /// from this specific contested tile — no war declared.
+    /// </summary>
+    private bool TryIntimidateRetreat(int firstId, int secondId, int tileId)
+    {
+        var first  = Tribes.FirstOrDefault(t => t.Id == firstId  && t.IsAlive);
+        var second = Tribes.FirstOrDefault(t => t.Id == secondId && t.IsAlive);
+        if (first is null || second is null) return false;
+
+        var stronger = first.Artifacts.Combat >= second.Artifacts.Combat ? first : second;
+        var weaker   = stronger.Id == first.Id ? second : first;
+
+        var ratio = stronger.Artifacts.Combat / MathF.Max(0.05f, weaker.Artifacts.Combat);
+        if (ratio < IntimidationCombatRatio) return false;
+        if (weaker.Artifacts.Risk >= IntimidationRiskThreshold) return false;
+
+        if (tileId < 0 || tileId >= Tiles.Count) return false;
+        var tile = Tiles[tileId];
+        var weakerClaim = tile.Controls.FirstOrDefault(c => c.TribeId == weaker.Id);
+        if (weakerClaim is null) return false;
+
+        tile.Controls.Remove(weakerClaim);
+        NormalizeControls(tile);
+        weaker.Territory.Remove(tileId);
+
+        AddEvent(new PlayableEvent(Tick, PlayableEventKind.Intimidation, stronger.Id, weaker.Id, tileId, 0, null));
+        return true;
+    }
+
     private void TryDeclareWarBetween(int firstId, int secondId)
     {
         var first  = Tribes.FirstOrDefault(t => t.Id == firstId  && t.IsAlive);
@@ -967,16 +1091,32 @@ public sealed class PlayableSimulation
 
         var aggressor = first.Population >= second.Population ? first : second;
         var target    = aggressor.Id == first.Id ? second : first;
+
+        // BP patch: aggressor must not be exhausted from a recent war
+        if (aggressor.WarExhaustionTicks > 0) return;
+
+        var warCause = aggressor.FoodStores < aggressor.Population * 0.15f
+            ? PlayableWarCause.SurvivalPressure
+            : aggressor.Artifacts.Combat > 0.72f
+                ? PlayableWarCause.HighAggression
+                : PlayableWarCause.OpportunityWar;
+        aggressor.LastWarCause = warCause;
+
         aggressor.WarTargetTribeId = target.Id;
         AddEvent(new PlayableEvent(Tick, PlayableEventKind.WarDeclared, aggressor.Id, target.Id, aggressor.MainCampTileId, 0, null));
     }
 
     private void CheckImperialisticWar()
     {
+        var isEndgame = Tribes.Count(t => t.IsAlive) <= _initialTribeCount / 6;
+
         foreach (var tribe in Tribes.Where(t => t.IsAlive && !t.WarTargetTribeId.HasValue).ToList())
         {
             if (tribe.Territory.Count < TierTileCap(tribe.Tier)) continue;
             if (tribe.FoodStores < tribe.Population * 0.25f) continue;
+
+            // BP patch: non-endgame wars require exhaustion cooldown to have cleared
+            if (!isEndgame && tribe.WarExhaustionTicks > 0) continue;
 
             var target = Tribes
                 .Where(t => t.IsAlive && t.Id != tribe.Id && !t.WarTargetTribeId.HasValue)
@@ -986,6 +1126,13 @@ public sealed class PlayableSimulation
                 .FirstOrDefault();
 
             if (target is null) continue;
+
+            // BP patch: non-endgame wars require sufficient border pressure
+            var pressureKey = tribe.Id < target.Id ? (tribe.Id, target.Id) : (target.Id, tribe.Id);
+            if (!isEndgame && (!_borderPressure.TryGetValue(pressureKey, out var pressure) || pressure < PressureWarThreshold))
+                continue;
+
+            tribe.LastWarCause = PlayableWarCause.OpportunityWar;
             tribe.WarTargetTribeId = target.Id;
             AddEvent(new PlayableEvent(Tick, PlayableEventKind.WarDeclared, tribe.Id, target.Id, tribe.MainCampTileId, 0, null));
         }
@@ -1038,6 +1185,7 @@ public sealed class PlayableSimulation
             attacker.WarTargetTribeId = null;
             attacker.IsAlive = false;
             RecordExtinction(attacker, PlayableExtinctionReason.Combat);
+            defender.WarExhaustionTicks = PostWarExhaustionTicks;
             return;
         }
         if (defRouted)
@@ -1066,7 +1214,8 @@ public sealed class PlayableSimulation
         defeated.Population = 0;
         defeated.IsAlive = false;
         defeated.WarTargetTribeId = null;
-        RecordExtinction(defeated, PlayableExtinctionReason.Combat);
+        RecordExtinction(defeated, PlayableExtinctionReason.Combat, absorbedBy: victor);
+        victor.WarExhaustionTicks = PostWarExhaustionTicks;
         AddEvent(new PlayableEvent(Tick, PlayableEventKind.Conquest, victor.Id, defeated.Id, defeated.MainCampTileId, popGain, null));
     }
 
@@ -1103,6 +1252,7 @@ public enum PlayableEventKind
     Conquest,
     VeterancyBump,
     TierPromotion,
+    Intimidation,
 }
 
 public enum PlayableExtinctionReason
@@ -1110,6 +1260,14 @@ public enum PlayableExtinctionReason
     Starvation,
     Merger,
     Combat,
+}
+
+public enum PlayableWarCause
+{
+    None,
+    HighAggression,
+    SurvivalPressure,
+    OpportunityWar,
 }
 
 public sealed record PlayableEvent(
@@ -1127,7 +1285,14 @@ public sealed record PlayableTribeTombstone(
     PlayableExtinctionReason Reason,
     int MainCampTileId,
     int PopulationAtDeath = 0,
-    int TerritoryAtDeath = 0);
+    int TerritoryAtDeath = 0,
+    ArtifactVector InitialArtifacts = default,
+    ArtifactVector ArtifactsAtDeath = default,
+    int MaxPopulationReached = 0,
+    int MaxTilesReached = 0,
+    PolityTier PolityTierReached = PolityTier.Tribe,
+    PlayableWarCause WarCause = PlayableWarCause.None,
+    int? AbsorbedByTribeId = null);
 
 internal enum PlayableClaimOutcome
 {
@@ -1203,6 +1368,8 @@ public sealed class PlayableTribe
         FoodStores = foodStores;
         Tier = tier;
         Artifacts = artifacts;
+        InitialArtifacts = artifacts;
+        MaxPopulationReached = population;
         MemberTribes.Add(new PlayablePolityMember(id, name, TribeVisuals.RoleLabel(artifacts), IsLeader: true));
     }
 
@@ -1240,6 +1407,15 @@ public sealed class PlayableTribe
     // War state
     public int? WarTargetTribeId { get; set; }
     public ulong NextVeterancyTick { get; set; }
+
+    // Obituary tracking
+    public ArtifactVector InitialArtifacts { get; }
+    public int MaxPopulationReached { get; set; }
+    public int MaxTilesReached { get; set; }
+    public PlayableWarCause LastWarCause { get; set; }
+
+    // BP patch: post-war cooldown before this tribe can declare again
+    public int WarExhaustionTicks { get; set; }
 
     public List<PlayablePolityMember> MemberTribes { get; } = new();
 }

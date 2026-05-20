@@ -82,8 +82,15 @@ public sealed class GameRoot : Game
     // M9: Lineage & Tombstone inspection panels
     private readonly LineageInspectorPanel _lineageInspector = new();
     private readonly TombstonePanel _tombstonePanel = new();
+    private readonly TombstoneObituaryPanel _obituaryPanel = new();
     private bool _lineagePanelVisible;
     private bool _tombstonePanelVisible;
+    private bool _obituaryVisible;
+    private int? _obituaryTribeId;
+
+    // Simulation complete / export state
+    private string? _lastExportPath;
+    private double _exportMessageTimer;
 
     // ESC menu
     private readonly UI.EscMenu _escMenu = new();
@@ -265,6 +272,9 @@ public sealed class GameRoot : Game
         DrainReceivedFrames();
         PollTombstoneFounders(gameTime);
         UpdateWindowTitle(gameTime);
+
+        if (_exportMessageTimer > 0)
+            _exportMessageTimer -= gameTime.ElapsedGameTime.TotalSeconds;
 
         _previousKeyboard = keyboard;
         _previousMouse = mouse;
@@ -554,6 +564,55 @@ public sealed class GameRoot : Game
                 }
             }
 
+            // Obituary popup (shown when a tombstone row is clicked)
+            if (_obituaryVisible && _obituaryTribeId.HasValue && _panelFontRenderer is not null)
+            {
+                var tombstone = _playableSimulation.Tombstones
+                    .FirstOrDefault(t => t.TribeId == _obituaryTribeId.Value);
+                if (tombstone is not null)
+                {
+                    var tribeNameForObit = _playableSimulation.Tribes
+                        .FirstOrDefault(t => t.Id == tombstone.TribeId)?.Name
+                        ?? $"Tribe {tombstone.TribeId}";
+                    string? absorbedByName = null;
+                    if (tombstone.AbsorbedByTribeId.HasValue)
+                        absorbedByName = _playableSimulation.Tribes
+                            .FirstOrDefault(t => t.Id == tombstone.AbsorbedByTribeId.Value)?.Name
+                            ?? $"Tribe {tombstone.AbsorbedByTribeId.Value}";
+
+                    var defaultObituaryOrigin = new Point(
+                        GraphicsDevice.Viewport.Width / 2 - 190,
+                        GraphicsDevice.Viewport.Height / 2 - 200);
+                    var obituaryOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.Obituary, defaultObituaryOrigin);
+
+                    _obituaryPanel.Draw(
+                        _spriteBatch,
+                        tombstone,
+                        tribeNameForObit,
+                        absorbedByName,
+                        _panelFontRenderer,
+                        obituaryOrigin);
+                }
+                else
+                {
+                    _obituaryVisible = false;
+                }
+            }
+
+            // Simulation complete banner and export hint
+            if (!_isNetworkMode && _playableSimulation.IsSimulationComplete && _panelFontRenderer is not null)
+            {
+                var winner = _playableSimulation.Tribes.FirstOrDefault(t => t.IsAlive);
+                if (winner is not null)
+                    DrawSimulationCompleteBanner(_spriteBatch, _panelFontRenderer, winner.Name);
+            }
+
+            // Export success toast
+            if (_exportMessageTimer > 0 && _lastExportPath is not null && _panelFontRenderer is not null)
+            {
+                DrawExportToast(_spriteBatch, _panelFontRenderer, _lastExportPath);
+            }
+
             if (_debugHud is not null)
             {
                 _debugHud.ReservedTopRightPanel = _selectionPanel?.LastBounds;
@@ -576,6 +635,50 @@ public sealed class GameRoot : Game
         }
 
         base.Draw(gameTime);
+    }
+
+    private void DrawSimulationCompleteBanner(SpriteBatch sb, FontRenderer font, string winnerName)
+    {
+        var vp = GraphicsDevice.Viewport;
+        var lh = font.LineHeight(FontSize.Header);
+        var sh = font.LineHeight(FontSize.Small);
+        var bannerH = lh + sh + 20;
+        var bannerRect = new Rectangle(0, 0, vp.Width, bannerH);
+
+        sb.Begin(sortMode: SpriteSortMode.Deferred, blendState: BlendState.AlphaBlend, samplerState: SamplerState.LinearClamp);
+
+        using var pixel = new Texture2D(GraphicsDevice, 1, 1);
+        pixel.SetData(new[] { Color.White });
+
+        sb.Draw(pixel, bannerRect, new Color(10, 18, 10, 210));
+        sb.Draw(pixel, new Rectangle(0, bannerH - 2, vp.Width, 2), new Color(100, 220, 130, 180));
+
+        var title = $"SIMULATION COMPLETE  ─  {winnerName.ToUpperInvariant()} SURVIVES";
+        font.DrawString(sb, title, new Vector2(12, 6), FontSize.Header, new Color(120, 255, 140, 240));
+
+        var hint = "Press E to export run data as JSON  |  Press K for tombstone ledger";
+        font.DrawString(sb, hint, new Vector2(12, 6 + lh + 2), FontSize.Small, new Color(140, 180, 140, 180));
+
+        sb.End();
+    }
+
+    private void DrawExportToast(SpriteBatch sb, FontRenderer font, string path)
+    {
+        var vp = GraphicsDevice.Viewport;
+        var sh = font.LineHeight(FontSize.Small);
+        var toastH = sh + 16;
+        var toastRect = new Rectangle(0, vp.Height - toastH, vp.Width, toastH);
+
+        sb.Begin(sortMode: SpriteSortMode.Deferred, blendState: BlendState.AlphaBlend, samplerState: SamplerState.LinearClamp);
+
+        using var pixel = new Texture2D(GraphicsDevice, 1, 1);
+        pixel.SetData(new[] { Color.White });
+
+        sb.Draw(pixel, toastRect, new Color(10, 28, 10, 200));
+        var msg = $"Exported: {path}";
+        font.DrawString(sb, msg, new Vector2(10, vp.Height - toastH + 8), FontSize.Small, new Color(100, 220, 130, 230));
+
+        sb.End();
     }
 
     protected override void Dispose(bool disposing)
@@ -881,12 +984,31 @@ public sealed class GameRoot : Game
 
         if (commands.SelectAtScreenPosition && commands.SelectionScreenPosition is { } screenPosition)
         {
-            // Route click to tombstone panel first if it's visible and the cursor is over it
+            var mx = (int)screenPosition.X;
+            var my = (int)screenPosition.Y;
             var clickedPanel = false;
-            if (_tombstonePanelVisible && _tombstonePanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
-                && _tombstonePanel.LastBounds.Contains((int)screenPosition.X, (int)screenPosition.Y))
+
+            // Obituary close button
+            if (_obituaryVisible && _obituaryPanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
+                && _obituaryPanel.LastBounds.Contains(mx, my))
             {
-                _tombstonePanel.HandleMouseClick((int)screenPosition.X, (int)screenPosition.Y);
+                if (_obituaryPanel.HandleMouseClick(mx, my))
+                    _obituaryVisible = false;
+                clickedPanel = true;
+            }
+
+            // Route click to tombstone panel
+            if (!clickedPanel && _tombstonePanelVisible
+                && _tombstonePanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
+                && _tombstonePanel.LastBounds.Contains(mx, my))
+            {
+                _tombstonePanel.HandleMouseClick(mx, my);
+                if (_tombstonePanel.ObituaryRequested)
+                {
+                    _obituaryTribeId = _tombstonePanel.SelectedTombstoneTribeId;
+                    _obituaryVisible = true;
+                    _tombstonePanel.ConsumeObituaryRequest();
+                }
                 clickedPanel = true;
             }
 
@@ -950,6 +1072,21 @@ public sealed class GameRoot : Game
             _tombstonePanelVisible = !_tombstonePanelVisible;
             if (_tombstonePanelVisible)
                 _tombstonePanel.ResetScroll();
+        }
+
+        // Export simulation run (E key)
+        if (commands.ExportSimulation && !_isNetworkMode)
+        {
+            try
+            {
+                _lastExportPath = Models.SimulationExporter.SaveToFile(_playableSimulation);
+                _exportMessageTimer = 5.0;
+                Console.WriteLine($"[export] saved to {_lastExportPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[export] failed: {ex.Message}");
+            }
         }
 
         // M9: Tombstone panel sort/scroll forwarded to panel
@@ -1189,6 +1326,8 @@ public sealed class GameRoot : Game
 
         AddPanelBounds(DraggablePanelId.Lineage, _lineageInspector.LastBounds);
         AddPanelBounds(DraggablePanelId.Tombstone, _tombstonePanel.LastBounds);
+        if (_obituaryVisible)
+            AddPanelBounds(DraggablePanelId.Obituary, _obituaryPanel.LastBounds);
     }
 
     private void AddPanelBounds(DraggablePanelId panel, Rectangle bounds)

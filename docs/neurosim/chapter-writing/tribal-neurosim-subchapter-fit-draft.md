@@ -170,6 +170,34 @@ These are strategic trade-offs. A tribe's best action depends on its own state a
 
 The first complete run provides a concrete narrative: Tribe 270 won with high Isolation and Resource drives, suggesting a defensive-expansionist strategy under the simulation's rules. The optimization document also shows a game-theoretic failure mode: peaceful genomes created an endgame equilibrium lock, so the system added endgame pressure to force strategic resolution.
 
+### Hawk-Dove Interpretation
+
+One especially useful formalism for the chapter is the Hawk-Dove game. Tribal NeuroSim does not solve the classical Hawk-Dove model analytically, but parts of its behavior can be interpreted through that lens. In chapter-writing terms, this is valuable because it gives a compact payoff structure for conflict, retreat, and escalation that closely matches what the code actually executes.
+
+In this interpretation, `Dove` corresponds to cooperation or retreat, especially when a tribe exhibits high goal drive and high isolation. `Hawk` corresponds to aggression or war, especially when high raid drive combines with high aggression. This mapping should be presented as an interpretable behavioral posture derived from the neural drive space, not as a literal claim that every tribe is permanently one type.
+
+A thesis-ready way to present this is as a simplified payoff matrix, where higher values indicate better strategic outcomes under the simulation's local conflict rules:
+
+| Tribe A / Tribe B | Dove | Hawk |
+| --- | --- | --- |
+| **Dove** | `(R, R)`  Mutual de-escalation. Both cooperate or one yields peacefully, minimizing loss and preserving long-run sustainability. | `(S, T)`  The Dove retreats while the Hawk exploits the contested asset or territory. The Dove suffers a limited positional loss but preserves population. |
+| **Hawk** | `(T, S)`  The Hawk captures the short-run advantage while the Dove avoids catastrophic losses by withdrawing. | `(P, P)`  Both choose aggression, escalating into full conflict with severe casualties, resource depletion, and extinction pressure. |
+
+with the usual Hawk-Dove ordering:
+
+`T > R > P > S`
+
+where:
+
+- `T` = exploitative gain from Hawk against Dove
+- `R` = mutual restraint / sustainable coexistence
+- `P` = destructive punishment from Hawk against Hawk
+- `S` = retreat payoff when Dove yields to Hawk
+
+This matrix fits the simulation particularly well because the four outcome classes are already visible in the implemented mechanics. Dove versus Dove corresponds to peaceful coexistence, negotiated non-expansion into a disputed region, or one side yielding space without triggering major combat. Hawk versus Dove corresponds to asymmetric exploitation, where one polity presses the advantage and the other preserves itself by retreating. Hawk versus Hawk is the most important case for the thesis narrative because it maps directly onto total-war execution, including the repeated Poisson combat loops that produce reciprocal casualties and severe resource depletion.
+
+This framing also helps explain the instability of early simulation phases. In early runs, many interactions behaved like chaotic repeated Hawk versus Hawk encounters: multiple tribes selected aggression under scarcity and territorial pressure, disputes escalated too quickly, and the system entered highly destructive conflict cascades before more stable patterns of consolidation emerged. Framing these phases as Hawk-Dove imbalance is cleaner than describing them as generic "chaos," because it ties the observed instability to a recognizable strategic interaction pattern already encoded in the model.
+
 ### How To Write It In The Thesis
 
 This section should be titled something like "Strategic Interaction and Game-Theoretic Structure" rather than simply "Game Theory" if you want to avoid overclaiming.

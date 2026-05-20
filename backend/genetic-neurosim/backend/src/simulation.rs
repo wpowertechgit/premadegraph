@@ -1491,6 +1491,7 @@ impl TribeSimulation {
                 defender_id: w.defender_id,
                 start_tick: w.start_tick,
                 status: w.status,
+                kind: w.kind,
                 attacker_casualties: w.attacker_casualties,
                 defender_casualties: w.defender_casualties,
                 battle_tile: w.battle_tile,
@@ -2486,9 +2487,11 @@ impl TribeSimulation {
                     defender_id: def_id,
                     start_tick: tick,
                     status: crate::war::WarStatus::Active,
+                    kind: crate::war::WarKind::FullScale,
                     attacker_casualties: 0,
                     defender_casualties: 0,
                     battle_tile: Some(self.tribes[target_idx].home_tile as u32),
+                    contested_tiles: vec![],
                 });
                 let mut ev = crate::events::SimulationEvent::new(
                     0, tick, gen,
@@ -2582,9 +2585,11 @@ impl TribeSimulation {
                     defender_id: def_id,
                     start_tick: tick,
                     status: crate::war::WarStatus::Active,
+                    kind: crate::war::WarKind::FullScale,
                     attacker_casualties: 0,
                     defender_casualties: 0,
                     battle_tile: Some(battle_tile),
+                    contested_tiles: vec![],
                 });
                 let mut ev = crate::events::SimulationEvent::new(
                     0, tick, gen,
@@ -2672,9 +2677,11 @@ impl TribeSimulation {
                     defender_id: def_id,
                     start_tick: tick,
                     status: crate::war::WarStatus::Active,
+                    kind: crate::war::WarKind::FullScale,
                     attacker_casualties: 0,
                     defender_casualties: 0,
                     battle_tile: Some(battle_tile),
+                    contested_tiles: vec![],
                 });
                 let mut ev = crate::events::SimulationEvent::new(
                     0, tick, gen,
@@ -2813,9 +2820,11 @@ impl TribeSimulation {
                 defender_id: def_id,
                 start_tick: tick,
                 status: crate::war::WarStatus::Active,
+                kind: crate::war::WarKind::FullScale,
                 attacker_casualties: 0,
                 defender_casualties: 0,
                 battle_tile: Some(battle_tile),
+                contested_tiles: vec![],
             });
             let mut ev = crate::events::SimulationEvent::new(
                 0, tick, gen,
@@ -2857,6 +2866,17 @@ impl TribeSimulation {
             let atk_id = self.tribes[attacker_idx].id as u32;
             let def_id = self.tribes[defender_idx].id as u32;
 
+            // Determine whether this is a limited border dispute or a full-scale war
+            let is_border_dispute = self.active_wars.iter().any(|w| {
+                w.status == crate::war::WarStatus::Active
+                    && w.kind == crate::war::WarKind::BorderDispute
+                    && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                        || (w.attacker_id == def_id && w.defender_id == atk_id))
+            });
+            // Border skirmishes use a much lighter casualty rate — it's a regional fight,
+            // not an existential war. 0.04 vs 0.15 keeps both tribes healthy after resolution.
+            let cas_multiplier = if is_border_dispute { 0.04 } else { 0.15 };
+
             // Box-Muller normal sample for attacker
             let u1: f32 = self.rng.random::<f32>().max(1e-7);
             let u2: f32 = self.rng.random::<f32>();
@@ -2883,14 +2903,12 @@ impl TribeSimulation {
 
             let ratio = (attacker_strength / defender_strength.max(0.01)).min(5.0);
 
-            // Casualties: 0.15 multiplier × pop × a_combat gives ~7.5% loss/round; at 40 rounds/war
-            // that forces 95%+ population loss even for large Empires, making wars decisive.
             let a_cas_lambda = (self.tribes[defender_idx].stats.a_combat
-                * self.tribes[attacker_idx].population as f32 * 0.15).max(1.0);
+                * self.tribes[attacker_idx].population as f32 * cas_multiplier).max(1.0);
             let a_casualties = self.knuth_poisson(a_cas_lambda);
 
             let d_cas_lambda = (self.tribes[attacker_idx].stats.a_combat
-                * self.tribes[defender_idx].population as f32 * 0.15 * ratio).max(1.0);
+                * self.tribes[defender_idx].population as f32 * cas_multiplier * ratio).max(1.0);
             let d_casualties = self.knuth_poisson(d_cas_lambda);
 
             self.tribes[attacker_idx].population =
@@ -2898,14 +2916,26 @@ impl TribeSimulation {
             self.tribes[defender_idx].population =
                 self.tribes[defender_idx].population.saturating_sub(d_casualties);
 
-            // Collapse threshold: civilisation collapses at 5% of max_population (capped 50–5000)
-            let atk_threshold = (self.tribes[attacker_idx].max_population / 20).max(50).min(5_000);
-            if self.tribes[attacker_idx].population < atk_threshold {
-                self.tribes[attacker_idx].population = 0;
-            }
-            let def_threshold = (self.tribes[defender_idx].max_population / 20).max(50).min(5_000);
-            if self.tribes[defender_idx].population < def_threshold {
-                self.tribes[defender_idx].population = 0;
+            if is_border_dispute {
+                // Border wars never kill tribes — floor both at 10% of max_population.
+                let atk_floor = (self.tribes[attacker_idx].max_population / 10).max(20);
+                let def_floor = (self.tribes[defender_idx].max_population / 10).max(20);
+                if self.tribes[attacker_idx].population < atk_floor {
+                    self.tribes[attacker_idx].population = atk_floor;
+                }
+                if self.tribes[defender_idx].population < def_floor {
+                    self.tribes[defender_idx].population = def_floor;
+                }
+            } else {
+                // Collapse threshold: civilisation collapses at 5% of max_population (capped 50–5000)
+                let atk_threshold = (self.tribes[attacker_idx].max_population / 20).max(50).min(5_000);
+                if self.tribes[attacker_idx].population < atk_threshold {
+                    self.tribes[attacker_idx].population = 0;
+                }
+                let def_threshold = (self.tribes[defender_idx].max_population / 20).max(50).min(5_000);
+                if self.tribes[defender_idx].population < def_threshold {
+                    self.tribes[defender_idx].population = 0;
+                }
             }
 
             // L1: accumulate casualties in war record
@@ -3058,14 +3088,101 @@ impl TribeSimulation {
                 }
                 // BP: Victor enters post-war cooldown before they can start another war.
                 self.tribes[attacker_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS;
-            } else if self.tribes[attacker_idx].ticks_in_state > 120 {
-                // C4: War timeout lowered from 300 → 120 so winners rejoin diplomacy faster
+            } else if is_border_dispute && self.tribes[attacker_idx].ticks_in_state > 45 {
+                // ── Border dispute timeout: tile transfer resolution ───────
+                // Whoever inflicted more relative casualties wins the border tiles.
+                // Both tribes survive and return to Peace.
+                let (winner_id, loser_id, winner_idx, loser_idx) = {
+                    let war = self.active_wars.iter().find(|w| {
+                        w.status == crate::war::WarStatus::Active
+                            && w.kind == crate::war::WarKind::BorderDispute
+                            && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                                || (w.attacker_id == def_id && w.defender_id == atk_id))
+                    });
+                    if let Some(w) = war {
+                        let atk_ratio = w.attacker_casualties as f32
+                            / self.tribes[attacker_idx].population.max(1) as f32;
+                        let def_ratio = w.defender_casualties as f32
+                            / self.tribes[defender_idx].population.max(1) as f32;
+                        // Higher relative casualties = loser
+                        if atk_ratio > def_ratio {
+                            (def_id, atk_id, defender_idx, attacker_idx)
+                        } else {
+                            (atk_id, def_id, attacker_idx, defender_idx)
+                        }
+                    } else {
+                        (atk_id, def_id, attacker_idx, defender_idx)
+                    }
+                };
+
+                // Transfer only the contested tiles to the winner
+                let tiles_to_transfer: Vec<u32> = self.active_wars.iter()
+                    .find(|w| {
+                        w.status == crate::war::WarStatus::Active
+                            && w.kind == crate::war::WarKind::BorderDispute
+                            && ((w.attacker_id == winner_id && w.defender_id == loser_id)
+                                || (w.attacker_id == loser_id && w.defender_id == winner_id))
+                    })
+                    .map(|w| w.contested_tiles.clone())
+                    .unwrap_or_default();
+
+                for &tile in &tiles_to_transfer {
+                    let tile_idx = tile as usize;
+                    // Remove loser's co-occupancy; full control goes to winner
+                    self.world.remove_tile_occupant(tile_idx, loser_id);
+                    self.world.set_tile_owner(tile_idx, winner_id);
+                    // Update territory vecs
+                    self.tribes[loser_idx].territory.retain(|&t| t != tile as u16);
+                    if !self.tribes[winner_idx].territory.contains(&(tile as u16)) {
+                        self.tribes[winner_idx].territory.push(tile as u16);
+                    }
+                }
+
                 self.tribes[attacker_idx].behavior = BehaviorState::Peace;
                 self.tribes[attacker_idx].target_tribe = None;
                 self.tribes[attacker_idx].ticks_in_state = 0;
                 self.tribes[defender_idx].behavior = BehaviorState::Peace;
                 self.tribes[defender_idx].ticks_in_state = 0;
-                // L1: war ended in timeout peace
+
+                let ended_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
+                    w.status == crate::war::WarStatus::Active
+                        && w.kind == crate::war::WarKind::BorderDispute
+                        && ((w.attacker_id == atk_id && w.defender_id == def_id)
+                            || (w.attacker_id == def_id && w.defender_id == atk_id))
+                }) {
+                    war.status = crate::war::WarStatus::AttackerWon;
+                    Some(war.war_id)
+                } else {
+                    None
+                };
+                if let Some(war_id) = ended_war_id {
+                    let mut ev = crate::events::SimulationEvent::new(
+                        0, self.tick, self.generation,
+                        crate::events::EventType::WarEnded,
+                        crate::events::EventSeverity::Important,
+                        winner_id,
+                    );
+                    ev.other_tribe_id = loser_id;
+                    ev.war_id = war_id;
+                    ev.value_a = tiles_to_transfer.len() as f32;
+                    ev.flags = crate::war::WarStatus::AttackerWon as u32;
+                    self.push_event(ev);
+                }
+                if !self.config.headless {
+                    println!("[BORDER WAR tick={}] tribe_{} won border dispute vs tribe_{} ({} tiles transferred)",
+                        self.tick, winner_id, loser_id, tiles_to_transfer.len());
+                }
+                // Short cooldown after border skirmish
+                self.tribes[attacker_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS / 2;
+                self.tribes[defender_idx].war_exhaustion_ticks = Self::POST_WAR_EXHAUSTION_TICKS / 2;
+
+            } else if !is_border_dispute && self.tribes[attacker_idx].ticks_in_state > 120 {
+                // C4: Full-scale war timeout — stalemate peace
+                self.tribes[attacker_idx].behavior = BehaviorState::Peace;
+                self.tribes[attacker_idx].target_tribe = None;
+                self.tribes[attacker_idx].ticks_in_state = 0;
+                self.tribes[defender_idx].behavior = BehaviorState::Peace;
+                self.tribes[defender_idx].ticks_in_state = 0;
                 let ended_war_id = if let Some(war) = self.active_wars.iter_mut().find(|w| {
                     w.status == crate::war::WarStatus::Active
                         && (w.attacker_id == atk_id || w.defender_id == atk_id)
@@ -3195,9 +3312,12 @@ impl TribeSimulation {
 
     // ─── C2: Dispute Escalation ───────────────────────────────────────────────
 
-    /// Ticks a dispute must exist before forced resolution. BP: raised from 60 → 180 to give
-    /// border pressure time to accumulate before war declarations are valid.
-    const DISPUTE_GRACE_TICKS: u64 = 180;
+    /// Ticks a dispute must exist before forced resolution. Raised to 300 so fractional
+    /// borders have time to be visible on the map before escalating.
+    const DISPUTE_GRACE_TICKS: u64 = 300;
+
+    /// After a frozen-border stalemate, dispute is re-evaluated after this many additional ticks.
+    const FROZEN_BORDER_RECHECK_TICKS: u64 = 200;
 
     /// Border pressure thresholds. Pressure builds at +1/tick while adjacent, decays at -2/tick.
     const PRESSURE_WAR_THRESHOLD: u32 = 80;
@@ -3315,9 +3435,12 @@ impl TribeSimulation {
     }
 
     /// For each dispute pair older than DISPUTE_GRACE_TICKS, force a resolution:
-    ///   - Alliance  : both want alliance (goal_drive high, a_team high, no existing ally)
-    ///   - War       : the more aggressive tribe declares war on the other
-    ///   - Retreat   : weaker side abandons the shared contested tiles
+    ///   - Alliance      : both want alliance (goal_drive high, a_team high, no existing ally)
+    ///   - Frozen border : neither aggressive enough for war nor weak enough to fully retreat —
+    ///                     partial claims persist; re-evaluated after FROZEN_BORDER_RECHECK_TICKS
+    ///   - Partial retreat: weaker side yields roughly half its disputed tiles, keeping the rest
+    ///                      as a stable fractional border (v3 §4 60/40 mechanic)
+    ///   - War           : the more aggressive tribe declares war on the other
     fn apply_dispute_resolution(&mut self) {
         let tick = self.tick;
 
@@ -3383,23 +3506,19 @@ impl TribeSimulation {
                 continue;
             }
 
-            // ── War or retreat path ───────────────────────────────────────
-            // Relative strength determines who retreats vs who attacks
+            // ── Strength comparison ───────────────────────────────────────
             let str_i = self.tribes[i].population as f32 * self.tribes[i].stats.a_combat;
             let str_j = self.tribes[j].population as f32 * self.tribes[j].stats.a_combat;
-
-            // The more aggressive or stronger tribe declares war; the other retreats if clearly weaker
             let (aggressor, defender) = if aggr_i >= aggr_j { (i, j) } else { (j, i) };
             let aggressor_aggr = self.tribes[aggressor].last_outputs[0];
             let (str_atk, str_def) = if aggressor == i { (str_i, str_j) } else { (str_j, str_i) };
 
-            let defender_clearly_weaker = str_def < str_atk * 0.6;
-            let aggressor_wants_war = aggressor_aggr > 0.40;
+            let defender_clearly_weaker = str_def < str_atk * 0.5;  // raised from 0.6 — needs to be more lopsided
+            let aggressor_wants_war     = aggressor_aggr > 0.55;     // raised from 0.40 — needs real aggression
 
             if aggressor_wants_war && !defender_clearly_weaker {
                 // ── War path ──────────────────────────────────────────────
-                // BP: Skip war declaration if aggressor is still in post-war exhaustion.
-                // Dispute stays open; will be re-evaluated at next 30-tick cycle.
+                // BP: Skip if aggressor is still in post-war exhaustion; re-evaluate next cycle.
                 if self.tribes[aggressor].war_exhaustion_ticks > 0 { continue; }
 
                 if !matches!(self.tribes[aggressor].behavior, BehaviorState::AtWar | BehaviorState::Imploding) {
@@ -3411,6 +3530,17 @@ impl TribeSimulation {
                     let def_id = self.tribes[defender].id as u32;
                     let battle_tile = self.tribes[defender].home_tile as u32;
                     let gen = self.generation;
+
+                    // Collect the specific tiles at stake for this border dispute
+                    let border_contested: Vec<u32> = self.tribes[defender].territory.iter()
+                        .map(|&t| t as usize)
+                        .filter(|&t| {
+                            self.world.tile_is_disputed[t]
+                                && self.world.get_tile_occupants(t).iter().any(|o| o.tribe_id == atk_id)
+                                && self.world.get_tile_occupants(t).iter().any(|o| o.tribe_id == def_id)
+                        })
+                        .map(|t| t as u32)
+                        .collect();
 
                     let already = self.active_wars.iter().any(|w| {
                         w.status == crate::war::WarStatus::Active
@@ -3426,9 +3556,11 @@ impl TribeSimulation {
                             defender_id: def_id,
                             start_tick: tick,
                             status: crate::war::WarStatus::Active,
+                            kind: crate::war::WarKind::BorderDispute,
                             attacker_casualties: 0,
                             defender_casualties: 0,
                             battle_tile: Some(battle_tile),
+                            contested_tiles: border_contested,
                         });
                         let mut ev = crate::events::SimulationEvent::new(
                             0, tick, gen,
@@ -3455,14 +3587,14 @@ impl TribeSimulation {
                     }
                     self.dispute_registry.remove(&(i, j));
                 }
-            } else {
-                // ── Retreat path ──────────────────────────────────────────
-                // Weaker tribe (defender) yields all tiles disputed with the aggressor
+            } else if defender_clearly_weaker {
+                // ── Partial retreat path ──────────────────────────────────
+                // Weaker tribe yields roughly half its disputed tiles with this aggressor,
+                // keeping the rest as a stable fractional border (v3 §4 60/40 mechanic).
                 let def_id = self.tribes[defender].id as u32;
                 let atk_id = self.tribes[aggressor].id as u32;
 
-                // Collect tiles to yield: disputed tiles where defender is a co-occupant with aggressor
-                let tiles_to_yield: Vec<usize> = self.tribes[defender].territory.iter()
+                let mut contested: Vec<usize> = self.tribes[defender].territory.iter()
                     .map(|&t| t as usize)
                     .filter(|&t| {
                         self.world.tile_is_disputed[t]
@@ -3471,11 +3603,16 @@ impl TribeSimulation {
                     })
                     .collect();
 
-                for tile in &tiles_to_yield {
-                    self.world.remove_tile_occupant(*tile, def_id);
+                // Yield only the first half (by tile index order) — the rest remain as
+                // stable fractional border claims. The dispute is closed; the remaining
+                // co-occupied tiles will form a new dispute entry naturally next registry scan.
+                let yield_count = (contested.len() + 1) / 2;
+                contested.truncate(yield_count);
+
+                for &tile in &contested {
+                    self.world.remove_tile_occupant(tile, def_id);
                 }
-                // Purge yielded tiles from the defender's territory vec
-                self.tribes[defender].territory.retain(|&t| !tiles_to_yield.contains(&(t as usize)));
+                self.tribes[defender].territory.retain(|&t| !contested.contains(&(t as usize)));
 
                 self.dispute_registry.remove(&(i, j));
 
@@ -3487,10 +3624,26 @@ impl TribeSimulation {
                     def_id,
                 );
                 ev.other_tribe_id = atk_id;
-                ev.flags = 3; // resolution_kind = retreat
+                ev.flags = 3; // resolution_kind = partial retreat
                 self.push_event(ev);
                 if !self.config.headless {
-                    println!("[DISPUTE tick={}] tribe_{} retreats from tribe_{} ({} tiles yielded)", tick, def_id, atk_id, tiles_to_yield.len());
+                    println!("[DISPUTE tick={}] tribe_{} partially retreats from tribe_{} ({}/{} tiles yielded, {} remain as fractional border)",
+                        tick, def_id, atk_id, yield_count, contested.len() + yield_count,
+                        contested.len() + yield_count - yield_count);
+                }
+            } else {
+                // ── Frozen border path ────────────────────────────────────
+                // Neither side is aggressive enough to go to war nor weak enough to fully
+                // retreat. The fractional claims persist as a stable contested border.
+                // Re-open the dispute after FROZEN_BORDER_RECHECK_TICKS so it gets
+                // re-evaluated when circumstances change (population shift, neural drift).
+                *self.dispute_registry.get_mut(&(i, j)).unwrap() = tick + Self::FROZEN_BORDER_RECHECK_TICKS;
+
+                let id_i = self.tribes[i].id as u32;
+                let id_j = self.tribes[j].id as u32;
+                if !self.config.headless {
+                    println!("[DISPUTE tick={}] tribe_{} <-> tribe_{}: frozen border stalemate, recheck in {} ticks",
+                        tick, id_i, id_j, Self::FROZEN_BORDER_RECHECK_TICKS);
                 }
             }
         }
@@ -4973,9 +5126,9 @@ mod harness_tests {
             // Pre-register dispute at tick 0 so age will be exactly DISPUTE_GRACE_TICKS when we step
             sim.dispute_registry.insert((0, 1), 0);
 
-            // Jump to one tick before a dispute-resolution cycle (multiple of 30) >= 180
-            // step() → tick=180, 180%30==0 → apply_dispute_resolution runs, age=180 ≥ 180 → expired
-            sim.tick = 179;
+            // Jump to one tick before a dispute-resolution cycle (multiple of 30) >= 300
+            // step() → tick=300, 300%30==0 → apply_dispute_resolution runs, age=300 ≥ 300 → expired
+            sim.tick = 299;
         }
 
         sim_arc.write().step();
