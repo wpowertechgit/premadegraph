@@ -356,9 +356,10 @@ public sealed class TombstonePanel
         // Cause of death
         var (causeLabel, causeColor) = tombstone.Reason switch
         {
-            PlayableExtinctionReason.Starvation => ("STARVE", DeathColor),
-            PlayableExtinctionReason.Merger => ("MERGE", MergerColor),
-            _ => ("UNKNOWN", MutedColor),
+            PlayableExtinctionReason.Starvation => ("STARVE",   DeathColor),
+            PlayableExtinctionReason.Merger     => ("MERGE",    MergerColor),
+            PlayableExtinctionReason.Combat     => ("CONQUER",  DeathColor),
+            _                                   => ("UNKNOWN",  MutedColor),
         };
         _font!.DrawString(spriteBatch, causeLabel, new Vector2(x + 250, y), FontSize.Body, causeColor);
     }
@@ -470,9 +471,11 @@ public sealed class TombstonePanel
         y += smallHeight + 4;
 
         var endIdx = Math.Min(_scrollOffset + MaxVisibleRows, sorted.Count);
+        _rowRects.Clear();
         for (var i = _scrollOffset; i < endIdx; i++)
         {
             var rec = sorted[i];
+            var rowStartY = y;
             _font.DrawString(spriteBatch, rec.TickDied.ToString(), new Vector2(x, y), FontSize.Body, TextColor);
             _font.DrawString(spriteBatch, Truncate(rec.ClusterId, 14), new Vector2(x + 70, y), FontSize.Body, TextColor);
             y += lineHeight;
@@ -483,6 +486,8 @@ public sealed class TombstonePanel
             var founderColor = rec.FounderPuuids.Count > 0 ? AccentColor : MutedColor;
             _font.DrawString(spriteBatch, founderText, new Vector2(x + 12, y), FontSize.Small, founderColor);
             y += smallHeight + 2;
+
+            _rowRects.Add((new Rectangle(x, rowStartY, PanelWidth - PanelMargin * 2, y - rowStartY), (int)rec.TribeId));
 
             if (i < endIdx - 1)
                 FillRect(spriteBatch, new Rectangle(x, y - 1, PanelWidth - PanelMargin * 2 - 8, 1), new Color(255, 255, 255, 6));

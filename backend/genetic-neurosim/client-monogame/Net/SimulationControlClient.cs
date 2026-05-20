@@ -4,11 +4,26 @@ using TribalNeuroSim.Client.Models;
 
 namespace TribalNeuroSim.Client.Net;
 
+public sealed record TombstoneArtifactsDto(
+    [property: JsonPropertyName("a_combat")]       float Combat,
+    [property: JsonPropertyName("a_risk")]         float Risk,
+    [property: JsonPropertyName("a_resource")]     float Resource,
+    [property: JsonPropertyName("a_map_objective")] float MapObjective,
+    [property: JsonPropertyName("a_team")]         float Team);
+
 public sealed record TombstoneFounderDto(
-    [property: JsonPropertyName("tribe_id")] uint TribeId,
-    [property: JsonPropertyName("cluster_id")] string ClusterId,
-    [property: JsonPropertyName("tick_died")] ulong TickDied,
-    [property: JsonPropertyName("founder_puuids")] List<string> FounderPuuids);
+    [property: JsonPropertyName("tribe_id")]           uint TribeId,
+    [property: JsonPropertyName("cluster_id")]         string ClusterId,
+    [property: JsonPropertyName("tick_died")]          ulong TickDied,
+    [property: JsonPropertyName("generation_died")]    uint GenerationDied,
+    [property: JsonPropertyName("population_at_death")] uint PopulationAtDeath,
+    [property: JsonPropertyName("max_population")]     uint MaxPopulation,
+    [property: JsonPropertyName("territory_at_death")] int TerritoryAtDeath,
+    [property: JsonPropertyName("polity_tier_reached")] string PolityTierReached,
+    [property: JsonPropertyName("cause")]              string Cause,
+    [property: JsonPropertyName("final_artifacts")]    TombstoneArtifactsDto? FinalArtifacts,
+    [property: JsonPropertyName("founder_puuids")]     List<string> FounderPuuids,
+    [property: JsonPropertyName("founder_names")]      List<string> FounderNames);
 
 public sealed record TombstonesResponseDto(
     [property: JsonPropertyName("count")] int Count,

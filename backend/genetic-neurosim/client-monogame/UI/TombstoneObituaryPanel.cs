@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TribalNeuroSim.Client.Domain;
 using TribalNeuroSim.Client.Models;
+using TribalNeuroSim.Client.Net;
 using TribalNeuroSim.Client.Protocol;
 using TribalNeuroSim.Client.Rendering;
 
@@ -12,7 +13,7 @@ public sealed class TombstoneObituaryPanel
     private const int PanelWidth = 380;
     private const int PanelMargin = 14;
 
-    private static readonly Color PanelColor     = new(10, 12, 16, 220);
+    private static readonly Color PanelColor     = new(10, 12, 16, 255);
     private static readonly Color BorderColor     = new(255, 255, 255, 40);
     private static readonly Color AccentColor     = new(103, 188, 255, 230);
     private static readonly Color TextColor       = new(228, 235, 224, 245);
@@ -184,6 +185,159 @@ public sealed class TombstoneObituaryPanel
 
         DrawLabelValue(spriteBatch, x, y, lh, "MAX TILES", tombstone.MaxTilesReached.ToString(), TextColor);
         y += lh + 2;
+
+        spriteBatch.End();
+    }
+
+    public void DrawNetwork(
+        SpriteBatch spriteBatch,
+        TombstoneFounderDto record,
+        FontRenderer fontRenderer,
+        Point origin)
+    {
+        ArgumentNullException.ThrowIfNull(spriteBatch);
+
+        if (_font is null || !ReferenceEquals(_gd, spriteBatch.GraphicsDevice))
+        {
+            _pixel?.Dispose();
+            _gd = spriteBatch.GraphicsDevice;
+            _pixel = new Texture2D(_gd, 1, 1);
+            _pixel.SetData(new[] { Color.White });
+            _font = fontRenderer;
+        }
+
+        var lh = _font.LineHeight(FontSize.Body);
+        var sh = _font.LineHeight(FontSize.Small);
+        var hh = _font.LineHeight(FontSize.Header);
+        var founderCount = record.FounderPuuids.Count;
+        var hasArtifacts = record.FinalArtifacts is not null;
+
+        var cause = record.Cause ?? string.Empty;
+
+        // Parse cause string for conqueror/absorber tribe ID
+        string? byTribeId = null;
+        if (cause.StartsWith("conquered-by-") || cause.StartsWith("absorbed-by-"))
+            byTribeId = cause[(cause.LastIndexOf('-') + 1)..];
+
+        // Fate label derived from cause string
+        var (fateLabel, fateColor, accentColor) = cause switch
+        {
+            var c when c.StartsWith("conquered") => ("CONQUERED (absorbed)", DeathColor,  DeathColor),
+            var c when c.StartsWith("absorbed")  => ("MERGED (alliance)",    MergerColor, MergerColor),
+            "starved"                             => ("STARVED (food collapse)", WarColor, WarColor),
+            "imploded"                            => ("IMPLODED",             WarColor,    WarColor),
+            _                                    => ("UNKNOWN",               MutedColor,  AccentColor),
+        };
+
+        var panelHeight =
+            PanelMargin
+            + hh + 4                          // title
+            + lh + 2                          // fate
+            + (byTribeId != null ? lh + 2 : 0) // by tribe
+            + lh + 2                          // died at tick
+            + lh + 2                          // cluster
+            + lh + 2                          // generation
+            + lh + 2                          // pop at death / max pop
+            + lh + 2                          // tiles at death
+            + lh + 2                          // polity tier
+            + (hasArtifacts ? 6 + sh + 6 + 5 * (sh + 3) : 0)  // artifact section
+            + 6 + sh + 6                      // founders section header
+            + Math.Max(1, founderCount) * (lh + sh + 5)  // name + puuid per founder
+            + PanelMargin;
+
+        var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
+        LastBounds = panel;
+
+        spriteBatch.Begin(
+            sortMode: SpriteSortMode.Deferred,
+            blendState: BlendState.AlphaBlend,
+            samplerState: SamplerState.LinearClamp);
+
+        FillRect(spriteBatch, panel, PanelColor);
+        DrawOutline(spriteBatch, panel, BorderColor, 1);
+        FillRect(spriteBatch, new Rectangle(panel.X, panel.Y, 4, panel.Height), accentColor with { A = 200 });
+
+        var x = panel.X + PanelMargin + 4;
+        var y = panel.Y + PanelMargin;
+        var contentW = PanelWidth - PanelMargin * 2 - 4;
+
+        _font.DrawString(spriteBatch, "OBITUARY", new Vector2(x, y), FontSize.Header, AccentColor);
+        _font.DrawString(spriteBatch, $"Tribe {record.TribeId}", new Vector2(x + 90, y), FontSize.Header, TextColor);
+
+        _closeBtnRect = new Rectangle(panel.Right - PanelMargin - 22, y, 22, hh);
+        FillRect(spriteBatch, _closeBtnRect, CloseBtnColor with { A = 160 });
+        DrawOutline(spriteBatch, _closeBtnRect, BorderColor, 1);
+        _font.DrawString(spriteBatch, "X", new Vector2(_closeBtnRect.X + 7, y), FontSize.Body, TextColor);
+        y += hh + 4;
+
+        DrawLabelValue(spriteBatch, x, y, lh, "FATE", fateLabel, fateColor);
+        y += lh + 2;
+
+        if (byTribeId != null)
+        {
+            var byLabel = cause.StartsWith("absorbed") ? "MERGED INTO" : "ABSORBED BY";
+            DrawLabelValue(spriteBatch, x, y, lh, byLabel, $"Tribe {byTribeId}", MutedColor);
+            y += lh + 2;
+        }
+
+        DrawLabelValue(spriteBatch, x, y, lh, "DIED AT TICK", record.TickDied.ToString(), MutedColor);
+        y += lh + 2;
+
+        DrawLabelValue(spriteBatch, x, y, lh, "CLUSTER", record.ClusterId, AccentColor);
+        y += lh + 2;
+
+        DrawLabelValue(spriteBatch, x, y, lh, "GENERATION", record.GenerationDied.ToString(), TextColor);
+        y += lh + 2;
+
+        var popStr = cause.StartsWith("conquered") || cause.StartsWith("absorbed")
+            ? $"transferred (max: {record.MaxPopulation:N0})"
+            : $"{record.PopulationAtDeath:N0} / {record.MaxPopulation:N0}";
+        DrawLabelValue(spriteBatch, x, y, lh, "POP AT DEATH", popStr, TextColor);
+        y += lh + 2;
+
+        DrawLabelValue(spriteBatch, x, y, lh, "TILES AT DEATH", record.TerritoryAtDeath.ToString(), TextColor);
+        y += lh + 2;
+
+        DrawLabelValue(spriteBatch, x, y, lh, "POLITY TIER", (record.PolityTierReached ?? "UNKNOWN").ToUpperInvariant(), AccentColor);
+        y += lh + 2;
+
+        if (hasArtifacts)
+        {
+            y += 6;
+            DrawSectionHeader(spriteBatch, x, y, contentW, sh, "NEURAL ARTIFACTS AT DEATH");
+            y += sh + 6;
+
+            var art = record.FinalArtifacts!;
+            var av = new ArtifactVector(art.Combat, art.Risk, art.Resource, art.MapObjective, art.Team);
+            DrawArtifactBars(spriteBatch, x, y, contentW, sh, av, null);
+            y += 5 * (sh + 3);
+        }
+
+        y += 6;
+        DrawSectionHeader(spriteBatch, x, y, contentW, sh, "FOUNDERS");
+        y += sh + 6;
+
+        if (founderCount == 0)
+        {
+            _font.DrawString(spriteBatch, "no founders linked", new Vector2(x, y), FontSize.Small, MutedColor);
+        }
+        else
+        {
+            for (var i = 0; i < founderCount; i++)
+            {
+                var puuid = record.FounderPuuids[i];
+                var rawName = record.FounderNames is { Count: > 0 } fn && i < fn.Count ? fn[i] : null;
+                // treat as unnamed if null, empty, or identical to the puuid (no DB entry)
+                var isUnnamed = string.IsNullOrEmpty(rawName) || rawName == puuid;
+                var name = isUnnamed ? "—" : rawName!;
+                var puuidDisplay = puuid.Length > 34 ? puuid[..34] : puuid;
+
+                _font.DrawString(spriteBatch, name, new Vector2(x, y), FontSize.Body, TextColor);
+                y += lh;
+                _font.DrawString(spriteBatch, puuidDisplay, new Vector2(x + 4, y), FontSize.Small, MutedColor);
+                y += sh + 5;
+            }
+        }
 
         spriteBatch.End();
     }

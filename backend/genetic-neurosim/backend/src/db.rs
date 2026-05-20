@@ -87,6 +87,7 @@ impl Database {
                 feed_risk: 0.0,
                 cluster_size: 0,
                 founder_puuids: vec![],
+                founder_names: vec![],
             })
             .collect();
 

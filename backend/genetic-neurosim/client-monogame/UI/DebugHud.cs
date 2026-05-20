@@ -152,7 +152,7 @@ public sealed class DebugHud : IDisposable
         var y = panel.Y + PanelMargin;
 
         // Title
-        _font.DrawString(spriteBatch, "TRIBAL NEUROSIM v3", new Vector2(x, y), FontSize.Header, AccentColor);
+        _font.DrawString(spriteBatch, "TRIBAL NEUROSIM", new Vector2(x, y), FontSize.Header, AccentColor);
         y += _font.LineHeight(FontSize.Header) + 4;
 
         // Row: MODE

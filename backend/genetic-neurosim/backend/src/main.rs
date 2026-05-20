@@ -412,6 +412,7 @@ fn synthetic_validation_clusters(count: usize) -> Vec<simulation::ClusterProfile
                 feed_risk:             n(2.0 + (i % 6) as f32 * 0.45),
                 cluster_size,
                 founder_puuids: vec![],
+                founder_names:  vec![],
             }
         })
         .collect()
@@ -1172,20 +1173,20 @@ async fn ws_desktop_v2_client(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
     let mut rx = state.frame_v1_tx.subscribe();
 
-    // Send initial V1 frame
-    let v1_payload = state.simulation.read().current_packet_v1();
-    let wrapped_initial = if !v1_payload.is_empty() {
-        let (tick, gen, alive) = {
-            let sim = state.simulation.read();
-            (
+    // Send initial V1 frame — single lock so payload and envelope tribe count are consistent
+    let wrapped_initial = {
+        let sim = state.simulation.read();
+        let v1_payload = sim.current_packet_v1();
+        if !v1_payload.is_empty() {
+            Some(wrap_frame_v1(
+                &v1_payload,
                 sim.simulation_tick(),
                 sim.simulation_generation(),
                 sim.alive_tribe_count(),
-            )
-        };
-        Some(wrap_frame_v1(&v1_payload, tick, gen, alive))
-    } else {
-        None
+            ))
+        } else {
+            None
+        }
     };
     if let Some(wrapped) = wrapped_initial {
         if sender.send(Message::Binary(wrapped.into())).await.is_err() {

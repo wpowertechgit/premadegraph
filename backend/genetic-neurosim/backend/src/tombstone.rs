@@ -42,7 +42,9 @@ pub struct TombstoneRecord {
     pub tick_died: u64,
     pub generation_died: u32,
     pub population_at_death: u32,
+    pub max_population: u32,
     pub territory_at_death: usize,
+    pub polity_tier_reached: String,
     pub cause: String,
     pub extinction_cause: ExtinctionCause,
     /// Compact lineage summary: seed cluster references and generation milestones.
@@ -51,6 +53,8 @@ pub struct TombstoneRecord {
     /// PUUIDs of the founding players from the flexset cluster profile.
     /// Links the simulation tribe back to real League of Legends players.
     pub founder_puuids: Vec<String>,
+    /// Display names resolved from the dataset DB at tribe creation time.
+    pub founder_names: Vec<String>,
 }
 
 // ─── TombstoneLedger ─────────────────────────────────────────────────────────
@@ -84,9 +88,8 @@ impl TombstoneLedger {
             .cloned()
             .collect();
 
-        let founder_puuids: Vec<String> = tribe.founders.iter()
-            .map(|f| f.puuid.clone())
-            .collect();
+        let founder_puuids: Vec<String> = tribe.founders.iter().map(|f| f.puuid.clone()).collect();
+        let founder_names: Vec<String>  = tribe.founders.iter().map(|f| f.name.clone()).collect();
 
         self.records.push(TombstoneRecord {
             tribe_id: tribe.id as u32,
@@ -94,7 +97,9 @@ impl TombstoneLedger {
             tick_died: tick,
             generation_died: tribe.generation,
             population_at_death: tribe.population,
+            max_population: tribe.max_population,
             territory_at_death: tribe.territory.len(),
+            polity_tier_reached: format!("{:?}", tribe.polity_tier),
             cause: extinction_cause.to_cause_string(),
             extinction_cause,
             lineage_summary,
@@ -106,6 +111,7 @@ impl TombstoneLedger {
                 a_team: tribe.stats.a_team,
             },
             founder_puuids,
+            founder_names,
         });
     }
 
@@ -226,8 +232,8 @@ mod tests {
         let mut ledger = TombstoneLedger::new();
         let mut tribe = make_tribe(9, vec![]);
         tribe.founders = vec![
-            FounderTag { puuid: "puuid-aaa".into(), inherited_at_generation: 0 },
-            FounderTag { puuid: "puuid-bbb".into(), inherited_at_generation: 0 },
+            FounderTag { puuid: "puuid-aaa".into(), name: "PlayerA".into(), inherited_at_generation: 0 },
+            FounderTag { puuid: "puuid-bbb".into(), name: "PlayerB".into(), inherited_at_generation: 0 },
         ];
         ledger.record_death(&tribe, 100, ExtinctionCause::Starved);
         let rec = &ledger.all_records()[0];

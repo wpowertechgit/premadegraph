@@ -23,7 +23,7 @@ RUN python3 -m venv /opt/venv
 COPY package*.json ./
 
 RUN npm install
-RUN pip install --no-cache-dir networkx pyvis requests python-dotenv
+RUN pip install --no-cache-dir requests python-dotenv
 
 COPY . .
 

@@ -8,7 +8,7 @@ const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const PORT = 3001;
 const DB_EXPLORER_ORIGIN = process.env.DB_EXPLORER_ORIGIN || "http://localhost:5088";
-const { execFile, spawn } = require("child_process");
+const { spawn } = require("child_process");
 const { normalizePlayersByPuuid } = require("./normalize_players_by_puuid");
 const {
   runSearch: runPrototypePathfinderSearch,
@@ -2676,23 +2676,19 @@ app.post('/api/save-player', (req, res) => {
   });
 });
 
-app.post("/api/generate-graph", (req, res) => {
-  execFile(
-    "python",
-    ["build_graph.py", "--connected-only", "--min-weight", "2"],
-    { cwd: backendDir, env: { ...process.env, ...getActiveRustEnv() } },
-    (error, stdout, stderr) => {
-    if (error) {
-      console.error("Python script error:", error);
-      return res.status(500).json({ message: "Python script execution failed." });
-    }
-    if (stderr) {
-      console.warn("Python script stderr:", stderr);
-    }
-    console.log("Graph generated successfully.");
-    res.json({ message: "Graph generation completed." });
-    },
-  );
+app.post("/api/generate-graph", async (req, res) => {
+  try {
+    const dataset = getActiveDataset();
+    await startGraphV2ExportForDataset(dataset, { force: true });
+    const manifest = readJsonFile(getGraphV2ArtifactPathsForDataset(dataset).manifest);
+    res.json({
+      message: "Rust Graph V2 generation completed.",
+      manifest,
+    });
+  } catch (error) {
+    console.error("Rust graph generation failed:", error.message);
+    res.status(error.statusCode || 500).json({ message: error.message || "Rust graph generation failed." });
+  }
 });
 
 app.get("/api/graph", (req, res) => {
@@ -3330,8 +3326,29 @@ async function computeNeurosimClusterProfiles(dataset) {
         a_map_objective: round4(a4),
         a_team:          round4(a5),
         founder_puuids:  r.member_puuids ? r.member_puuids.split(',') : [],
+        founder_names:   [],  // populated below
       };
     });
+
+    // Batch-resolve puuid → player name (SQLite param limit = 999, batch at 500)
+    const allPuuids = [...new Set(clusters.flatMap((c) => c.founder_puuids))];
+    if (allPuuids.length > 0) {
+      const nameMap = new Map();
+      const BATCH = 500;
+      for (let i = 0; i < allPuuids.length; i += BATCH) {
+        const batch = allPuuids.slice(i, i + BATCH);
+        const placeholders = batch.map(() => '?').join(',');
+        const rows = await sqliteAll(
+          db,
+          `SELECT puuid, names FROM players WHERE puuid IN (${placeholders})`,
+          batch,
+        );
+        for (const row of rows) nameMap.set(row.puuid, row.names || row.puuid);
+      }
+      for (const cluster of clusters) {
+        cluster.founder_names = cluster.founder_puuids.map((p) => nameMap.get(p) ?? p);
+      }
+    }
 
     return {
       datasetId: dataset.id,

@@ -7,3 +7,12 @@ README.md
 .DS_Store
 __pycache__
 pathfinder-rust/target
+pathfinder-rust/cache
+genetic-neurosim
+data/matches
+data/cache
+output
+*.log
+pathfinder_replays*.json
+players.db-shm
+players.db-wal

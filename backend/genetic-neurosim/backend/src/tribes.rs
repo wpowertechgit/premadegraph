@@ -84,6 +84,7 @@ impl Default for RiverCrossing {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FounderTag {
     pub puuid: String,
+    pub name: String,
     pub inherited_at_generation: u32,
 }
 
@@ -212,8 +213,10 @@ impl TribeState {
         let founders = profile
             .founder_puuids
             .iter()
-            .map(|p| FounderTag {
+            .enumerate()
+            .map(|(i, p)| FounderTag {
                 puuid: p.clone(),
+                name: profile.founder_names.get(i).cloned().unwrap_or_default(),
                 inherited_at_generation: 0,
             })
             .collect();

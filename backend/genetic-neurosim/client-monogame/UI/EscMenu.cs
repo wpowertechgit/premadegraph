@@ -87,7 +87,7 @@ public sealed class EscMenu : IDisposable
         var cx = panel.X + PanelPadding + 4;
         var cy = panel.Y + PanelPadding;
 
-        _font.DrawString(spriteBatch, "TRIBAL NEUROSIM v3", new Vector2(cx, cy), FontSize.Header, AccentColor);
+        _font.DrawString(spriteBatch, "TRIBAL NEUROSIM", new Vector2(cx, cy), FontSize.Header, AccentColor);
         cy += headerH + 8;
 
         // Buttons

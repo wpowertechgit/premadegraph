@@ -118,7 +118,7 @@ public sealed class GameRoot : Game
 
         IsMouseVisible = true;
         Window.AllowUserResizing = true;
-        Window.Title = "Tribal NeuroSim v3";
+        Window.Title = "Tribal NeuroSim";
 
         _connection = new SimulationConnection();
         _frameDecoder = new FrameDecoder();
@@ -567,35 +567,47 @@ public sealed class GameRoot : Game
             // Obituary popup (shown when a tombstone row is clicked)
             if (_obituaryVisible && _obituaryTribeId.HasValue && _panelFontRenderer is not null)
             {
-                var tombstone = _playableSimulation.Tombstones
-                    .FirstOrDefault(t => t.TribeId == _obituaryTribeId.Value);
-                if (tombstone is not null)
+                var defaultObituaryOrigin = new Point(
+                    GraphicsDevice.Viewport.Width / 2 - 190,
+                    GraphicsDevice.Viewport.Height / 2 - 200);
+                var obituaryOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.Obituary, defaultObituaryOrigin);
+
+                if (_useNetworkRender)
                 {
-                    var tribeNameForObit = _playableSimulation.Tribes
-                        .FirstOrDefault(t => t.Id == tombstone.TribeId)?.Name
-                        ?? $"Tribe {tombstone.TribeId}";
-                    string? absorbedByName = null;
-                    if (tombstone.AbsorbedByTribeId.HasValue)
-                        absorbedByName = _playableSimulation.Tribes
-                            .FirstOrDefault(t => t.Id == tombstone.AbsorbedByTribeId.Value)?.Name
-                            ?? $"Tribe {tombstone.AbsorbedByTribeId.Value}";
-
-                    var defaultObituaryOrigin = new Point(
-                        GraphicsDevice.Viewport.Width / 2 - 190,
-                        GraphicsDevice.Viewport.Height / 2 - 200);
-                    var obituaryOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.Obituary, defaultObituaryOrigin);
-
-                    _obituaryPanel.Draw(
-                        _spriteBatch,
-                        tombstone,
-                        tribeNameForObit,
-                        absorbedByName,
-                        _panelFontRenderer,
-                        obituaryOrigin);
+                    var netRec = _serverTombstones?.Records
+                        .FirstOrDefault(r => (int)r.TribeId == _obituaryTribeId.Value);
+                    if (netRec is not null)
+                        _obituaryPanel.DrawNetwork(_spriteBatch, netRec, _panelFontRenderer, obituaryOrigin);
+                    else
+                        _obituaryVisible = false;
                 }
                 else
                 {
-                    _obituaryVisible = false;
+                    var tombstone = _playableSimulation.Tombstones
+                        .FirstOrDefault(t => t.TribeId == _obituaryTribeId.Value);
+                    if (tombstone is not null)
+                    {
+                        var tribeNameForObit = _playableSimulation.Tribes
+                            .FirstOrDefault(t => t.Id == tombstone.TribeId)?.Name
+                            ?? $"Tribe {tombstone.TribeId}";
+                        string? absorbedByName = null;
+                        if (tombstone.AbsorbedByTribeId.HasValue)
+                            absorbedByName = _playableSimulation.Tribes
+                                .FirstOrDefault(t => t.Id == tombstone.AbsorbedByTribeId.Value)?.Name
+                                ?? $"Tribe {tombstone.AbsorbedByTribeId.Value}";
+
+                        _obituaryPanel.Draw(
+                            _spriteBatch,
+                            tombstone,
+                            tribeNameForObit,
+                            absorbedByName,
+                            _panelFontRenderer,
+                            obituaryOrigin);
+                    }
+                    else
+                    {
+                        _obituaryVisible = false;
+                    }
                 }
             }
 
@@ -1212,7 +1224,7 @@ public sealed class GameRoot : Game
             var tick = _viewModel.Tick;
             var endpoint = _diagnostics.IsConnected ? "node connected" : "node connecting...";
 
-            Window.Title = $"Tribal NeuroSim v3 | network | tick {tick} | tribes {livingTribes} | disputes {disputedTiles} | {endpoint}";
+            Window.Title = $"Tribal NeuroSim | network | tick {tick} | tribes {livingTribes} | disputes {disputedTiles} | {endpoint}";
             return;
         }
 
@@ -1225,7 +1237,7 @@ public sealed class GameRoot : Game
         var mode = _playableSimulation.IsPaused ? "paused" : $"{_ticksPerSecond} tps";
         var localEndpoint = _diagnostics.IsConnected ? "node connected" : "local demo";
 
-        Window.Title = $"Tribal NeuroSim v3 | {mode} | tick {_playableSimulation.Tick} | tribes {localLivingTribes} | disputes {localDisputedTiles} | selected {selectedSummary} | {localEndpoint}";
+        Window.Title = $"Tribal NeuroSim | {mode} | tick {_playableSimulation.Tick} | tribes {localLivingTribes} | disputes {localDisputedTiles} | selected {selectedSummary} | {localEndpoint}";
     }
 
     private void LoadRuntimeTextures()
@@ -1477,7 +1489,7 @@ public sealed class GameRoot : Game
             var selectedNameStr = selectedV1Tribe is not null ? $"Tribe {selectedV1Tribe.Id} ({selectedTierLabel})" : null;
 
             return new DebugHudState(
-                ModeText: _diagnostics.IsConnected ? "NETWORK (FrameV1)" : "NETWORK (connecting...)",
+                ModeText: _diagnostics.IsConnected ? "NETWORK" : "NETWORK (connecting...)",
                 Tick: checked((long)_viewModel.Tick),
                 LivingTribes: v1Living,
                 DisputedTiles: v1Disputed,

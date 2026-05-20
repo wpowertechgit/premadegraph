@@ -91,6 +91,8 @@ pub struct ClusterProfile {
     // player identifiers through NeuroSim's own config/status APIs.
     #[serde(default, skip_serializing)]
     pub founder_puuids: Vec<String>,
+    #[serde(default, skip_serializing)]
+    pub founder_names: Vec<String>,
 }
 
 // ─── ControlConfig ───────────────────────────────────────────────────────────
@@ -974,6 +976,7 @@ fn scenario_cluster(id: &str, a_combat: f32, a_resource: f32) -> ClusterProfile 
         feed_risk:            0.25,
         cluster_size:         3,
         founder_puuids:       vec![],
+        founder_names:        vec![],
     }
 }
 

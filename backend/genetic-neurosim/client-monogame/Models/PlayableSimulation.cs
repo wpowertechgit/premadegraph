@@ -762,7 +762,7 @@ public sealed class PlayableSimulation
         {
             var merged = TryMergeTribes(key.FirstTribeId, key.SecondTribeId, tileId);
             if (!merged && _disputeCounts[key] >= DisputeWarThreshold)
-                TryDeclareWarBetween(key.FirstTribeId, key.SecondTribeId);
+                TryDeclareWarBetween(key.FirstTribeId, key.SecondTribeId, PlayableWarKind.BorderDispute);
         }
     }
 
@@ -1082,7 +1082,7 @@ public sealed class PlayableSimulation
         return true;
     }
 
-    private void TryDeclareWarBetween(int firstId, int secondId)
+    private void TryDeclareWarBetween(int firstId, int secondId, PlayableWarKind warKind = PlayableWarKind.FullScale)
     {
         var first  = Tribes.FirstOrDefault(t => t.Id == firstId  && t.IsAlive);
         var second = Tribes.FirstOrDefault(t => t.Id == secondId && t.IsAlive);
@@ -1103,6 +1103,8 @@ public sealed class PlayableSimulation
         aggressor.LastWarCause = warCause;
 
         aggressor.WarTargetTribeId = target.Id;
+        aggressor.WarKind = warKind;
+        aggressor.WarDeclaredTick = Tick;
         AddEvent(new PlayableEvent(Tick, PlayableEventKind.WarDeclared, aggressor.Id, target.Id, aggressor.MainCampTileId, 0, null));
     }
 
@@ -1134,6 +1136,8 @@ public sealed class PlayableSimulation
 
             tribe.LastWarCause = PlayableWarCause.OpportunityWar;
             tribe.WarTargetTribeId = target.Id;
+            tribe.WarKind = PlayableWarKind.FullScale;
+            tribe.WarDeclaredTick = Tick;
             AddEvent(new PlayableEvent(Tick, PlayableEventKind.WarDeclared, tribe.Id, target.Id, tribe.MainCampTileId, 0, null));
         }
     }
@@ -1163,6 +1167,15 @@ public sealed class PlayableSimulation
 
     private void ResolveCombatTick(PlayableTribe attacker, PlayableTribe defender)
     {
+        var isBorderDispute = attacker.WarKind == PlayableWarKind.BorderDispute;
+
+        // Border dispute timeout: resolve by tile transfer after 45 ticks
+        if (isBorderDispute && Tick - attacker.WarDeclaredTick >= 45)
+        {
+            ResolveBorderDispute(attacker, defender);
+            return;
+        }
+
         var atkNoise = 0.8f + (float)_random.NextDouble() * 0.4f;
         var defNoise = 0.8f + (float)_random.NextDouble() * 0.4f;
 
@@ -1170,11 +1183,23 @@ public sealed class PlayableSimulation
         var defStrength = defender.Population * (defender.Artifacts.Combat + HomelandDefenseBonus) * defNoise;
         var ratio = Math.Clamp(atkStrength / Math.Max(defStrength, 0.1f), 0.2f, 5f);
 
-        var defCas = Math.Max(1, (int)(defender.Population * 0.06f * ratio));
-        var atkCas = Math.Max(1, (int)(attacker.Population * 0.04f / ratio));
+        // Border disputes use lighter casualties — skirmish, not existential war
+        var casBase = isBorderDispute ? 0.015f : 0.06f;
+        var defCas = Math.Max(1, (int)(defender.Population * casBase * ratio));
+        var atkCas = Math.Max(1, (int)(attacker.Population * casBase / ratio));
 
         attacker.Population = Math.Max(0, attacker.Population - atkCas);
         defender.Population = Math.Max(0, defender.Population - defCas);
+
+        if (isBorderDispute)
+        {
+            // Floor both tribes at 10% of max pop — border wars never kill
+            var atkFloor = Math.Max(5, attacker.MaxPopulationReached / 10);
+            var defFloor = Math.Max(5, defender.MaxPopulationReached / 10);
+            if (attacker.Population < atkFloor) attacker.Population = atkFloor;
+            if (defender.Population < defFloor) defender.Population = defFloor;
+            return;
+        }
 
         var defRouted = defender.Population == 0
             || (attacker.Population > 0 && defender.Population < attacker.Population * SurrenderRatio);
@@ -1193,6 +1218,35 @@ public sealed class PlayableSimulation
             attacker.WarTargetTribeId = null;
             AbsorbTribe(attacker, defender);
         }
+    }
+
+    private void ResolveBorderDispute(PlayableTribe attacker, PlayableTribe defender)
+    {
+        // Winner = tribe with more population remaining
+        var winner = attacker.Population >= defender.Population ? attacker : defender;
+        var loser  = winner.Id == attacker.Id ? defender : attacker;
+
+        // Transfer tiles co-occupied by both tribes to winner
+        var transferred = 0;
+        foreach (var tileId in loser.Territory.ToList())
+        {
+            var tile = Tiles[tileId];
+            if (!tile.Controls.Any(c => c.TribeId == winner.Id)) continue;
+            loser.Territory.Remove(tileId);
+            tile.Controls.RemoveAll(c => c.TribeId == loser.Id);
+            NormalizeControls(tile);
+            transferred++;
+        }
+
+        attacker.WarTargetTribeId = null;
+        attacker.WarExhaustionTicks = PostWarExhaustionTicks / 2;
+
+        AddEvent(new PlayableEvent(
+            Tick, PlayableEventKind.BorderDisputeResolved,
+            winner.Id, loser.Id,
+            winner.MainCampTileId,
+            transferred,
+            null));
     }
 
     private void AbsorbTribe(PlayableTribe victor, PlayableTribe defeated)
@@ -1253,6 +1307,13 @@ public enum PlayableEventKind
     VeterancyBump,
     TierPromotion,
     Intimidation,
+    BorderDisputeResolved,
+}
+
+public enum PlayableWarKind
+{
+    FullScale,
+    BorderDispute,
 }
 
 public enum PlayableExtinctionReason
@@ -1406,6 +1467,8 @@ public sealed class PlayableTribe
 
     // War state
     public int? WarTargetTribeId { get; set; }
+    public PlayableWarKind WarKind { get; set; } = PlayableWarKind.FullScale;
+    public ulong WarDeclaredTick { get; set; }
     public ulong NextVeterancyTick { get; set; }
 
     // Obituary tracking

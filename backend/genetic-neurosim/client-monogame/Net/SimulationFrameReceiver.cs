@@ -46,7 +46,7 @@ public sealed class SimulationFrameReceiver
                     _decodedFrames.Enqueue(frame);
                     _diagnostics.RecordDecodedFrame(frame, payload.Length);
                 }
-                catch (Exception ex) when (ex is InvalidDataException or ArgumentException or OverflowException)
+                catch (Exception ex) when (ex is InvalidDataException or ArgumentException or OverflowException or IndexOutOfRangeException)
                 {
                     _diagnostics.RecordDecodeError(ex, payload.Length);
                 }
