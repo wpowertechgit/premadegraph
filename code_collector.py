@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 # A kimeneti fájl neve
 OUTPUT_FILE = "teljes_projekt_kod.txt"
@@ -76,9 +77,15 @@ def collect_code():
                         # Beolvassuk a fájlt
                         with open(file_path, 'r', encoding='utf-8') as infile:
                             content = infile.read()
+                        
+                        # Időbélyegek lekérdezése
+                        ctime = os.path.getctime(file_path)
+                        mtime = os.path.getmtime(file_path)
+                        date_created = datetime.fromtimestamp(ctime).strftime("%Y-%m-%d %H:%M:%S")
+                        date_modified = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
                             
                         # A kért fejléc formátum
-                        header = f"\n### {clean_path} #####\n"
+                        header = f"\n### {clean_path} | Date Created: {date_created} | Date Modified: {date_modified} #####\n"
                         
                         outfile.write(header)
                         outfile.write(content)

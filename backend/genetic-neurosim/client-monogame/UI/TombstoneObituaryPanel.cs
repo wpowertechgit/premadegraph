@@ -18,7 +18,7 @@ public sealed class TombstoneObituaryPanel
     private static readonly Color AccentColor     = new(103, 188, 255, 230);
     private static readonly Color TextColor       = new(228, 235, 224, 245);
     private static readonly Color MutedColor      = new(138, 150, 144, 210);
-    private static readonly Color SectionColor    = new(255, 255, 255, 14);
+    private static readonly Color SectionColor    = new(30,  45,  65,  210);
     private static readonly Color DeathColor      = new(220, 100, 100, 230);
     private static readonly Color MergerColor     = new(120, 210, 120, 220);
     private static readonly Color WarColor        = new(250, 195, 92, 240);
@@ -28,12 +28,23 @@ public sealed class TombstoneObituaryPanel
     private static readonly Color BarDeltaNeg     = new(220, 100, 100, 200);
     private static readonly Color CloseBtnColor   = new(200, 80, 80, 200);
 
+    private const int MaxVisibleFounders = 5;
+
     private Texture2D? _pixel;
     private FontRenderer? _font;
     private GraphicsDevice? _gd;
 
     public Rectangle LastBounds { get; private set; } = Rectangle.Empty;
     private Rectangle _closeBtnRect = Rectangle.Empty;
+    private int _founderScrollOffset;
+
+    public void HandleScroll(int scrollDelta, int mouseX, int mouseY)
+    {
+        if (!LastBounds.Contains(mouseX, mouseY)) return;
+        _founderScrollOffset -= scrollDelta / 120; // one notch = 120 units
+    }
+
+    public void ResetScroll() => _founderScrollOffset = 0;
 
     public bool HandleMouseClick(int mx, int my)
     {
@@ -212,6 +223,11 @@ public sealed class TombstoneObituaryPanel
         var founderCount = record.FounderPuuids.Count;
         var hasArtifacts = record.FinalArtifacts is not null;
 
+        // Clamp scroll offset to valid range
+        var maxScroll = Math.Max(0, founderCount - MaxVisibleFounders);
+        _founderScrollOffset = Math.Clamp(_founderScrollOffset, 0, maxScroll);
+        var visibleFounders = Math.Min(founderCount, MaxVisibleFounders);
+
         var cause = record.Cause ?? string.Empty;
 
         // Parse cause string for conqueror/absorber tribe ID
@@ -242,7 +258,8 @@ public sealed class TombstoneObituaryPanel
             + lh + 2                          // polity tier
             + (hasArtifacts ? 6 + sh + 6 + 5 * (sh + 3) : 0)  // artifact section
             + 6 + sh + 6                      // founders section header
-            + Math.Max(1, founderCount) * (lh + sh + 5)  // name + puuid per founder
+            + (founderCount > MaxVisibleFounders ? sh + 4 : 0)  // scroll hint row
+            + Math.Max(1, visibleFounders) * (lh + sh + 5)  // name + puuid per visible founder
             + PanelMargin;
 
         var panel = new Rectangle(origin.X, origin.Y, PanelWidth, panelHeight);
@@ -314,7 +331,10 @@ public sealed class TombstoneObituaryPanel
         }
 
         y += 6;
-        DrawSectionHeader(spriteBatch, x, y, contentW, sh, "FOUNDERS");
+        var founderHeader = founderCount > MaxVisibleFounders
+            ? $"FOUNDERS  ({_founderScrollOffset + 1}–{_founderScrollOffset + visibleFounders} of {founderCount})"
+            : "FOUNDERS";
+        DrawSectionHeader(spriteBatch, x, y, contentW, sh, founderHeader);
         y += sh + 6;
 
         if (founderCount == 0)
@@ -323,7 +343,15 @@ public sealed class TombstoneObituaryPanel
         }
         else
         {
-            for (var i = 0; i < founderCount; i++)
+            if (founderCount > MaxVisibleFounders)
+            {
+                var scrollHint = _founderScrollOffset > 0 && _founderScrollOffset < maxScroll
+                    ? "▲ scroll ▼"
+                    : _founderScrollOffset == 0 ? "scroll ▼" : "▲ scroll";
+                _font.DrawString(spriteBatch, scrollHint, new Vector2(x + contentW - 58, y - sh - 3), FontSize.Small, MutedColor);
+            }
+
+            for (var i = _founderScrollOffset; i < _founderScrollOffset + visibleFounders; i++)
             {
                 var puuid = record.FounderPuuids[i];
                 var rawName = record.FounderNames is { Count: > 0 } fn && i < fn.Count ? fn[i] : null;

@@ -12,12 +12,14 @@ public enum DraggablePanelId
     Lineage,
     Tombstone,
     Obituary,
+    WarDispute,
 }
 
 public sealed class PanelDragController
 {
     private static readonly DraggablePanelId[] HitTestOrder =
     [
+        DraggablePanelId.WarDispute,
         DraggablePanelId.Obituary,
         DraggablePanelId.Selection,
         DraggablePanelId.Performance,

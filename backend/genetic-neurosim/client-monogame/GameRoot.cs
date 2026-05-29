@@ -88,6 +88,11 @@ public sealed class GameRoot : Game
     private bool _obituaryVisible;
     private int? _obituaryTribeId;
 
+    // Wars & Disputes popup panel
+    private readonly WarDisputePanel _warDisputePanel = new();
+    private bool _warDisputeVisible;
+    private List<WarDisplayEntry> _cachedWarEntries = new();
+
     // Simulation complete / export state
     private string? _lastExportPath;
     private double _exportMessageTimer;
@@ -275,6 +280,14 @@ public sealed class GameRoot : Game
 
         if (_exportMessageTimer > 0)
             _exportMessageTimer -= gameTime.ElapsedGameTime.TotalSeconds;
+
+        // Forward scroll wheel to obituary panel for founder list scrolling
+        if (_obituaryVisible)
+        {
+            var scrollDelta = mouse.ScrollWheelValue - _previousMouse.ScrollWheelValue;
+            if (scrollDelta != 0)
+                _obituaryPanel.HandleScroll(scrollDelta, mouse.X, mouse.Y);
+        }
 
         _previousKeyboard = keyboard;
         _previousMouse = mouse;
@@ -609,6 +622,35 @@ public sealed class GameRoot : Game
                         _obituaryVisible = false;
                     }
                 }
+            }
+
+            // Wars & Disputes popup
+            if (_warDisputeVisible && _panelFontRenderer is not null)
+            {
+                _cachedWarEntries = BuildWarEntries();
+                var ms = Mouse.GetState();
+
+                var disputedTileCount = _useNetworkRender
+                    ? _viewModel.TileData.Count(kv => kv.Value.IsDisputed)
+                    : _playableSimulation.DisputedTileCount;
+
+                var defaultWarPanelOrigin = new Point(
+                    GraphicsDevice.Viewport.Width / 2 - WarDisputePanel.PanelWidthConst / 2,
+                    GraphicsDevice.Viewport.Height / 2 - 160);
+                var warPanelOrigin = _panelDragController.ResolveOrigin(DraggablePanelId.WarDispute, defaultWarPanelOrigin);
+
+                _warDisputePanel.Draw(
+                    _spriteBatch,
+                    _cachedWarEntries,
+                    disputedTileCount,
+                    _panelFontRenderer,
+                    warPanelOrigin,
+                    ms.X,
+                    ms.Y);
+            }
+            else
+            {
+                _cachedWarEntries.Clear();
             }
 
             // Simulation complete banner and export hint
@@ -1000,12 +1042,54 @@ public sealed class GameRoot : Game
             var my = (int)screenPosition.Y;
             var clickedPanel = false;
 
+            // Wars & Disputes panel (rows + close button)
+            if (_warDisputeVisible && _warDisputePanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
+                && _warDisputePanel.LastBounds.Contains(mx, my))
+            {
+                var closed = _warDisputePanel.HandleMouseClick(mx, my);
+                if (closed)
+                    _warDisputeVisible = false;
+
+                // Camera pan to war location when a row is clicked
+                if (_warDisputePanel.ClickedWarIndex >= 0 && _warDisputePanel.ClickedWarIndex < _cachedWarEntries.Count)
+                {
+                    var entry = _cachedWarEntries[_warDisputePanel.ClickedWarIndex];
+                    var atk = entry.AttackerWorldPos;
+                    var def = entry.DefenderWorldPos;
+                    if (atk.HasValue && def.HasValue)
+                    {
+                        _camera.FocalPoint = new Vector3(
+                            (atk.Value.X + def.Value.X) * 0.5f,
+                            0f,
+                            (atk.Value.Y + def.Value.Y) * 0.5f);
+                    }
+                    else if (atk.HasValue)
+                    {
+                        _camera.FocalPoint = new Vector3(atk.Value.X, 0f, atk.Value.Y);
+                    }
+                    _warDisputePanel.ConsumeWarClick();
+                }
+                clickedPanel = true;
+            }
+
+            // Toggle Wars & Disputes panel when clicking the HUD WARS row
+            if (!clickedPanel && _debugHud is not null
+                && _debugHud.LastWarRowBounds != Microsoft.Xna.Framework.Rectangle.Empty
+                && _debugHud.LastWarRowBounds.Contains(mx, my))
+            {
+                _warDisputeVisible = !_warDisputeVisible;
+                clickedPanel = true;
+            }
+
             // Obituary close button
-            if (_obituaryVisible && _obituaryPanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
+            if (!clickedPanel && _obituaryVisible && _obituaryPanel.LastBounds != Microsoft.Xna.Framework.Rectangle.Empty
                 && _obituaryPanel.LastBounds.Contains(mx, my))
             {
                 if (_obituaryPanel.HandleMouseClick(mx, my))
+                {
                     _obituaryVisible = false;
+                    _obituaryPanel.ResetScroll();
+                }
                 clickedPanel = true;
             }
 
@@ -1340,6 +1424,8 @@ public sealed class GameRoot : Game
         AddPanelBounds(DraggablePanelId.Tombstone, _tombstonePanel.LastBounds);
         if (_obituaryVisible)
             AddPanelBounds(DraggablePanelId.Obituary, _obituaryPanel.LastBounds);
+        if (_warDisputeVisible)
+            AddPanelBounds(DraggablePanelId.WarDispute, _warDisputePanel.LastBounds);
     }
 
     private void AddPanelBounds(DraggablePanelId panel, Rectangle bounds)
@@ -1578,6 +1664,77 @@ public sealed class GameRoot : Game
             // M18B: Polity tier tracking
             HighestTierLabel: GetTierLabel((byte)_playableSimulation.HighestTierReached),
             MergeCount: _playableSimulation.ActiveMergeCount);
+    }
+
+    /// Builds the list of war display entries for the WarDisputePanel.
+    private List<WarDisplayEntry> BuildWarEntries()
+    {
+        // Index render tribe positions for quick lookup by tribe ID.
+        var posById = new Dictionary<int, Vector2>();
+        if (_lastRenderTribes is not null)
+        {
+            foreach (var t in _lastRenderTribes)
+                posById[t.Id] = t.Position;
+        }
+
+        var entries = new List<WarDisplayEntry>();
+
+        if (_useNetworkRender)
+        {
+            // Network mode: use V1 war records streamed from Rust backend.
+            var tick = _viewModel.Tick;
+            foreach (var war in _viewModel.Wars)
+            {
+                if (war.WarStatus != 0) continue; // only active wars (status 0)
+
+                posById.TryGetValue((int)war.AttackerId, out var atkPos);
+                posById.TryGetValue((int)war.DefenderId, out var defPos);
+
+                // Derive whether war is local (border dispute) or full-scale.
+                // The V1 protocol does not carry war kind, so we estimate from duration:
+                // short wars (< 60 ticks) tend to be border skirmishes; longer ones full-scale.
+                var elapsed    = tick >= war.StartTick ? tick - war.StartTick : 0;
+                var scaleLabel = elapsed < 60 ? "BORDER DISPUTE" : "FULL SCALE";
+
+                entries.Add(new WarDisplayEntry(
+                    AttackerLabel:   $"Tribe {war.AttackerId}",
+                    DefenderLabel:   $"Tribe {war.DefenderId}",
+                    ScaleLabel:      scaleLabel,
+                    StartTick:       war.StartTick,
+                    CurrentTick:     tick,
+                    AttackerWorldPos: posById.ContainsKey((int)war.AttackerId) ? atkPos : null,
+                    DefenderWorldPos: posById.ContainsKey((int)war.DefenderId) ? defPos : null));
+            }
+        }
+        else
+        {
+            // Local demo mode: wars are represented by WarTargetTribeId on each tribe.
+            var tick = _playableSimulation.Tick;
+            foreach (var attacker in _playableSimulation.Tribes)
+            {
+                if (!attacker.IsAlive || !attacker.WarTargetTribeId.HasValue) continue;
+                var defender = _playableSimulation.Tribes
+                    .FirstOrDefault(t => t.Id == attacker.WarTargetTribeId.Value && t.IsAlive);
+                if (defender is null) continue;
+
+                posById.TryGetValue(attacker.Id, out var atkPos);
+                posById.TryGetValue(defender.Id, out var defPos);
+
+                var scaleLabel = attacker.WarKind == Models.PlayableWarKind.FullScale
+                    ? "FULL SCALE" : "BORDER DISPUTE";
+
+                entries.Add(new WarDisplayEntry(
+                    AttackerLabel:   attacker.Name,
+                    DefenderLabel:   defender.Name,
+                    ScaleLabel:      scaleLabel,
+                    StartTick:       attacker.WarDeclaredTick,
+                    CurrentTick:     tick,
+                    AttackerWorldPos: posById.ContainsKey(attacker.Id) ? atkPos : null,
+                    DefenderWorldPos: posById.ContainsKey(defender.Id) ? defPos : null));
+            }
+        }
+
+        return entries;
     }
 
     /// M5: Format polity tier counts for debug HUD (e.g. "T:10 C:2 D:0 K:1 E:0")

@@ -2076,6 +2076,12 @@ impl TribeSimulation {
             } else { next };
 
             if next != current {
+                // When leaving Allied state, clear stale ally reference.
+                // apply_alliances checks ally_tribe.is_none() to find partners;
+                // without clearing, widowed tribes permanently block each other from re-alliancing.
+                if matches!(current, BehaviorState::Allied) {
+                    self.tribes[i].ally_tribe = None;
+                }
                 let (dominant_output_index, max_drive) = self.tribes[i].last_outputs
                     .iter()
                     .enumerate()
@@ -2216,6 +2222,8 @@ impl TribeSimulation {
         // Track tiles claimed this round to prevent two tribes claiming the same tile
         let mut newly_claimed: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let mut claims: Vec<(usize, usize, f32)> = Vec::new(); // (tribe_idx, tile_idx, cost)
+        // AtWar tribes: contested border tiles to mark as disputed (tribe_id, tile_idx)
+        let mut war_contests: Vec<(u32, usize)> = Vec::new();
 
         // ── Evaluate all tribes for expansion eligibility ──
         for tribe_idx in 0..self.tribes.len() {
@@ -2272,6 +2280,53 @@ impl TribeSimulation {
                 newly_claimed.insert(best_tile);
                 claims.push((tribe_idx, best_tile, cost));
             }
+        }
+
+        // ── AtWar tribes push onto enemy border tiles (creates visible disputed tiles) ──
+        // Only runs every 3 ticks to match combat cadence; skipped when no neutral expansion possible.
+        if tick % 3 == 0 {
+            for tribe_idx in 0..self.tribes.len() {
+                if !self.tribes[tribe_idx].alive { continue; }
+                if !matches!(self.tribes[tribe_idx].behavior, BehaviorState::AtWar) { continue; }
+                let target_idx = match self.tribes[tribe_idx].target_tribe {
+                    Some(t) => t,
+                    None => continue,
+                };
+                if !self.tribes[target_idx].alive { continue; }
+                let target_tribe_id = self.tribes[target_idx].id as u32;
+                let atk_tribe_id    = self.tribes[tribe_idx].id as u32;
+                // Find up to 3 enemy tiles adjacent to attacker territory
+                let mut contested_count = 0usize;
+                'outer: for &atk_tile in &self.tribes[tribe_idx].territory {
+                    for adj in self.world.adjacent_tiles(atk_tile as usize) {
+                        if contested_count >= 3 { break 'outer; }
+                        if newly_claimed.contains(&adj) { continue; }
+                        let adj_idx = self.tile_tribe_idx[adj];
+                        if adj_idx == u32::MAX { continue; }
+                        if adj_idx as usize != target_idx { continue; }
+                        war_contests.push((atk_tribe_id, adj));
+                        newly_claimed.insert(adj);
+                        contested_count += 1;
+                    }
+                }
+                // Also push attacker's OWN border tiles into dispute (defender presses back)
+                let mut press_count = 0usize;
+                'outer2: for &atk_tile in &self.tribes[tribe_idx].territory {
+                    if press_count >= 2 { break 'outer2; }
+                    let has_enemy_neighbor = self.world.adjacent_tiles(atk_tile as usize)
+                        .iter()
+                        .any(|&adj| self.tile_tribe_idx[adj] as usize == target_idx);
+                    if has_enemy_neighbor {
+                        war_contests.push((target_tribe_id, atk_tile as usize));
+                        press_count += 1;
+                    }
+                }
+            }
+        }
+
+        // ── Apply war contests (create disputed tiles at front lines) ──
+        for (pressing_tribe_id, tile_idx) in war_contests {
+            self.world.add_tile_occupant(tile_idx, pressing_tribe_id, 0.4);
         }
 
         // ── Apply claims ──
@@ -3718,8 +3773,9 @@ impl TribeSimulation {
 
     // ─── R5: Binary Diplomacy — Alliance/Merger Pipeline ───────────────────────
 
-    /// Ticks as Allied before merge eligible. C4: lowered from 300 → 80 for tick-200 consolidation.
-    pub const MERGE_TICK_THRESHOLD: u32 = 80;
+    /// Ticks as Allied before merge eligible. Must exceed DISPUTE_GRACE_TICKS (300)
+    /// so territorial disputes play out before consolidation into higher polity tiers.
+    pub const MERGE_TICK_THRESHOLD: u32 = 350;
     /// Every N ticks, check for merge eligibility. C4: lowered from 100 → 20.
     pub const MERGE_CHECK_INTERVAL: u64 = 20;
     /// A_team below this triggers rebellion.
@@ -4925,6 +4981,7 @@ mod harness_tests {
             feed_risk: 0.30,
             cluster_size,
             founder_puuids: vec![],
+            founder_names: vec![],
         }
     }
 
@@ -5481,6 +5538,7 @@ mod harness_tests {
                 feed_risk: 0.35,
                 cluster_size: 5 + (i % 3) as u32,  // 5–7
                 founder_puuids: vec![],
+                founder_names: vec![],
             }
         }).collect();
 

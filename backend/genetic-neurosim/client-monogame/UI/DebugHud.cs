@@ -92,6 +92,8 @@ public sealed class DebugHud : IDisposable
     public Point? PerformancePanelOriginOverride { get; set; }
     public Rectangle LastBounds { get; private set; } = Rectangle.Empty;
     public Rectangle LastPerformanceBounds { get; private set; } = Rectangle.Empty;
+    /// <summary>Screen bounds of the WARS triple-row in the V3 stats section. Empty when not visible.</summary>
+    public Rectangle LastWarRowBounds { get; private set; } = Rectangle.Empty;
 
     /// <summary>Toggle V3 stats section visibility (default: true). Use 'V' key.</summary>
     public bool ShowV3Stats { get; set; } = true;
@@ -230,11 +232,18 @@ public sealed class DebugHud : IDisposable
             y += lineHeight;
 
             // Row 2: Wars / Entities / Tombstones (3-column compact)
+            // Record clickable area for WARS label so GameRoot can open the WarDisputePanel on click.
+            LastWarRowBounds = new Rectangle(panel.X, y, PanelWidth, lineHeight);
+            var warsColor = state.ActiveWarCount > 0 ? ErrorColor : TextColor;
             DrawTripleRow(spriteBatch, x, y, lineHeight,
-                "WARS", state.ActiveWarCount.ToString(), TextColor,
+                "WARS", state.ActiveWarCount.ToString(), warsColor,
                 "ENT", state.TotalEntityCount.ToString("#,0"), TextColor,
                 "TOMB", state.TombstoneCount.ToString(), state.TombstoneCount > 0 ? WarningColor : MutedColor);
             y += lineHeight + 2;
+        }
+        else
+        {
+            LastWarRowBounds = Rectangle.Empty;
         }
 
         // M6: Extra debug lines (network mode diagnostic info)
