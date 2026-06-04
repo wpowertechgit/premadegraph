@@ -5,6 +5,7 @@ services:
       - "8000:8000"
     environment:
       - PREMADEGRAPH_URL=http://backend:3001
+      - NEUROSIM_WORLD_SEED=42
     restart: unless-stopped
     depends_on:
       backend:

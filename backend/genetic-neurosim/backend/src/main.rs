@@ -85,7 +85,26 @@ struct CliRunMarkers {
 
 impl CliRunConfig {
     fn default_log_path() -> PathBuf {
-        PathBuf::from("backend/genetic-neurosim/logs/neurosim-cli-run.jsonl")
+        PathBuf::from("logs/neurosim-cli-run.jsonl")
+    }
+
+    /// Build a unique log path: logs/neurosim-{seed}-{dataset}-{nonce}.jsonl
+    /// Dataset label comes from PREMADEGRAPH_DATASET_ID env var ("synthetic" if absent).
+    /// Nonce from time so parallel same-seed runs don't collide.
+    fn unique_log_path(seed: u64) -> PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let dataset = env::var("PREMADEGRAPH_DATASET_ID")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "synthetic".to_string());
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos();
+        let nonce = (seed ^ (nanos as u64)).wrapping_mul(0x9e3779b97f4a7c15) >> 32;
+        PathBuf::from(format!(
+            "logs/neurosim-{seed}-{dataset}-{nonce:08x}.jsonl"
+        ))
     }
 
     fn usage() -> &'static str {
@@ -110,8 +129,9 @@ impl CliRunConfig {
             return Ok(None);
         }
 
+        let mut explicit_log = false;
         let mut config = Self {
-            ticks: 1_200,
+            ticks: 100_000,
             checkpoint_interval: 50,
             log_path: Some(Self::default_log_path()),
             seed: 42,
@@ -139,6 +159,7 @@ impl CliRunConfig {
                     } else {
                         Some(PathBuf::from(value))
                     };
+                    explicit_log = true;
                 }
                 "--seed" => {
                     config.seed = parse_arg_value(&args, &mut index, "--seed")?;
@@ -175,6 +196,11 @@ impl CliRunConfig {
         }
         if config.synthetic_clusters == 0 && config.scenario_id.is_none() {
             return Err("--clusters must be greater than zero".to_string());
+        }
+
+        // Assign unique log path unless caller specified --log explicitly.
+        if !explicit_log {
+            config.log_path = Some(Self::unique_log_path(config.seed));
         }
 
         Ok(Some(config))
@@ -236,7 +262,8 @@ fn live_world_seed_from_env_or_args() -> Result<u64, String> {
 
 async fn run_cli_validation(config: CliRunConfig) -> Result<(), String> {
     let mut writer = open_cli_log_writer(config.log_path.as_ref())?;
-    let (clusters, cluster_source) = load_cli_clusters(&config).await?;
+    let (mut clusters, cluster_source) = load_cli_clusters(&config).await?;
+    clusters.sort_by(|a, b| a.id.cmp(&b.id));
 
     let mut control = ControlConfig {
         clusters,
@@ -299,13 +326,33 @@ async fn run_cli_validation(config: CliRunConfig) -> Result<(), String> {
         }
     }
 
-    let (summary, metrics, lineage_stats, tombstones) = {
+    let (summary, metrics, lineage_stats, tombstones, winner) = {
         let sim = simulation.read();
+        let winner = sim.run_summary().tribes.into_iter()
+            .find(|t| t.alive)
+            .map(|t| serde_json::json!({
+                "tribe_id": t.id,
+                "cluster_id": t.cluster_id,
+                "polity_tier": t.polity_tier,
+                "polity_behavior": t.polity_behavior,
+                "population": t.population,
+                "territory_tiles": t.territory_count,
+                "max_population": t.max_population,
+                "ticks_alive": t.ticks_alive,
+                "a_combat": t.a_combat,
+                "a_resource": t.a_resource,
+                "a_risk": t.a_risk,
+                "a_map_objective": t.a_map_objective,
+                "a_team": t.a_team,
+                "wars_won": t.wars_won,
+                "wars_lost": t.wars_lost,
+            }));
         (
             sim.run_summary(),
             sim.validation_metrics(),
             sim.lineage_stats(),
             sim.tombstones(),
+            winner,
         )
     };
     write_json_line(
@@ -313,6 +360,7 @@ async fn run_cli_validation(config: CliRunConfig) -> Result<(), String> {
         &serde_json::json!({
             "type": "final_summary",
             "summary": summary,
+            "winner": winner,
             "metrics": metrics,
             "lineage_stats": lineage_stats,
             "tombstones": tombstones,

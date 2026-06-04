@@ -352,7 +352,13 @@ pub struct TribeSummaryRecord {
     pub casualties_received: u32,
     pub a_combat: f32,
     pub a_resource: f32,
+    pub a_risk: f32,
+    pub a_map_objective: f32,
+    pub a_team: f32,
     pub feed_risk: f32,
+    pub max_population: u32,
+    pub polity_tier: crate::tribes::PolityTier,
+    pub polity_behavior: String,
     pub last_inputs: [f32; INPUT_COUNT],
     pub last_outputs: [f32; OUTPUT_COUNT],
     pub fitness_score: f32,
@@ -1200,7 +1206,9 @@ impl TribeSimulation {
         }
     }
 
-    pub fn set_clusters(&mut self, clusters: Vec<ClusterProfile>) {
+    pub fn set_clusters(&mut self, mut clusters: Vec<ClusterProfile>) {
+        // Sort by id for deterministic tribe placement regardless of fetch order.
+        clusters.sort_by(|a, b| a.id.cmp(&b.id));
         self.config.clusters = clusters;
     }
 
@@ -1731,8 +1739,9 @@ impl TribeSimulation {
         // 8. River crossing evolution (Task 11)
         self.apply_river_crossing();
 
-        // 9. Check halted (all tribes dead)
-        if self.tribes.iter().all(|t| !t.alive) {
+        // 9. Check halted (all tribes dead, or last tribe standing)
+        let alive_now = self.tribes.iter().filter(|t| t.alive).count();
+        if alive_now == 0 || alive_now == 1 {
             self.halted = true;
         }
 
@@ -4566,7 +4575,13 @@ impl TribeSimulation {
                 casualties_received,
                 a_combat: t.stats.a_combat,
                 a_resource: t.stats.a_resource,
+                a_risk: t.stats.a_risk,
+                a_map_objective: t.stats.a_map_objective,
+                a_team: t.stats.a_team,
                 feed_risk: t.stats.feed_risk,
+                max_population: t.max_population,
+                polity_tier: t.polity_tier,
+                polity_behavior: format!("{:?}", t.specialization_role),
                 last_inputs: t.last_inputs,
                 last_outputs: t.last_outputs,
                 fitness_score: t.fitness_score,
