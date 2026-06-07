@@ -1,0 +1,60 @@
+@startdot
+digraph ValidationEventFlow {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    splines=ortho,
+    nodesep=0.55,
+    ranksep=0.85,
+    fontname="Arial"
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Arial",
+    fontsize=11,
+    color="#2f3a45",
+    fillcolor="#f7f9fb",
+    penwidth=1.3,
+    margin="0.12,0.08"
+  ];
+
+  edge [
+    color="#485460",
+    arrowsize=0.7,
+    penwidth=1.2,
+    fontname="Arial",
+    fontsize=10
+  ];
+
+  seed [label="Seed + dataset\nflexset / soloq", fillcolor="#eef6ff"];
+  init [label="Deterministic init\nsorted clusters"];
+  tick [label="Tick loop\nneural drives + state machine"];
+  checkpoint [label="checkpoint\nalive, tiles, wars,\npolity distribution"];
+  war_declared [label="war_declared\nattacker, defender, tick"];
+  war_resolved [label="war_resolved\nwinner, loser, cause"];
+  tombstone [label="tombstone\nfinal genome + cause", fillcolor="#fde2e4"];
+  final [label="final_summary\nwinner + full run stats", fillcolor="#fff7df"];
+  compare [label="Batch comparison\nsame seed -> same summary", fillcolor="#f1f8e9"];
+
+  seed -> init -> tick;
+  tick -> checkpoint [label="interval"];
+  tick -> war_declared [label="event"];
+  war_declared -> war_resolved;
+  war_resolved -> tombstone [label="if tribe dies"];
+  checkpoint -> final;
+  tombstone -> final;
+  final -> compare;
+
+  node [
+    shape=note,
+    style=filled,
+    fillcolor="#fff9db",
+    color="#8d6e00"
+  ];
+
+  note1 [label="A screenshot csak illusztráció.\nA validáció forrása a napló."];
+  note1 -> final [style=dashed, color="#8d6e00"];
+}
+@enddot

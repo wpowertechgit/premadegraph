@@ -1,0 +1,80 @@
+@startdot
+digraph PathfinderGraph {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    splines=true,
+    nodesep=0.6,
+    ranksep=0.9,
+    fontname="Arial"
+  ];
+
+  node [
+    shape=circle,
+    style=filled,
+    fixedsize=true,
+    width=0.55,
+    height=0.55,
+    fontname="Arial",
+    fontsize=11,
+    color="#2f3a45",
+    fillcolor="#ffffff",
+    penwidth=1.4
+  ];
+
+  edge [
+    color="#666666",
+    arrowsize=0.55,
+    penwidth=1.0,
+    fontname="Arial",
+    fontsize=10
+  ];
+
+  A [label="A", fillcolor="#b7e4c7"];
+  B [label="B"];
+  C [label="C"];
+  D [label="D"];
+  E [label="E"];
+  F [label="F"];
+  G [label="G"];
+  H [label="H", fillcolor="#ffd6a5"];
+
+  A -> B [label="1.0", color="#2d6a4f", penwidth=2.4];
+  B -> C [label="1.2", color="#2d6a4f", penwidth=2.4];
+  C -> H [label="1.1", color="#2d6a4f", penwidth=2.4];
+  A -> D [label="2.4"];
+  D -> E [label="0.9"];
+  E -> H [label="3.0"];
+  B -> F [label="2.1"];
+  F -> G [label="1.0"];
+  G -> H [label="1.8"];
+  C -> E [label="1.5"];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fixedsize=false,
+    width=1.4,
+    height=0.45,
+    fillcolor="#eef6ff",
+    color="#2f3a45"
+  ];
+
+  input [label="Súlyozott gráf\nedge cost"];
+  astar [label="A*"];
+  dijkstra [label="Dijkstra"];
+  bidir [label="Bidirectional search"];
+  replay [label="Pathfinder Lab\nútvonal + mérések"];
+
+  input -> astar;
+  input -> dijkstra;
+  input -> bidir;
+  astar -> replay;
+  dijkstra -> replay;
+  bidir -> replay;
+
+  edge [style=dashed, color="#999999"];
+  input -> A [label="start"];
+  H -> replay [label="chosen path"];
+}
+@enddot

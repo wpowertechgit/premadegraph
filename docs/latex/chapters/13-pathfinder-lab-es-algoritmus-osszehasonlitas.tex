@@ -27,6 +27,13 @@ A* & jól kialakított alsó becsléssel & A projektben egzakt marad, nem csak v
 
 A dolgozatban az összehasonlítás fő célja nem az, hogy ``győztest'' hirdessek, hanem az, hogy megmutassam: a rendszer képes ugyanazon gráfmodellt több algoritmikus nézőpontból kezelni, és a különbségek ellenőrizhetően visszakövethetők.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.92\textwidth]{assets/diagrams/thesis_pathfinding_graphviz.png}
+\caption{A Pathfinder Lab algoritmikus értelmezése: ugyanazon súlyozott gráfon több keresési stratégia futtatható, majd az eredmény a replay és mérési rétegen keresztül válik összehasonlíthatóvá.}
+\label{fig:pathfinder-graphviz-overview}
+\end{figure}
+
 \diagramfigure{A Pathfinder Lab és a frontend komponensstruktúrája - a keresési kérelmek útja a React nézettől a Rust motorig}{path finder and frontend component diagram.pdf}
 
 \section{Kézi vezérlés, replay és magyarázhatóság}

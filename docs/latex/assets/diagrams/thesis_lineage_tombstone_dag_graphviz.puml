@@ -1,0 +1,57 @@
+@startdot
+digraph LineageTombstone {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    splines=true,
+    nodesep=0.65,
+    ranksep=0.8,
+    fontname="Arial"
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Arial",
+    fontsize=11,
+    color="#2f3a45",
+    fillcolor="#f7f9fb",
+    penwidth=1.3,
+    margin="0.12,0.08"
+  ];
+
+  edge [
+    color="#485460",
+    arrowsize=0.7,
+    penwidth=1.2,
+    fontname="Arial",
+    fontsize=10
+  ];
+
+  s1 [label="Seed tribe 120\ncluster profile", fillcolor="#eef6ff"];
+  s2 [label="Seed tribe 271\ncluster profile", fillcolor="#eef6ff"];
+  s3 [label="Seed tribe 397\ncluster profile", fillcolor="#eef6ff"];
+
+  f1 [label="Fusion / inheritance\nGenome::inherit_from()", fillcolor="#fff7df"];
+  child [label="Descendant entity\nparent_a, parent_b"];
+  win [label="Surviving polity\nactive state"];
+  dead1 [label="TombstoneRecord\ncause: absorbed", fillcolor="#fde2e4"];
+  dead2 [label="TombstoneRecord\ncause: defeated", fillcolor="#fde2e4"];
+  ledger [label="TombstoneLedger\ncompact audit state", fillcolor="#f8f9fa"];
+  registry [label="LineageRegistry\nentity_id -> parents", fillcolor="#f1f8e9"];
+
+  s1 -> f1;
+  s2 -> f1;
+  f1 -> child [label="new genome"];
+  child -> win [label="continues"];
+  s3 -> win [label="war / absorption path"];
+  s1 -> dead1 [style=dashed, label="inactive parent"];
+  s2 -> dead1 [style=dashed];
+  s3 -> dead2 [style=dashed, label="if defeated"];
+  dead1 -> ledger;
+  dead2 -> ledger;
+  s1 -> registry [style=dotted];
+  s2 -> registry [style=dotted];
+  child -> registry [style=dotted];
+}
+@enddot

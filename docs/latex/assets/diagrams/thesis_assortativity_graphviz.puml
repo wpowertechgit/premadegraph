@@ -1,0 +1,64 @@
+@startdot
+digraph Assortativity {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    splines=true,
+    nodesep=0.7,
+    ranksep=1.0,
+    fontname="Arial"
+  ];
+
+  node [
+    shape=circle,
+    style=filled,
+    fixedsize=true,
+    width=0.7,
+    height=0.7,
+    fontname="Arial",
+    fontsize=10,
+    color="#2f3a45",
+    penwidth=1.5
+  ];
+
+  edge [
+    color="#596275",
+    arrowsize=0.5,
+    penwidth=1.4,
+    fontname="Arial",
+    fontsize=10
+  ];
+
+  p1 [label="P1\n0.82", fillcolor="#52b788"];
+  p2 [label="P2\n0.79", fillcolor="#74c69d"];
+  p3 [label="P3\n0.77", fillcolor="#95d5b2"];
+  p4 [label="P4\n0.31", fillcolor="#ffd166"];
+  p5 [label="P5\n0.28", fillcolor="#f4a261"];
+  p6 [label="P6\n0.25", fillcolor="#e76f51"];
+
+  p1 -> p2 [label="edge sample"];
+  p2 -> p3;
+  p4 -> p5;
+  p5 -> p6;
+  p3 -> p4 [style=dashed, color="#9aa0a6", label="mixed edge"];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fixedsize=false,
+    width=2.2,
+    height=0.55,
+    fillcolor="#eef6ff",
+    color="#2f3a45"
+  ];
+
+  samples [label="Élpárok mintája\n(x = metric(u), y = metric(v))"];
+  pearson [label="Pearson-korreláció\naz élek két végpontja között"];
+  result [label="Asszortativitási együttható\nopscore vagy feedscore"];
+
+  p2 -> samples [style=dotted, color="#555555"];
+  p5 -> samples [style=dotted, color="#555555"];
+  samples -> pearson;
+  pearson -> result;
+}
+@enddot

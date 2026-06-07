@@ -1,0 +1,54 @@
+@startdot
+digraph NeuroSimArchitecture {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    splines=ortho,
+    nodesep=0.6,
+    ranksep=0.9,
+    fontname="Arial"
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Arial",
+    fontsize=11,
+    color="#2f3a45",
+    fillcolor="#f7f9fb",
+    penwidth=1.3,
+    margin="0.12,0.08"
+  ];
+
+  edge [
+    color="#485460",
+    arrowsize=0.7,
+    penwidth=1.2,
+    fontname="Arial",
+    fontsize=10
+  ];
+
+  premade [label="PremadeGraph backend\ncluster export API", fillcolor="#eef6ff"];
+  rust [label="Rust NeuroSim authority\nworld state, tick loop,\nwar, lineage, tombstone", fillcolor="#fff7df", penwidth=2.2];
+  jsonl [label="JSONL logs\ncheckpoint, event,\nfinal_summary", fillcolor="#f8f9fa"];
+  ws [label="FrameV1 binary WebSocket\nTNS3 envelope"];
+  nodebridge [label="Node bridge\nproxy + orchestration"];
+  monogame [label="MonoGame client\nrendering + inspection", fillcolor="#f1f3ff"];
+  cli [label="Headless CLI\nbatch validation", fillcolor="#f1f8e9"];
+
+  premade -> rust [label="cluster profiles\nA_* artifacts"];
+  rust -> jsonl [label="append-only audit"];
+  rust -> ws [label="binary frames"];
+  ws -> nodebridge;
+  nodebridge -> monogame [label="live visualization"];
+  rust -> cli [label="deterministic run"];
+  cli -> jsonl [label="reproducible output"];
+
+  subgraph cluster_rule {
+    label="Authority split";
+    color="#d5dde5";
+    style="rounded";
+    rust; jsonl; ws; cli;
+  }
+}
+@enddot

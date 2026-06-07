@@ -7,6 +7,7 @@ venv/
 node_modules/
 .next/
 dist/
+backend/logs/
 backend/target/
 backend/recordings/
 client-monogame/bin/

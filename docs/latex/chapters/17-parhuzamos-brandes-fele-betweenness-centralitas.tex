@@ -6,6 +6,13 @@ A bridge-orbit vizualizáció már a Graph V2 pipeline-ból is meghatároz egyes
 
 A projektben a betweenness centralitás a \texttt{backend/pathfinder-rust/src/engine/centrality.rs} modulban van implementálva. Az implementáció több fontos döntést tartalmaz, amelyek mindegyike önálló módszertani állítás.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.92\textwidth]{assets/diagrams/thesis_brandes_bridge_graphviz.png}
+\caption{A betweenness centralitás intuitív értelmezése: a hídcsomópont sok klaszterközi legrövidebb útvonalon jelenik meg, ezért magas Brandes-pontszámot kap.}
+\label{fig:brandes-bridge-graphviz}
+\end{figure}
+
 \section{Az algoritmus: Brandes 2001}
 
 A Brandes-algoritmus \cite{brandes2001} a hagyományos $O(n^3)$ komplexitású betweenness-számítást $O(nm)$-re csökkenti (irányítatlan gráfra, ahol $n$ a csomópontok és $m$ az élek száma). Az ötlet az, hogy a csomópontonkénti legrövidebb-út fákat nem kell külön-külön tárolni: a forráscsomópontból induló BFS/Dijkstra-futtatás eredményéből egy visszaterjesztési lépésben kiszámítható az összes közötti wt-részleges járulék.

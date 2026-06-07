@@ -23,6 +23,13 @@ A projekt ezt két fontos kiterjesztéssel használja:
 
 A \texttt{backend/pathfinder-rust/src/engine/assortativity.rs} egyik lényeges technikai döntése, hogy az irányítatlan éleket mindkét endpoint-orientációval figyelembe veszi a Pearson-akkumulációban. Ez azért védhető, mert az élnek nincs természetes iránya, ugyanakkor a két végpont tulajdonságpárja szimmetrikusan járul hozzá a korrelációhoz. A modul emellett külön számlálja az alacsony támogatás, a hiányzó score és a túl rövid játékostörténet miatt kihagyott éleket is. Így az asszortativitási eredmény nem egy feketedoboz-korreláció, hanem egy jól dokumentált mintaképzési folyamat eredménye.
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.92\textwidth]{assets/diagrams/thesis_assortativity_graphviz.png}
+\caption{Az asszortativitás él-végponti értelmezése: az összekapcsolt játékospárok metrikaértékei Pearson-korrelációként kerülnek összesítésre.}
+\label{fig:assortativity-graphviz-overview}
+\end{figure}
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.30\textheight,keepaspectratio]{assortavity-controls.png}

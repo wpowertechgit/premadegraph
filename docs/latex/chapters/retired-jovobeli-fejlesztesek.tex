@@ -1,0 +1,22 @@
+\chapter{Jövőbeli fejlesztések}
+
+\section{Jövőbeli fejlesztési irányok}
+
+A projekt jelenlegi állapotában implementált irányok köre lefedi a fő kutatási kérdéseket. Az alábbiakban azok a tervdokumentumokban szereplő irányok szerepelnek, amelyeket a jelenlegi verzióban visszavontam vagy elhalasztottam.
+
+\subsection{Visszavont vagy elhalasztott irányok}
+
+A dolgozat korábbi tervdokumentumaiban szerepelt néhány irány, amelyeket a jelenlegi verzióban visszavontam vagy elhalasztottam:
+
+\begin{itemize}
+    \item \textbf{Contraction Hierarchies}: a jelenlegi gráfméret mellett nem indokolt az implementálása; az A* egzakt verziója elegendő teljesítményt ad.
+    \item \textbf{Temporal consistency / játékos stabilitás}: eltávolítva a jelenlegi verzióból; a meccsek időrendje nem elég erős módszertani alap hosszanti stabilitási állításokhoz.
+    \item \textbf{Community cohesion vs. performance kapcsolat}: eltávolítva a jelenlegi verzióból; az asszortativitás tisztábban, védhetőbb matematikai keretben válaszolja meg a releváns teljesítmény-hasonlósági kérdést.
+
+\end{itemize}
+
+Ezeket a visszavont irányokat azért sorolom fel, mert a tervdokumentumokban nyomuk maradt. A dolgozat konzisztenciája szempontjából fontos kimondani: ezek jelenlegi állapotban nem implementáltak, és a jelen szöveg nem tekinti őket kész feature-nek.
+
+\section{Zárszó}
+
+Ha a projektet egy mondatban kellene összefoglalnom, azt mondanám: a \emph{Premade Graph} nem egyszerűen játékosstatisztikák megjelenítése, hanem egy olyan próbálkozás, amely a kompetitív játékot kapcsolati és analitikai térként kezeli. Ez a szemlélet tette lehetővé, hogy a meccsekből gráf, a gráfból asszociatív core-periphery szerkezet, a score-rétegből pedig ténylegesen vitatható és megvédhető asszortativitási és központisági kutatási kérdés legyen.

@@ -1,0 +1,188 @@
+\chapter{Összegzés}
+
+\section{Mit mutat be a dolgozat?}
+
+A dolgozat egy olyan rendszert mutat be, amely valós League of Legends mérkőzésadatokból indul ki,
+majd ezekből játékosprofilokat, kapcsolatokat, gráfokat, klasztereket, elemzési eredményeket és
+végül egy szimulációs kísérletet épít. Közérthetően fogalmazva: a rendszer nem csak azt nézi meg,
+hogy egy játékos mennyit öl vagy hányszor hal meg, hanem azt is, hogy kikkel játszik együtt,
+kikkel kerül szembe, milyen ismétlődő kapcsolatok rajzolódnak ki körülötte, és ezekből milyen
+nagyobb hálózati minták olvashatók ki.
+
+A projekt lényege ezért nem egyetlen látványos képernyő vagy egyetlen algoritmus. A fő eredmény az,
+hogy a nyers meccsadatoktól el lehet jutni egy ellenőrizhető, több lépésből álló kutatási
+pipeline-ig. Ebben a pipeline-ban minden fontos döntésnek van szerepe: az adatgyűjtésnek,
+a játékosok azonosításának, a teljesítménymutatók számításának, a gráfépítésnek, a Rust-alapú
+algoritmusoknak, a perzisztenciának, a frontend megjelenítésnek és a NeuroSim szimulációnak is.
+
+\section{A rendszer közérthető képe}
+
+A League of Legends mérkőzésekben minden játékos egy nagyobb kapcsolati tér részévé válik.
+Egyes játékosok újra és újra egymás mellé kerülnek, mások rendszeresen egymás ellen játszanak.
+Ezek az ismétlődések önmagukban nem árulnak el semmit a játékosok szándékáról vagy érzéseiről,
+de alkalmasak arra, hogy kapcsolatként kezeljük őket egy gráfban -- és arra, hogy ebből a
+kapcsolathálóból valódi következtetéseket vonjunk le.
+
+A projekt ebből a felismerésből indul. Nem egy egyszerű statisztikai oldalt épít, hanem egy
+teljes feldolgozási láncot: a nyers API-adattól a normalizált játékosprofilokon, a gráfépítésen,
+a klaszterezésen és a Rust-alapú gráfanalitikán át egészen egy evolúciós szimulációig, amelybe
+ezek a valódi adatból levezetett profilok épülnek be.
+
+A kérdések, amelyeket a rendszer vizsgál, nem pszichológiai állítások. Vannak-e sűrűbb csoportok
+a kapcsolathálóban? Vannak-e játékosok, akik sok csoport között közvetítenek, és ezek eltávolítása
+szétszakítaná a hálót? Hasonló teljesítményű játékosok kerülnek-e egymás mellé szívesebben?
+Másképpen viselkedik-e egy Flex Queue-ból felépített gráf -- ahol az ismétlődő együttjátszás
+természetes --, mint egy SoloQ kontroll-gráf, ahol a matchmaking véletlenszerűsége dominál?
+
+Ezek mérhető, módszertanilag védett kérdések. A válaszok nem mutatnak be valódi emberi szándékot,
+de megmutatják, milyen hálózati szerkezetek keletkeznek adott adatgyűjtési és elemzési szabályok
+mellett. Ez a különbségtétel -- mit mér a rendszer és mit nem -- az egész projekt tudományos
+értékének alapja.
+
+\section{A fő eredmények}
+
+A dolgozat első nagy eredménye a több-adatkészletes adatgyűjtési és feldolgozási architektúra.
+A \texttt{flexset} és a \texttt{soloq} adatkészlet külön kezelése azért fontos, mert a két queue
+nem ugyanazt a jelenséget méri. A Flex Queue alkalmasabb ismétlődő kapcsolati minták vizsgálatára,
+míg a SoloQ inkább kontrollként és egyéni teljesítményprofilként értelmezhető.
+
+A második fontos eredmény az \texttt{opscore} és \texttt{feedscore} metrikák használata.
+Ezek nem tökéletes igazságmérők, hanem értelmezhető, szerepkörérzékeny pontszámok. Az értékük abban
+van, hogy a játékosok teljesítménye nem egyetlen nyers statisztikára szűkül, hanem több játékbeli
+szempontból válik összehasonlíthatóvá. Ez tette lehetővé, hogy a teljesítménymutatók később
+gráfanalitikai bemenetként is használhatók legyenek.
+
+A harmadik eredmény a játékoskapcsolati gráf és annak elemzése. A \texttt{flexset} adatkészleten
+kirajzolódó szerkezet core-periphery jellegű: vannak sűrűbb, erősebben összekapcsolt magrészek,
+és sok lazább, kisebb periférikus csoport. Ez a megfigyelés nem azt jelenti, hogy a gráf teljes
+társas valóságot ír le, hanem azt, hogy az ismétlődő mérkőzéskapcsolatok nem véletlenül szétszórt
+pontokként jelennek meg.
+
+A negyedik eredmény az asszortativitási elemzés. Az \texttt{opscore} esetében pozitív kapcsolat
+figyelhető meg: a kapcsolt játékosok több esetben hasonlóbb teljesítményprofilt mutatnak, mint amit
+teljesen véletlen kapcsolatoknál várnánk. A \texttt{feedscore} viszont érzékenyebb a gráfmódra,
+ami jól mutatja, hogy az elemzésben a projekciós döntések nem technikai apróságok, hanem az
+eredmény értelmezését is alakítják.
+
+Az ötödik eredmény a Rust-alapú algoritmikus réteg. A rendszer nem csak adatokat jelenít meg,
+hanem gráfalgoritmusokat is futtat: útvonalkeresést, asszortativitást és betweenness-központiságot.
+Ez szakdolgozati szempontból azért fontos, mert a projekt nem marad meg dashboard-szinten.
+A számításigényes részek külön futtatókörnyezetben, determinisztikus és újrafuttatható módon
+jelennek meg.
+
+\section{A Tribal NeuroSim szerepe}
+
+A dolgozat záró nagy egysége a Tribal NeuroSim. Ennek szerepe nem az, hogy közvetlenül
+megjósolja a League of Legends meccsek kimenetelét. A NeuroSim inkább egy transfer-kísérlet:
+azt vizsgálja, hogy a gráfból és a klaszterekből kinyert teljesítményprofilok átvihetők-e egy
+evolúciós, többügynökös szimuláció kezdeti paramétereibe.
+
+Egyszerűbben: a PremadeGraph megmondja, milyen profilú csoportokat látunk a játékosgráfban,
+a NeuroSim pedig ezekből a profilokból induló törzseket enged versenyezni egy kontrollált
+szimulációs világban. A törzsek nem valódi játékosokat jelentenek, hanem klaszterekből képzett
+modell-entitásokat. Ez a különbség lényeges, mert így a szimuláció nem pszichológiai állítás,
+hanem ellenőrizhető modellkísérlet marad.
+
+A négy validált futtatás alapján a Flex Queue-ból származó profilok konvergensebb viselkedést
+mutattak: mindkét vizsgált seed mellett hasonló, Warband/Combat jellegű győztes archetípus jelent
+meg. A SoloQ futtatások változékonyabbak voltak: eltérő seedek mellett eltérő győztes profilok
+alakultak ki. Ez nem bizonyítja, hogy a valódi Flex Queue játékosok ilyenek, vagy hogy a SoloQ
+játékosok más pszichológiai típusba tartoznának. Azt viszont alátámasztja, hogy a két adatkészletből
+származó klaszterpriorok ugyanabban a szimulációs szabályrendszerben eltérő emergáló dinamikához
+vezethetnek.
+
+\section{Módszertani határok}
+
+A dolgozat egyik fontos erőssége, hogy nem próbál többet állítani annál, amit az adatok és a
+módszerek elbírnak. A signed balance, vagyis az előjeles gráfok strukturális egyensúlya például
+technikailag érdekes kísérleti irány marad, de nem fő empirikus eredmény. Ennek oka, hogy az
+ellenségként modellált mérkőzéskapcsolat nem feltétlenül jelent valódi negatív társas kapcsolatot.
+Lehet matchmaking-hatás, queue-időzítés, rangsorbeli közelség vagy adatgyűjtési következmény is.
+
+Ugyanezért nem szerepelnek a dolgozat fő állításai között időbeli stabilitási vagy közösségi
+kohézióra vonatkozó erős kijelentések. A projekt végső formája inkább a védhetőbb kérdésekre
+koncentrál: hogyan épül a gráf, milyen teljesítménymetrikák kapcsolhatók hozzá, milyen
+asszortativitási és központisági minták jelennek meg, hogyan különbözik a Flex Queue és a SoloQ,
+és hogyan használhatók a klaszterprofilok egy reprodukálható szimuláció bemeneteként.
+
+\section{Végső következtetés}
+
+A dolgozat végső állítása az, hogy kompetitív játékadatokból építhető olyan rendszer, amely egyszerre
+szoftvermérnöki és kutatási szempontból is értelmezhető. A PremadeGraph nem pusztán statisztikai
+oldal, hanem adatgyűjtési, adatmodellezési, gráfanalitikai és szimulációs keretrendszer.
+
+A rendszer legfontosabb értéke az összekapcsolás. A nyers Riot API-adatokból normalizált játékosprofil
+lesz; a játékosprofilokból kapcsolati gráf; a gráfból klaszterek, asszortativitási eredmények és
+központisági mutatók; ezekből pedig olyan klaszterprofilok, amelyek a Tribal NeuroSimben
+viselkedési priorokként újra felhasználhatók. Ez a lánc teszi a dolgozatot többé, mint különálló
+modulok gyűjteménye.
+
+Összefoglalva: a projekt azt mutatja meg, hogy egy online kompetitív játék mérkőzésadatai nemcsak
+eredménylistaként kezelhetők, hanem kapcsolati és viselkedési mintákat hordozó adatrendszerként is.
+A dolgozat legerősebb, védhető következtetése nem az, hogy feltárja a játékosok valódi motivációit,
+hanem az, hogy megmutatja: óvatos módszertani keretek között ezekből az adatokból reprodukálható,
+magyarázható és továbbvihető hálózati elemzés építhető.
+
+\section{Túl a videojátékon -- módszertani transzferálhatóság}
+\label{sec:osszegzes-transfer}
+
+A PremadeGraph kiindulópontja egy League of Legends API-n keresztül gyűjtött adatbázis. Ez
+tudatos választás volt, nem véletlenszerű: a Riot Games Developer API nyilvánosan elérhető,
+gazdagon dokumentált, fejlesztői szinten kezelhető, és strukturált JSON adatot szolgáltat.
+A játékadatok jellegük miatt ideálisan alkalmasak gráf-pipeline prototipizálásra -- sok szereplő,
+sok interakció, jól definiált szerepkörök, kvantitatív teljesítménymutatók. De a módszertan
+nem LoL-specifikus. Amit ez a projekt épített, az egy általános célú kutatási infrastruktúra,
+amelynek minden komponense transzferálható.
+
+\textbf{Gráfklaszterezés és közösségi struktúra.} A greedy modularity maximization ugyanolyan
+természetességgel alkalmazható tudományos kollaborációs hálózatokra (kik dolgoznak együtt
+rendszeresen?), vállalati szervezeti gráfokra (melyik csapatok alkotnak valódi munkaegységet
+a formális orgchart mögött?), logisztikai hub-hálózatokra (mely elosztóközpontok alkotnak
+regionális klasztert?) vagy közösségi média interakciókra (milyen buborékok rajzolódnak ki?).
+
+\textbf{Asszortativitási elemzés.} Annak mérése, hogy hasonló attribútumú csomópontok
+hajlamosabbak-e egymással kapcsolódni, általánosan alkalmazható. Pénzügyi hálózatokban
+a kockázati kontagion terjedési mintáját írja le; ökológiai hálózatokban a niche-specializáció
+fokát méri; epidemiológiai modellekben a kontaktstruktúra homofíliáját jellemzi.
+
+\textbf{Párhuzamos Brandes-féle betweenness centralitás.} A kritikus közvetítő csomópontok
+azonosítása infrastruktúra-tervezésben (melyik útcsomópont kiesése bénítja meg a hálózatot?),
+járványvédelemben (mely egyén izolálása csökkenti leginkább a terjedést?) és
+ellátásilánc-elemzésben (melyik raktár kiesése okoz maximális fennakadást?) egyaránt
+közvetlenül alkalmazható.
+
+\textbf{Pathfinder algoritmusok.} A BFS, Dijkstra, kétirányú keresés és az egzakt A* nem
+League of Legends találmányok. Navigációs rendszerek, hálózati routing optimalizáció,
+robotikai útvonaltervezés, játékmotorok -- mindegyik ugyanezt az algoritmikus rétegt
+használja. A Pathfinder Lab összehasonlítási felülete adaptálható bármely gráf-alapú
+keresési problémára.
+
+\textbf{3D Bird's Eye Sphere és Fibonacci-vetítés.} A gömbfelületen egyenletesen elosztott
+gráf-vizualizáció egyedi megközelítést kínál nagy hálózatok struktúrájának áttekintéséhez.
+Ahol a klasszikus 2D force-directed elrendezés átfedő, olvashatatlan ábrákat produkál,
+a 3D gömbvetítés fenntartja a csúcsok szétválaszthatóságát. Bioinformatikában fehérje-interakciós
+hálózatoknál, szociológiában globális kapcsolathálózatoknál ez kifejezetten hasznos eszköz.
+
+\textbf{Tribal NeuroSim evolúciós szimulációja.} Az artifact-prior alapú inicializálás
+és a NEAT-stílusú neuroevolúció kombinációja bármilyen domainre alkalmazható, ahol
+csoportszintű teljesítményprofilok kinyerhetők és összehasonlíthatók. Az öt
+alapartifakt -- combat, resource, map\_objective, risk, team -- nem LoL-fogalom.
+Csapatsportokban harci~=~fragtörténet, resource~=~gazdasági döntések, map~=~pozícionálás,
+risk~=~agresszív húzások vállalása, team~=~asszisztok és csapatmentések. Startupok esetén
+combat~=~piaci agresszivitás, resource~=~tőkehatékonyság, map~=~piaci célzás, risk~=~kockázattűrés,
+team~=~csapatkoordináció. Az ökológiában combat~=~predációs képesség, resource~=~táplálékkeresési
+hatékonyság, team~=~koloniális koordináció. A rendszer ezeket az analógiákat nem spekulálja --
+hanem megmutatja az architektúrát, amellyel bármely ilyen adatforrás ugyanerre a szimulációs
+pipeline-ra illeszthető.
+
+A Riot Games API azért volt kényelmes prototípus-forrás, mert nyílt, strukturált és gazdag
+metaadatokban. De a módszertan nem igényel LoL-adatot. Ugyanez a pipeline futtatható bármely
+nyílt API-ra -- GitHub kollaborációs gráf, NBA teljesítményadatbázis, PubMed szerzői hálózat --,
+ahol hasonló felosztás elvégezhető. A videojáték itt eszköz volt, nem korlát.
+
+Ahogy az ABBA megfogalmazta évtizedekkel ezelőtt: \textit{the winner takes it all}.
+A Tribal NeuroSimben ez nem metafora, hanem a mechanika közvetlen következménye -- és egyben
+az egész pipeline szimbóluma. Az adat, a gráf, a klaszter, az analitika és a szimuláció mind
+egyetlen coherens lánc részei. Aki megérti ezt a láncot, annak kezében van egy általánosan
+alkalmazható hálózatelemzési és evolúciós modellezési keretrendszer -- amelynek a videojáték
+csak a legpraktikusabb és legelérhetőbb bemeneti forrása volt.
