@@ -334,7 +334,7 @@ h_j(t) \;=\; r(j)\cdot\min\!\Bigl(1,\;\tfrac{t - t_0(j)}{75}\Bigr), \qquad t \ge
 
 \subsection*{Harci modell}
 
-Két törzs -- $i$ (támadó) és $j$ (védő) -- háborúja Poisson-folyamatként modellezett.
+Két törzs, $i$ (támadó) és $j$ (védő), háborúja Poisson-folyamatként modellezett.
 Egyetlen harci körben a védő vesztesége:
 \begin{equation}
 \Delta p_j \;\sim\; \mathrm{Poisson}(\lambda_{ij}), \qquad
@@ -377,9 +377,9 @@ A szimuláció megáll, ha:
 \end{equation}
 A győztes törzs $k^* = \arg\min_{i \in \mathcal{I}(t)} |\mathcal{I}(t)|$ örökli az összes
 tile-t: $\mathcal{T}_{k^*} \leftarrow \mathcal{W}$. Ez a feltétel az evolúciós szelekció
-legélesebb formája -- nincs részleges kimenetel, nincs tárgyalás, nincs megosztott győzelem.
+legélesebb formája: nincs részleges kimenetel, nincs tárgyalás, nincs megosztott győzelem.
 Az egész rendszer egyetlen stabil állapotba konvergál, amelyet a matematikai struktúra
-elkerülhetetlenné tesz: \textit{the winner takes it all}.
+elkerülhetetlenné tesz.
 
 % ==========================================================================
 \section{Validációs filozófia és determinizmus-igazolás}
@@ -912,8 +912,8 @@ tick-enként, még ha kontaktzónája kisebb is.
 
 \textbf{Kétfrontos nyomás.} Ahogy a 25.4.~alszakasz tárgyalja, a domináns entitás
 egyszerre több szomszéddal kerülhet háborúba. Ha két kisebb törzs egymástól
-függetlenül ugyanazon tickben indít háborút a nagyobb ellen --- mint a trilaterális
-esetben ---, a Poisson-veszteség mindkét fronton akkumulálódik. A nagy törzs
+függetlenül ugyanazon tickben indít háborút a nagyobb ellen (mint a trilaterális
+esetben), a Poisson-veszteség mindkét fronton akkumulálódik. A nagy törzs
 populációja és élelmiszer-készlete egyszerre csökken, miközben csak az egyik
 ellenfelet tudja visszaverni.
 
@@ -923,7 +923,7 @@ ld. 26.2.~alszakasz) fokozatosan csökkenti a harci kapacitást. Egy kisebb, mob
 ellenfél számára ez ablakot nyit: a nagy törzs katonailag még erős, de logisztikailag
 sérülékeny.
 
-Összefoglalva: a szimuláció nem biztosítja a méretarányos fölényt. A méret
+A szimuláció tehát nem biztosítja a méretarányos fölényt. A méret
 előny az erőforrástermelésben és a területi jelenlétben, de hátrány a
 kétfrontos nyomással szemben és a logisztikai kitettségben. Ez a dinamika
 teszi a végső szakaszt nehezen előrejelezhetővé, és hozzájárul ahhoz, hogy
@@ -1017,11 +1017,9 @@ Az eredmények ugyanakkor nem bizonyítanak valódi játékos-pszichológiát. N
 
 A legerősebb thesis-szintű következtetés ezért határkijelölő: a Tribal NeuroSim nem feketedobozos igazsággép, hanem ellenőrizhető transfer-kísérlet. Megmutatja, hogy a PremadeGraph-ból származó klaszterprofilok viselkedési priorokká alakíthatók, ezek evolúciós többügynökös környezetben futtathatók, és az eredmények eseményszinten visszavezethetők a szimulációs dinamikára. Az oksági állítás azonban nyitva marad: a futtatások nem bizonyítják, hogy az adatkészlet-struktúra közvetlenül okozza a győztes archetípust, csak azt, hogy a különböző struktúrából származó priorok ebben a rendszerben különböző kimenetekkel társultak.
 
-Ahogy az ABBA fogalmazta meg évtizedekkel ezelőtt: \textit{the winner takes it all}.
-A Tribal NeuroSim szimulációiban ez nem metafora, hanem a mechanika közvetlen
-következménye: a végső győztes az összes tile-t, az összes erőforrást és az
+A Tribal NeuroSim szimulációiban a végső győztes az összes tile-t, az összes erőforrást és az
 összes leszármazási vonalat örökli. Nincs részleges kimenetel, nincs megosztott
-győzelem, nincs béke. Ez teszi a rendszert alkalmas eszközzé az evolúciós szelekciós
+győzelem, nincs béke. A rendszer így alkalmas eszköz az evolúciós szelekciós
 nyomás vizsgálatára: a szabályrendszer minden esetben egyértelmű, ellenőrizhető
 és reprodukálható eredményt kényszerít ki.
 
@@ -1052,9 +1050,9 @@ transzfer-forrás:
     risk = pushok vállalása, team = asszisztok és clutch-mentések) ugyanolyan klaszterprofilok
     képezhetők. A szimulációban az ilyen csapatprofilok versenyeznek erőforrásokért és
     területért, és az eredmény statisztikailag összevethető a valódi kiesési arányokkal.
-  \item \textbf{Startupok és üzleti szervezetek.} Egy vállalat növekedési profilja ---
-    expanziós aggresszivitás, erőforrás-hatékonyság, piaci célzás, kockázattűrés,
-    csapatkoordináció --- leképezhető az öt artifaktra. A szimuláció ilyenkor piaci
+  \item \textbf{Startupok és üzleti szervezetek.} Egy vállalat növekedési profilja
+    (expanziós aggresszivitás, erőforrás-hatékonyság, piaci célzás, kockázattűrés,
+    csapatkoordináció) leképezhető az öt artifaktra. A szimuláció ilyenkor piaci
     versenykörnyezetként viselkedik, és megfigyelhető, hogy adott profilkombinációk
     milyen körülmények között dominálnak.
   \item \textbf{Ökológiai populációdinamika.} Az $A\_\text{combat}$ $\leftrightarrow$ predációs képesség,
@@ -1070,9 +1068,9 @@ transzfer-forrás:
 
 \subsection*{Módszertani transzferálhatóság}
 
-A PremadeGraph projektben alkalmazott eszközök --- gráfklaszterezés, asszortativitási
+A PremadeGraph projektben alkalmazott eszközök (gráfklaszterezés, asszortativitási
 elemzés, Brandes-féle betweenness centralitás, 3D Bird's Eye Sphere, pathfinder
-algoritmusok --- szintén nem LoL-specifikusak. Bármilyen hálózatban, ahol csúcsok
+algoritmusok) szintén nem LoL-specifikusak. Bármilyen hálózatban, ahol csúcsok
 közötti kapcsolat meghatározható és teljesítménymutató rendelhető a csúcsokhoz,
 ugyanez a pipeline alkalmazható:
 

@@ -12,7 +12,7 @@ A projekt adatgyűjtő rétege a Riot API-ra épül. A jelenlegi architektúráb
     \item véletlen vagy konkrét játékos-alapú indítás.
 \end{itemize}
 
-Ez azért fontos, mert a Riot API korlátai mellett csak olyan rendszer tartható karban hosszabb távon, amely a gyűjtést külön modulnak tekinti, és nem keveri össze a futási idejű vizualizációval.
+A Riot API korlátai mellett csak olyan rendszer tartható karban hosszabb távon, amely a gyűjtést külön modulnak tekinti, és nem keveri össze a futási idejű vizualizációval.
 
 \section{Normalizálás PUUID alapján}
 
@@ -31,9 +31,9 @@ Ez adja a rendszer egyik központi alapját, mert minden későbbi gráfanalitik
 
 \section{A teljesítménymetrika szükségessége}
 
-A gráfanalitikai elemzés alapanyagát egy értelmes, szerepkörérzékeny teljesítménypontszám jelenti. A League of Legends meccsek nyers adatai -- ölések, halálok, arany, sebzés -- önmagukban nem hordoznak elegendő szemantikát: egy support 2 halála nem ugyanolyan értelmű, mint egy ADC 2 halála, egy jungler alacsony CS-értéke nem büntetendő ugyanúgy, mint egy laneré, és egy split-pusher alacsony csapaterősítő statisztikái nem feltétlenül jelzik gyenge meccsteljesítményt. Ahhoz, hogy a játékosokat egy gráfban összehasonlítható csúcsokként lehessen kezelni, szükség van egy olyan mutatóra, amely a meccsstatisztikákat szerepkör-specifikus elvárások alapján értelmezi.
+A gráfanalitikai elemzés alapanyagát egy értelmes, szerepkörérzékeny teljesítménypontszám jelenti. A League of Legends meccsek nyers adatai (ölések, halálok, arany, sebzés) önmagukban nem hordoznak elegendő szemantikát: egy support 2 halála nem ugyanolyan értelmű, mint egy ADC 2 halála, egy jungler alacsony CS-értéke nem büntetendő ugyanúgy, mint egy laneré, és egy split-pusher alacsony csapaterősítő statisztikái nem feltétlenül jelzik gyenge meccsteljesítményt. Ahhoz, hogy a játékosokat egy gráfban összehasonlítható csúcsokként lehessen kezelni, szükség van egy olyan mutatóra, amely a meccsstatisztikákat szerepkör-specifikus elvárások alapján értelmezi.
 
-Az \texttt{opscore} célja ezért nem az, hogy abszolút igazságmértékként funkcionáljon, hanem az, hogy egy következetes, értelmezhető és módszertanilag védhető skálát hozzon létre. Ez a skála az asszortativitási elemzés, a centralitásvizsgálat és az esetleges szimulációs seeding alapjaként szolgál. A metrika akkor tekinthető hasznosnak, ha különböző játékosokhoz és különböző meccsekhez következetesen rendel értelmes értékeket -- függetlenül attól, hogy az aktuális adatbázis éppen erős vagy gyenge játékosokból áll.
+Az \texttt{opscore} célja ezért nem az, hogy abszolút igazságmértékként funkcionáljon, hanem az, hogy egy következetes, értelmezhető és módszertanilag védhető skálát hozzon létre. Ez a skála az asszortativitási elemzés, a centralitásvizsgálat és az esetleges szimulációs seeding alapjaként szolgál. A metrika akkor tekinthető hasznosnak, ha különböző játékosokhoz és különböző meccsekhez következetesen rendel értelmes értékeket, függetlenül attól, hogy az aktuális adatbázis éppen erős vagy gyenge játékosokból áll.
 
 \section{A korábbi modell módszertani korlátai}
 
@@ -42,7 +42,7 @@ A modell fejlesztése fokozatos módszertani finomítás eredménye volt. A kiin
 Bár ez a megközelítés működőképes volt, két alapvető gyengeség hamar felszínre került.
 
 \paragraph{Adatbázis-relatív normalizálás.}
-Ha az adatbázis túlnyomórészt nagyon erős játékosokat tartalmaz, a medián játékos is a skála közepe körüli értéket kap -- hiába teljesít objektív szempontból kiemelkedően. Fordítva: ha az adatbázis viszonylag gyengébb játékosokból áll, ugyanaz a mediánteljesítmény szintén a skála közepén jelenik meg. Egy Challenger-szintű dataseten belüli medián és egy Bronze-szintű dataseten belüli medián numerikusan közel eshet egymáshoz -- ez azonban nem teljesítményállítás, csupán adatbázis-relatív elhelyezkedés. A gráfanalitika szempontjából ez különösen problematikus, mert az asszortativitás és a centralitás értelmezéséhez stabil, adatbázisfüggetlen teljesítménycímkékre van szükség.
+Ha az adatbázis túlnyomórészt nagyon erős játékosokat tartalmaz, a medián játékos is a skála közepe körüli értéket kap, hiába teljesít objektív szempontból kiemelkedően. Fordítva: ha az adatbázis viszonylag gyengébb játékosokból áll, ugyanaz a mediánteljesítmény szintén a skála közepén jelenik meg. Egy Challenger-szintű dataseten belüli medián és egy Bronze-szintű dataseten belüli medián numerikusan közel eshet egymáshoz. Ez azonban nem teljesítményállítás, csupán adatbázis-relatív elhelyezkedés. A gráfanalitika szempontjából ez különösen problematikus, mert az asszortativitás és a centralitás értelmezéséhez stabil, adatbázisfüggetlen teljesítménycímkékre van szükség.
 
 \paragraph{A korábbi halálokon alapuló közelítés korlátai.}
 A korábbi rendszer a halálokat és a kill-participationt egy külön, szándékosan minimális formulával értékelte, amely a halálokat büntette, a kill-participationt engedményként kezelte. Ez a közelítés azonban nem tudott különbséget tenni az alábbi, szemantikailag eltérő szituációk között:
@@ -55,7 +55,7 @@ A korábbi rendszer a halálokat és a kill-participationt egy külön, szándé
 \end{itemize}
 A korábbi képlet ezeket az eseteket nem tudta megkülönböztetni, mert nem vette figyelembe a meccs hosszát, a halálok eltöltött idejét, a szerepköri elvárásokat, a csapaterőhöz való viszonyt, vagy azt, hogy a halálokat ellensúlyozta-e valamilyen win condition-beváltás. Ez módszertani gyengeség, amelyet a jelenlegi modell strukturálisan orvosol.
 
-Egy harmadik korlát az volt, hogy a korábbi rendszerben az artifactok értékét egy merev felső korlát szorította: minden artifact maximális hozzájárulása közel azonos volt. Ez elfedte az elité, win-condition-szintű teljesítményeket -- például egy extrém KDA-val rendelkező carry meccset, amelyet a korábbi modell középszerű értékre komprimálhatott.
+Egy harmadik korlát az volt, hogy a korábbi rendszerben az artifactok értékét egy merev felső korlát szorította: minden artifact maximális hozzájárulása közel azonos volt. Ez elfedte az elité, win-condition-szintű teljesítményeket, például egy extrém KDA-val rendelkező carry meccset, amelyet a korábbi modell középszerű értékre komprimálhatott.
 
 \section{A helyi, szerepkörérzékeny opscore modell}
 
@@ -99,7 +99,7 @@ A TOP, JUNGLE és MIDDLE szerepköröknél a Fight Conversion kissé nagyobb sú
 
 A \texttt{Risk Discipline} artifact azt méri, hogy a játékos mennyire költségesen halt meg, és milyen túlélési minőséget produkált. Ez az artifact veszi át a korábbi halálokon alapuló mutató szerepét, de jóval kifejezőbben és részletesebben.
 
-Az első alkategória, a \emph{Death Cost}, a percenkénti halálrátát és a meccs során holtan töltött időarányt kombinálja. Kulcsfontosságú finomítás, hogy a halálok „ára" mérséklődik, ha a játékos magas kill-participationt mutat -- azaz ha a halálokat kompenzált harckonverzió kísérte.
+Az első alkategória, a \emph{Death Cost}, a percenkénti halálrátát és a meccs során holtan töltött időarányt kombinálja. Kulcsfontosságú finomítás, hogy a halálok „ára" mérséklődik, ha a játékos magas kill-participationt mutat, azaz ha a halálokat kompenzált harckonverzió kísérte.
 
 A második alkategória, a \emph{Survival Quality}, a meccs során életben töltött leghosszabb folyamatos időszak arányát és a kritikus szituációkban felmutatott túlélési eseményeket méri: alacsony HP-val való túlélés, több immobilizáció túlélése, csapdahelyzetből való kiszabadulás.
 
@@ -121,7 +121,7 @@ A \emph{Vision Control} alkategória a percenkénti vision score-t, a ward-aktiv
 
 Az \emph{Objective Conversion} alkategória az objektívumkárt, az epic-szörny részvételt (sárkányok, báró, herald, ellopott objektívumok) és a struktúrarombolást (tornyok, inhibitorok) súlyozza.
 
-Ez az artifact tartalmaz egy dinamikus dominancia-újrasúlyozást is: ha az \emph{Objective Conversion} lényegesen meghaladja a \emph{Vision Control} alkategória értékét, az artifact automatikusan az objektívumszerzés felé tolja a súlyt. Ez azért fontos, mert a split-pusher és az objektívumcarry playstyle leírható úgy, mint ahol az Objective Conversion az elsődleges win condition -- ilyen esetben az alacsony vision aktivitás nem bünteti indokolatlanul a játékost.
+Ez az artifact tartalmaz egy dinamikus dominancia-újrasúlyozást is: ha az \emph{Objective Conversion} lényegesen meghaladja a \emph{Vision Control} alkategória értékét, az artifact automatikusan az objektívumszerzés felé tolja a súlyt. A split-pusher és az objektívumcarry playstyle esetén az Objective Conversion az elsődleges win condition. Ilyen esetben az alacsony vision aktivitás nem bünteti indokolatlanul a játékost.
 
 A \texttt{Map and Objective Control} artifact kapja a legmagasabb overflow-erősséget, mert az objektív- és struktúranyomás közvetlen nyerési feltétel lehet.
 
@@ -129,7 +129,7 @@ A \texttt{Map and Objective Control} artifact kapja a legmagasabb overflow-erős
 
 A \texttt{Team Enablement} artifact a csapattársak számára teremtett értéket méri, mind az aktív cselekvő, mind a védelmező-kiszolgáló szerepben.
 
-A \emph{Setup Control} alkategória a percenkénti CC-aktivitást (immobilizálások, időszakos hatások) és a CC-konverziót -- azaz a CC utáni ölésbenyomás-hatékonyságot -- veszi alapul. Ez az alkategória az összes szerepkör esetén domináns; a support kapja a legkiegyensúlyozottabb arányokat a két alkategória között.
+A \emph{Setup Control} alkategória a percenkénti CC-aktivitást (immobilizálások, időszakos hatások) és a CC-konverziót (azaz a CC utáni ölésbenyomás-hatékonyságot) veszi alapul. Ez az alkategória az összes szerepkör esetén domináns; a support kapja a legkiegyensúlyozottabb arányokat a két alkategória között.
 
 A \emph{Protection Support} alkategória a szövetségesre átadott gyógyítást és pajzsot, illetve a szövetséges haláltól való megmentésének eseményeit értékeli. A support esetén ez az alkategória kap a legnagyobb relatív súlyt.
 
@@ -159,15 +159,15 @@ B(r) = \frac{r^h}{r^h + m^h}
 
 ahol $t = 0{,}70$ azt fejezi ki, hogy a várható teljesítményszint ($r = 1$) az alkategória-pontszám 70\%-át kapja, $h = 2$ pedig a görbe meredekségét szabályozza. Könnyen belátható, hogy $B(1) = 1/(1 + (1-t)/t) = t$\,: a görbe konstruálása pontosan azt biztosítja, hogy az elváráshoz igazodó teljesítmény a skála 70\%-án üljön.
 
-Pozitív mutatóknál -- ahol a nagyobb érték jobb -- a teljes pontozási függvény:
+Pozitív mutatóknál (ahol a nagyobb érték jobb) a teljes pontozási függvény:
 
 \begin{equation}
 S_+(r) = \min\!\left(c,\; B(r) + \lambda \cdot \ln\!\left(\max(1,\, r)\right)\right)
 \end{equation}
 
-ahol $\lambda = 0{,}50$ a logaritmikus bővítés erőssége és $c = 2{,}20$ az alkategória felső korlátja. A $\ln(\max(1, r))$ tag a várható szint feletti teljesítményt jutalmazza lassan növekvő, de korlátlan formában -- egészen addig, amíg a $c$ plafon be nem lép. Ez a logaritmikus rész teremti meg a modell elité carry potenciálját anélkül, hogy egyetlen nyers statisztika korlátlanul uralhatná a végeredményt.
+ahol $\lambda = 0{,}50$ a logaritmikus bővítés erőssége és $c = 2{,}20$ az alkategória felső korlátja. A $\ln(\max(1, r))$ tag a várható szint feletti teljesítményt jutalmazza lassan növekvő, de korlátlan formában, egészen addig, amíg a $c$ plafon be nem lép. Ez a logaritmikus rész teremti meg a modell elité carry potenciálját anélkül, hogy egyetlen nyers statisztika korlátlanul uralhatná a végeredményt.
 
-Negatív mutatóknál -- ahol a kisebb érték jobb, például a halálráta esetén --:
+Negatív mutatóknál (ahol a kisebb érték jobb, például a halálráta esetén):
 
 \begin{equation}
 S_-(r) = S_+\!\left(\frac{1}{r}\right)
@@ -177,7 +177,7 @@ Ez az inverzarány-transzformáció azt biztosítja, hogy az alulteljesítők al
 
 \subsection{Időtartam-megbízhatóság}
 
-Rövid meccsekben -- különösen korai megadásnál -- a percenkénti mutatók rendkívül labilis becslők. Egy 15 perces meccsben mért percenkénti arányszám jóval kevésbé stabil, mint egy 35 percesben mért ugyanaz. Ennek kezelésére a modell egy megbízhatósági szorzót vezet be:
+Rövid meccsekben (különösen korai megadásnál) a percenkénti mutatók rendkívül labilis becslők. Egy 15 perces meccsben mért percenkénti arányszám jóval kevésbé stabil, mint egy 35 percesben mért ugyanaz. Ennek kezelésére a modell egy megbízhatósági szorzót vezet be:
 
 \begin{equation}
 R_D = \operatorname{clamp}_{[0,1]}\!\left(\frac{D - 12}{8}\right)
@@ -252,12 +252,12 @@ A \texttt{Risk Discipline} artifact önmagában tartalmazza az összes haláloko
 \texttt{feed\_risk} = \operatorname{clamp}_{[0,10]}\!\left(10 - 5 \cdot A_{\text{risk}}\right)
 \end{equation}
 
-Ez a mutató a \texttt{Risk Discipline} artifact értékét fordítja át egy intuitív kockázati jelzőre: magas \texttt{feed\_risk} értéke alacsony \texttt{Risk Discipline}-t, tehát problematikus halálmintázatot jelez. Ez az érték azonban \emph{nem} önálló modell és \emph{nem} kutatási célpont -- kizárólag a \texttt{Risk Discipline} artifactból levezetett diagnosztikai segédszám, amelyet megjelenítési vagy szűrési célra lehet felhasználni.
+Ez a mutató a \texttt{Risk Discipline} artifact értékét fordítja át egy intuitív kockázati jelzőre: magas \texttt{feed\_risk} értéke alacsony \texttt{Risk Discipline}-t, tehát problematikus halálmintázatot jelez. Ez az érték azonban \emph{nem} önálló modell és \emph{nem} kutatási célpont, kizárólag a \texttt{Risk Discipline} artifactból levezetett diagnosztikai segédszám, amelyet megjelenítési vagy szűrési célra lehet felhasználni.
 
 \section{Kivételes teljesítmények és szélső esetek}
 
 \paragraph{Elité carry meccsek.}
-Egy kiemelkedő KDA-val és magas sebzéskoncentrációval rendelkező carry -- a fejlesztés során például egy 40 ölés, 9 halál, 14 assist scoreline-t produkáló TOP Quinn meccset vizsgáltak -- a korábbi modellben nyomás alá kerülhetett a kemény artifact-plafonok miatt. A jelenlegi modellben a \texttt{Combat Impact} és a \texttt{Map and Objective Control} artifactok bővítése lehetővé teszi, hogy ezek az értékek jóval a nominális 2 pont fölé menjenek. A tesztelt meccsen az összesített \texttt{opscore} a 10-es plafonig futott, ahol a \texttt{Combat Impact} ($2{,}85$) és a \texttt{Map and Objective Control} ($3{,}11$) bővítése döntő szerepet játszott, miközben a 9 halál a \texttt{Risk Discipline}-t ($1{,}39$) mérsékelte. Ez a viselkedés helyes: az elité carry meccset a modell elismerőn kezeli, miközben a halálok ára sem tűnik el.
+Egy kiemelkedő KDA-val és magas sebzéskoncentrációval rendelkező carry (a fejlesztés során például egy 40 ölés, 9 halál, 14 assist scoreline-t produkáló TOP Quinn meccset vizsgáltak) a korábbi modellben nyomás alá kerülhetett a kemény artifact-plafonok miatt. A jelenlegi modellben a \texttt{Combat Impact} és a \texttt{Map and Objective Control} artifactok bővítése lehetővé teszi, hogy ezek az értékek jóval a nominális 2 pont fölé menjenek. A tesztelt meccsen az összesített \texttt{opscore} a 10-es plafonig futott, ahol a \texttt{Combat Impact} ($2{,}85$) és a \texttt{Map and Objective Control} ($3{,}11$) bővítése döntő szerepet játszott, miközben a 9 halál a \texttt{Risk Discipline}-t ($1{,}39$) mérsékelte. Ez a viselkedés helyes: az elité carry meccset a modell elismerőn kezeli, miközben a halálok ára sem tűnik el.
 
 \paragraph{Split-pusher és struktúracarry.}
 Egy Yorick vagy Fiora, aki szándékosan kerüli a csatatereket és struktúrákon keresztül nyer, tipikusan alacsony \texttt{Team Enablement} értékkel rendelkezik. A jelenlegi modellben a \texttt{Map and Objective Control} artifact dinamikus dominancia-újrasúlyozása pontosan erre az esetre van kalibrálva: ha az Objective Conversion drámaian meghaladja a Vision Control értékét, az artifact súlyt vált az objektívumszerzés felé. Az alacsony csapaterősítő szám így nem torzítja indokolatlanul a végeredményt, amennyiben a win condition-beváltás ténylegesen megvalósult.
@@ -266,7 +266,7 @@ Egy Yorick vagy Fiora, aki szándékosan kerüli a csatatereket és struktúrák
 A korábbi rendszer tartalmazott egy önálló tanking artifactet, amely a kapott sebzés percenkénti értékét jutalmazta. Ez azonban két szemantikailag eltérő viselkedést mért egyszerre: a hasznos frontline-nyomásabszorpciót és az értéktelen, ismétlődő halálos rohambevételt. A jelenlegi modell nem tartalmaz önálló tanking artifactet. A hasznos frontline-játékos értéke a \texttt{Risk Discipline} (alacsony halálköltség, magas survival quality), a \texttt{Team Enablement} (setup control) és az esetleges \texttt{Map and Objective Control} (struktúra és epic monster részvétel) kombináción keresztül jelenik meg. A nyers kapott sebzés önmagában nem kap pontszámot; csak akkor válik értékelhetővé, ha az elvárható szerepköri magatartással együtt jelenik meg.
 
 \paragraph{Rövid meccsek és korai megadás.}
-Egy 15 perces meccsben a percenkénti arányok -- arany, sebzés, halálráta, vision score -- rendkívül kevés mintából adódnak. Egyetlen korai ölés megduplázhatja a tényleges DPM-et; egyetlen halál megduplázhatja a halálrátát. Az időtartam-megbízhatósági szorzó ($R_D$) pontosan ezt a jelenséget kezeli: a labilis percenkénti mutatók automatikusan a semleges, szerepköri elváráshoz közeli értékre simítódnak. Diszkrét eseményeken alapuló alkategóriák -- torony, sárkány, báró -- nincsenek megbízhatósági simítás alá vonva, mert ezek önmagukban értékelhetők.
+Egy 15 perces meccsben a percenkénti arányok (arany, sebzés, halálráta, vision score) rendkívül kevés mintából adódnak. Egyetlen korai ölés megduplázhatja a tényleges DPM-et, egyetlen halál megduplázhatja a halálrátát. Az időtartam-megbízhatósági szorzó ($R_D$) pontosan ezt a jelenséget kezeli: a labilis percenkénti mutatók automatikusan a semleges, szerepköri elváráshoz közeli értékre simítódnak. Diszkrét eseményeken alapuló alkategóriák (torony, sárkány, báró) nincsenek megbízhatósági simítás alá vonva, mert ezek önmagukban értékelhetők.
 
 \section{A korábbi halálokon alapuló mutató nyugdíjazása}
 
@@ -288,9 +288,9 @@ Az \texttt{opscore} jelenlegi \texttt{Risk Discipline} artifactja ezeket a hián
 
 \section{A modell empirikus beágyazottsága}
 
-Az \texttt{opscore} modell értelmezési keretéhez fontos módszertani megjegyzést kell fűzni. A dolgozat asszortativitási fejezetében közölt eredmények -- köztük a gráfmódonkénti és dataszetenkénti asszortativitási együtthatók -- a korábbi, percentilis-alapú normalizációs sémával számított értékeken alapulnak, amelyek az adatgyűjtés idején kerültek az adatbázisba. Ezek az eredmények mint empirikus megfigyelések érvényesek maradnak a korábbi modell keretein belül.
+Az \texttt{opscore} modell értelmezési keretéhez fontos módszertani megjegyzést kell fűzni. A dolgozat asszortativitási fejezetében közölt eredmények (köztük a gráfmódonkénti és dataszetenkénti asszortativitási együtthatók) a korábbi, percentilis-alapú normalizációs sémával számított értékeken alapulnak, amelyek az adatgyűjtés idején kerültek az adatbázisba. Ezek az eredmények mint empirikus megfigyelések érvényesek maradnak a korábbi modell keretein belül.
 
-A jelen fejezetben ismertetett helyi, szerepkörérzékeny modell ezzel szemben a kanonikus definíció, amelyre a rendszer épül. A két modell numerikusan eltérő eredményeket ad: a percentilis-alapú normalizálás az ellenőrzött adatbázis-pillanatképben tipikusan $5{,}5$--$6{,}5$ körüli átlagot produkált (a flexset dataseten a mért \texttt{opscore} átlag \textbf{5{,}721} volt), mivel a medián mindig az adatbázis közepéhez kötődött. A helyi modell eredményei ezzel szemben a szerepköri elvárásokhoz képest értelmezendők, ezért az eloszlás alakja az adatbázis összetételétől függetlenebb -- és ez a szándékos tervezési döntés.
+A jelen fejezetben ismertetett helyi, szerepkörérzékeny modell ezzel szemben a kanonikus definíció, amelyre a rendszer épül. A két modell numerikusan eltérő eredményeket ad: a percentilis-alapú normalizálás az ellenőrzött adatbázis-pillanatképben tipikusan $5{,}5$--$6{,}5$ körüli átlagot produkált (a flexset dataseten a mért \texttt{opscore} átlag \textbf{5{,}721} volt), mivel a medián mindig az adatbázis közepéhez kötődött. A helyi modell eredményei ezzel szemben a szerepköri elvárásokhoz képest értelmezendők, ezért az eloszlás alakja az adatbázis összetételétől függetlenebb. Ez a szándékos tervezési döntés.
 
 A mintanagyság kérdése mindkét modell esetén fontos módszertani korlát. Az ellenőrzött \texttt{players} állapotban:
 \begin{itemize}
@@ -300,7 +300,7 @@ A mintanagyság kérdése mindkét modell esetén fontos módszertani korlát. A
     \item legalább 10 meccsel \textbf{337} játékos rendelkezett.
 \end{itemize}
 
-A játékosok nagy része rövid megfigyelési múltból származik. Ezért minden olyan állításnál, amely stabilabb teljesítményprofilra utalna, különösen óvatosnak kell lenni -- ez mindkét modellre vonatkozik.
+A játékosok nagy része rövid megfigyelési múltból származik. Ezért minden olyan állításnál, amely stabilabb teljesítményprofilra utalna, különösen óvatosnak kell lenni. Ez mindkét modellre vonatkozik.
 
 \paragraph{Módszertani összefoglalás.}
 A helyi, szerepkörérzékeny \texttt{opscore} modell módszertanilag erősebb bemenetet biztosít a gráfanalitikai réteg számára, mint a korábbi percentilis-alapú megközelítés, mert:
@@ -310,7 +310,7 @@ A helyi, szerepkörérzékeny \texttt{opscore} modell módszertanilag erősebb b
     \item az elité carry és win condition-szintű teljesítmények számszerűen megjelennek, nem komprimálódnak el a plafonok mögé;
     \item a rövid meccsek nem produkálnak irreális szélső értékeket.
 \end{itemize}
-Ez teszi az \texttt{opscore}-t alkalmas bemenetté az asszortativitási elemzéshez, a betweenness centralitás interpretációjához és a tervezett szimulációs seeding-hez.
+Az \texttt{opscore} ennek köszönhetően alkalmas bemenet az asszortativitási elemzéshez, a betweenness centralitás interpretációjához és a tervezett szimulációs seeding-hez.
 
 \section{A teljes képletrendszer összefoglalása}
 

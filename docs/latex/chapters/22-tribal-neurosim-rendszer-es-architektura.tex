@@ -368,7 +368,7 @@ vagy vitatott tile-okra szűkülnek (\texttt{FLAG\_TILE\_DATA = 0x01}), így a p
 arányos az aktivitással, nem a teljes térképmérettel. Harmadszor: szimulációs és
 UI-ciklus szétválasztása. A Rust szerver 40~ms alatt lekezel egy teljes 599-törzsös
 tick-et; a MonoGame kliens aszinkron dekódol és renderel, anélkül hogy blokkolná a
-szimulációs ciklust. A két folyamat egymástól függetlenül fut --- ez az architektúra
+szimulációs ciklust. A két folyamat egymástól függetlenül fut, ez az architektúra
 alapja annak, hogy a szimuláció egyenletesen fut magas törzsszámnál is.
 
 \subsection*{Teljesítményproblémák és megoldásuk}

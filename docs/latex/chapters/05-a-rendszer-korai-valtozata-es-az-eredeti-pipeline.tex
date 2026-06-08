@@ -60,7 +60,7 @@ Ezek a hiányok nem kudarcot jeleztek, hanem természetes érési pontokat. A je
 
 Visszatekintve a projekt korai szakaszának legtermészetesebb csapdája az \emph{akkumulatív script-architectúra} lett volna, amelyben minden új feature egy újabb script formájában kerül be, és az egész rendszer globális állapottól függ. Ez a minta sok hasonló méretű adat-kutatási projektben megfigyelhető. Azzal, hogy a projekt tudatosan bevezette a dataset-absztrakciót, a Rust-szintű analitikai elválasztást és a perzisztens klasztermodellt, elkerülte ezt a csapdát.
 
-Különösen fontos fordulópontot jelentett az a felismerés, hogy \emph{a kutatási analitikának nem szabad a frontend-állapottól függenie}. Ha az asszortativitás kiszámítása frontend-kérésre, a böngészőben lévő adatokból történne, akkor egyrészt nem lenne reprodukálható, másrészt nagyon érzékeny lenne a felhasználói interakcióra. A Rust-oldali, parancssori futtathatóság ezt a problémát gyökeresen oldja meg.
+Döntő fordulópontot jelentett az a felismerés, hogy \emph{a kutatási analitikának nem szabad a frontend-állapottól függenie}. Ha az asszortativitás kiszámítása frontend-kérésre, a böngészőben lévő adatokból történne, akkor egyrészt nem lenne reprodukálható, másrészt nagyon érzékeny lenne a felhasználói interakcióra. A Rust-oldali, parancssori futtathatóság ezt a problémát gyökeresen oldja meg.
 
 \section{Miért kellett a régi szövegréteget is megtartani?}
 

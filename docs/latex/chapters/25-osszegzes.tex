@@ -20,7 +20,7 @@ algoritmusoknak, a perzisztenciának, a frontend megjelenítésnek és a NeuroSi
 A League of Legends mérkőzésekben minden játékos egy nagyobb kapcsolati tér részévé válik.
 Egyes játékosok újra és újra egymás mellé kerülnek, mások rendszeresen egymás ellen játszanak.
 Ezek az ismétlődések önmagukban nem árulnak el semmit a játékosok szándékáról vagy érzéseiről,
-de alkalmasak arra, hogy kapcsolatként kezeljük őket egy gráfban -- és arra, hogy ebből a
+de alkalmasak arra, hogy kapcsolatként kezeljük őket egy gráfban, és arra, hogy ebből a
 kapcsolathálóból valódi következtetéseket vonjunk le.
 
 A projekt ebből a felismerésből indul. Nem egy egyszerű statisztikai oldalt épít, hanem egy
@@ -31,12 +31,12 @@ ezek a valódi adatból levezetett profilok épülnek be.
 A kérdések, amelyeket a rendszer vizsgál, nem pszichológiai állítások. Vannak-e sűrűbb csoportok
 a kapcsolathálóban? Vannak-e játékosok, akik sok csoport között közvetítenek, és ezek eltávolítása
 szétszakítaná a hálót? Hasonló teljesítményű játékosok kerülnek-e egymás mellé szívesebben?
-Másképpen viselkedik-e egy Flex Queue-ból felépített gráf -- ahol az ismétlődő együttjátszás
-természetes --, mint egy SoloQ kontroll-gráf, ahol a matchmaking véletlenszerűsége dominál?
+Másképpen viselkedik-e egy Flex Queue-ból felépített gráf (ahol az ismétlődő együttjátszás
+természetes), mint egy SoloQ kontroll-gráf, ahol a matchmaking véletlenszerűsége dominál?
 
 Ezek mérhető, módszertanilag védett kérdések. A válaszok nem mutatnak be valódi emberi szándékot,
 de megmutatják, milyen hálózati szerkezetek keletkeznek adott adatgyűjtési és elemzési szabályok
-mellett. Ez a különbségtétel -- mit mér a rendszer és mit nem -- az egész projekt tudományos
+mellett. Ez a különbségtétel (mit mér a rendszer és mit nem) az egész projekt tudományos
 értékének alapja.
 
 \section{A fő eredmények}
@@ -66,7 +66,7 @@ eredmény értelmezését is alakítják.
 
 Az ötödik eredmény a Rust-alapú algoritmikus réteg. A rendszer nem csak adatokat jelenít meg,
 hanem gráfalgoritmusokat is futtat: útvonalkeresést, asszortativitást és betweenness-központiságot.
-Ez szakdolgozati szempontból azért fontos, mert a projekt nem marad meg dashboard-szinten.
+A projekt ezzel nem marad meg dashboard-szinten.
 A számításigényes részek külön futtatókörnyezetben, determinisztikus és újrafuttatható módon
 jelennek meg.
 
@@ -117,20 +117,20 @@ központisági mutatók; ezekből pedig olyan klaszterprofilok, amelyek a Tribal
 viselkedési priorokként újra felhasználhatók. Ez a lánc teszi a dolgozatot többé, mint különálló
 modulok gyűjteménye.
 
-Összefoglalva: a projekt azt mutatja meg, hogy egy online kompetitív játék mérkőzésadatai nemcsak
+A projekt tehát azt mutatja meg, hogy egy online kompetitív játék mérkőzésadatai nemcsak
 eredménylistaként kezelhetők, hanem kapcsolati és viselkedési mintákat hordozó adatrendszerként is.
 A dolgozat legerősebb, védhető következtetése nem az, hogy feltárja a játékosok valódi motivációit,
 hanem az, hogy megmutatja: óvatos módszertani keretek között ezekből az adatokból reprodukálható,
 magyarázható és továbbvihető hálózati elemzés építhető.
 
-\section{Túl a videojátékon -- módszertani transzferálhatóság}
+\section{Túl a videojátékon: módszertani transzferálhatóság}
 \label{sec:osszegzes-transfer}
 
 A PremadeGraph kiindulópontja egy League of Legends API-n keresztül gyűjtött adatbázis. Ez
 tudatos választás volt, nem véletlenszerű: a Riot Games Developer API nyilvánosan elérhető,
 gazdagon dokumentált, fejlesztői szinten kezelhető, és strukturált JSON adatot szolgáltat.
-A játékadatok jellegük miatt ideálisan alkalmasak gráf-pipeline prototipizálásra -- sok szereplő,
-sok interakció, jól definiált szerepkörök, kvantitatív teljesítménymutatók. De a módszertan
+A játékadatok jellegük miatt ideálisan alkalmasak gráf-pipeline prototipizálásra: sok szereplő,
+sok interakció, jól definiált szerepkörök, kvantitatív teljesítménymutatók. A módszertan
 nem LoL-specifikus. Amit ez a projekt épített, az egy általános célú kutatási infrastruktúra,
 amelynek minden komponense transzferálható.
 
@@ -153,7 +153,7 @@ közvetlenül alkalmazható.
 
 \textbf{Pathfinder algoritmusok.} A BFS, Dijkstra, kétirányú keresés és az egzakt A* nem
 League of Legends találmányok. Navigációs rendszerek, hálózati routing optimalizáció,
-robotikai útvonaltervezés, játékmotorok -- mindegyik ugyanezt az algoritmikus rétegt
+robotikai útvonaltervezés, játékmotorok: mindegyik ugyanezt az algoritmikus rétegt
 használja. A Pathfinder Lab összehasonlítási felülete adaptálható bármely gráf-alapú
 keresési problémára.
 
@@ -166,7 +166,7 @@ hálózatoknál, szociológiában globális kapcsolathálózatoknál ez kifejeze
 \textbf{Tribal NeuroSim evolúciós szimulációja.} Az artifact-prior alapú inicializálás
 és a NEAT-stílusú neuroevolúció kombinációja bármilyen domainre alkalmazható, ahol
 csoportszintű teljesítményprofilok kinyerhetők és összehasonlíthatók. Az öt
-alapartifakt -- combat, resource, map\_objective, risk, team -- nem LoL-fogalom.
+alapartifakt (combat, resource, map\_objective, risk, team) nem LoL-fogalom.
 Csapatsportokban harci~=~fragtörténet, resource~=~gazdasági döntések, map~=~pozícionálás,
 risk~=~agresszív húzások vállalása, team~=~asszisztok és csapatmentések. Startupok esetén
 combat~=~piaci agresszivitás, resource~=~tőkehatékonyság, map~=~piaci célzás, risk~=~kockázattűrés,
@@ -177,12 +177,12 @@ pipeline-ra illeszthető.
 
 A Riot Games API azért volt kényelmes prototípus-forrás, mert nyílt, strukturált és gazdag
 metaadatokban. De a módszertan nem igényel LoL-adatot. Ugyanez a pipeline futtatható bármely
-nyílt API-ra -- GitHub kollaborációs gráf, NBA teljesítményadatbázis, PubMed szerzői hálózat --,
+nyílt API-ra (GitHub kollaborációs gráf, NBA teljesítményadatbázis, PubMed szerzői hálózat),
 ahol hasonló felosztás elvégezhető. A videojáték itt eszköz volt, nem korlát.
 
 Ahogy az ABBA megfogalmazta évtizedekkel ezelőtt: \textit{the winner takes it all}.
-A Tribal NeuroSimben ez nem metafora, hanem a mechanika közvetlen következménye -- és egyben
+A Tribal NeuroSimben ez nem metafora, hanem a mechanika közvetlen következménye, és egyben
 az egész pipeline szimbóluma. Az adat, a gráf, a klaszter, az analitika és a szimuláció mind
 egyetlen coherens lánc részei. Aki megérti ezt a láncot, annak kezében van egy általánosan
-alkalmazható hálózatelemzési és evolúciós modellezési keretrendszer -- amelynek a videojáték
+alkalmazható hálózatelemzési és evolúciós modellezési keretrendszer, amelynek a videojáték
 csak a legpraktikusabb és legelérhetőbb bemeneti forrása volt.

@@ -76,7 +76,7 @@ Szerveres SQL-adatbázis & Erősebb többfelhasználós modell & A projekt loká
 \end{tabularx}
 \end{table}
 
-Különösen fontos itt a Python és Rust közti munkamegosztás. A Python megőrizte a gyors adatmanipuláció és prototípuskészítés előnyeit, míg a Rust a stabil futásidejű gráfmag szerepét kapta. A kettő közé a Node/Express réteg került, amely szerződéses API-határként működik.
+A Python és Rust közti munkamegosztás éles: a Python megőrizte a gyors adatmanipuláció és prototípuskészítés előnyeit, míg a Rust a stabil futásidejű gráfmag szerepét kapta. A kettő közé a Node/Express réteg került, amely szerződéses API-határként működik.
 
 \subsection{Miért maradt a Node középen?}
 
@@ -174,9 +174,9 @@ Az aktív adatállapotot 2026. április 28-án közvetlenül a repository aktuá
     \item finomított adatbázis (\texttt{playersrefined.db}): \textbf{6768} játékos, \textbf{140} klaszter, \textbf{1538} klasztertag.
 \end{itemize}
 
-Fontos megjegyezni, hogy a soloq dataset klaszterei jellemzően \emph{duo párokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül. Ez strukturálisan különbözik a flexset klasztereitől, ahol akár ötfős premade csapat is kialakulhat rendszeresen ismétlődő együttsként.
+A soloq dataset klaszterei jellemzően \emph{duo párokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül. Ez strukturálisan különbözik a flexset klasztereitől, ahol akár ötfős premade csapat is kialakulhat rendszeresen ismétlődő együttsként.
 
-Ez a pont fontos: a jelen dolgozat nem hipotetikus rendszert ír le, hanem egy olyan állapotot, amelyben a pipeline már nem csak tervekből áll, hanem két, egymással összehasonlítható, eltérő queue-szemantikájú, valós adatokkal feltöltött és ténylegesen lefuttatott kutatási korpusszal rendelkezik.
+A jelen dolgozat nem hipotetikus rendszert ír le, hanem egy olyan állapotot, amelyben a pipeline már nem csak tervekből áll, hanem két, egymással összehasonlítható, eltérő queue-szemantikájú, valós adatokkal feltöltött és ténylegesen lefuttatott kutatási korpusszal rendelkezik.
 
 A meccsszámban megfigyelhető egy-fájlos eltérés (4981 fájl vs. 4980 matchCount a Graph V2 összegzőben) metodikai megjegyzést igényel: ez feltehetően egy olyan meccsfájl, amelyet a gyűjtő letöltött, de a Graph V2 pipeline valamilyen validációs szűrőn kizárt. Ez nem kritikus eltérés, de jól mutatja, hogy a pipeline nem pusztán fájlszámlálás alapján dolgozik.
 

@@ -142,7 +142,7 @@ A kutatás-orientált frontend oldalak közös tulajdonsága, hogy nem elégedne
     \item elkerülni a túl gyors, túl erős társadalmi következtetéseket.
 \end{itemize}
 
-Ez különösen fontos, mert az ilyen típusú analitika könnyen félreértelmezhető. A felület ezért szándékosan tartalmaz interpretációs szövegeket és magyarázó elemeket is. A signed-balance oldal a jelenlegi dolgozati bemutatási útvonalból kikerült: a hozzá tartozó backend/Rust kód megmaradhat kísérleti opcióként, de a fő navigáció és a bemutatási útvonal már az asszortativitásra, a core-periphery gráfolvasatra és a Brandes-központiságra épül.
+Az ilyen típusú analitika könnyen félreértelmezhető. A felület ezért szándékosan tartalmaz interpretációs szövegeket és magyarázó elemeket is. A signed-balance oldal a jelenlegi dolgozati bemutatási útvonalból kikerült: a hozzá tartozó backend/Rust kód megmaradhat kísérleti opcióként, de a fő navigáció és a bemutatási útvonal már az asszortativitásra, a core-periphery gráfolvasatra és a Brandes-központiságra épül.
 
 \section{Betweenness Centrality oldal}
 
@@ -193,7 +193,7 @@ A Graph V2 pipeline a \texttt{backend/data/cache/\{datasetId\}/graph-v2/} könyv
 \caption{A Graph V2 pipeline bináris és JSON artifact-fájljainak szerkezete. A diagram a \texttt{graph-v2-artifact-structure.puml} forrás alapján különíti el a JSON leírókat (\texttt{manifest.json}, \texttt{node\_meta.json}, \texttt{cluster\_meta.json}) és a little-endian \texttt{.u32} bináris payloadokat (\texttt{edge\_pairs.u32}, \texttt{edge\_props.u32}, \texttt{node\_metrics.u32}). A \texttt{manifest.json} tartalmazza a csúcs-, él- és klaszterszámokat, míg a párhuzamos indexelés biztosítja, hogy az azonos sorszámú metadata- és metric-sor ugyanarra a csúcsra, illetve az azonos sorszámú edge-pair és edge-prop rekord ugyanarra az élre vonatkozzon.}
 \end{figure}
 
-A bináris formátumok (\texttt{.u32}) célja a betöltési teljesítmény: a frontend nem kénytelen JSON-parszolást végezni a csúcs- és élmutatókon; a bináris buffer közvetlenül beolvasható a WebGL renderelési pipeline-ba. Ez különösen a nagyméretű flexset esetén kritikus.
+A bináris formátumok (\texttt{.u32}) célja a betöltési teljesítmény: a frontend nem kénytelen JSON-parszolást végezni a csúcs- és élmutatókon; a bináris buffer közvetlenül beolvasható a WebGL renderelési pipeline-ba. Nagyméretű flexset esetén ez kritikus.
 
 \subsection{A summary.md mint gépi és emberi kontextus}
 

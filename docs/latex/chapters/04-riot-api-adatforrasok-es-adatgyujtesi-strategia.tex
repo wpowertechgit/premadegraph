@@ -112,7 +112,7 @@ Ez két fontos dolgot jelez. Egyrészt a korpusz zöme olyan játékmódból jö
 \end{tabular}
 \end{table}
 
-A map-eloszlás azt is mutatja, hogy a korpusz döntően a klasszikus Summoner's Rift környezetre épül. Ez azért lényeges, mert a szerepkörök, az útvonalkeresési interpretáció és a teljesítménymutatók is ebben a közegben a legjobban értelmezhetők.
+A map-eloszlás azt is mutatja, hogy a korpusz döntően a klasszikus Summoner's Rift környezetre épül. A szerepkörök, az útvonalkeresési interpretáció és a teljesítménymutatók ebben a közegben értelmezhetők a legjobban.
 
 \section{Premade-fókusz és gyűjtési stratégiai intuíció}
 
@@ -193,7 +193,7 @@ A \texttt{soloq} dataset gyűjtési konfigurációja szándékosan más fókussz
     \item \textbf{Kisebb korpusz}: a konfigurált korlátok 2000 meccs körül zárnak le (vs. flexset 4980).
 \end{itemize}
 
-A soloq gyűjtés tehát \emph{nem premade-ra optimalizált}: a Solo/Duo Queue nem ösztönzi az 5-fős premade csapatokat, és a kollekciós stratégia sem keresi aktívan a visszatérő szövetségesi mintákat. Ez teszi a soloq-ot alkalmas kontrollalappá.
+A soloq gyűjtés tehát \emph{nem premade-ra optimalizált}: a Solo/Duo Queue nem ösztönzi az 5-fős premade csapatokat, és a kollekciós stratégia sem keresi aktívan a visszatérő szövetségesi mintákat. A soloq ennek köszönhetően alkalmas kontrollalap.
 
 \begin{table}[H]
 \centering
@@ -216,7 +216,7 @@ Ez a kettős stratégia az egyik legfontosabb módszertani döntése a projektne
 
 \subsection{Megállási feltételek és reprodukálhatóság}
 
-Mindkét dataset gyűjtése a következő megállási feltételek valamelyikén áll le: elérte a konfigurált maximális meccsszámot; elérte a konfigurált maximális iterációszámot; a gyűjtési sor kiürült; vagy manuálisan le lett állítva.
+Mindkét dataset gyűjtése a következő megállási feltételek valamelyikén áll le: elérte a konfigurált maximális meccsszámot, elérte a konfigurált maximális iterációszámot, a gyűjtési sor kiürült, vagy manuálisan le lett állítva.
 
 A nyers meccs-JSON fájlok fájlrendszeren perzisztálódnak. Az idempotens létező-fájl-ellenőrzés garantálja, hogy már letöltött meccsek nem kerülnek újra letöltésre, ami lehetővé teszi a fokozatos, megszakítható gyűjtést.
 
