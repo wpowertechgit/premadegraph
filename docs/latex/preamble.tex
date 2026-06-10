@@ -1,9 +1,10 @@
 \documentclass[a4paper,12pt]{report}
 
 \usepackage{fontspec}
+\usepackage{setspace}
 \usepackage{polyglossia}
 \setmainlanguage{hungarian}
-\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage[a4paper,top=2cm,left=3cm,bottom=2cm,right=2cm]{geometry}
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{hyperref}
@@ -23,12 +24,13 @@
 \titleformat{\chapter}[hang]{\normalfont\bfseries\LARGE}{\thechapter.}{1em}{}
 \setcounter{tocdepth}{2}
 \setlist[itemize]{noitemsep, topsep=4pt}
-\setlength{\parskip}{0.5em}
+\setlength{\parskip}{6pt}
 \setlength{\parindent}{0pt}
 \graphicspath{{assets/demo_shots/}{assets/diagrams/}}
-\setmainfont{Times New Roman}
-\setsansfont{Arial}
+\setmainfont{Calibri}
+\setsansfont{Calibri}
 \setmonofont{Consolas}
+\setstretch{1.15}
 
 \lstset{
   basicstyle=\ttfamily\small,

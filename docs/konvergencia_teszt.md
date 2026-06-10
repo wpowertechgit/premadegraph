@@ -1,4 +1,4 @@
-  Futtatunk 10 különböző seedet flexset adatkészlettel, 3 run mindegyikből.
+  Futtatunk 20 különböző seedet flexset adatkészlettel, 5 run mindegyikből.
   Cél: statisztikailag alátámasztani hogy a flexset konvergens Warband/Combat
   győztest produkál, nem csak seed=42 és seed=7777-nél.
 
@@ -9,10 +9,10 @@
     cd backend\genetic-neurosim\backend
     cargo build --release
 
-  FUTTATÁSOK — 10 seed × 3 run, egyenként:
-    $seeds = @(1, 13, 99, 256, 1000, 3141, 5678, 9999, 31337, 77777)
+  FUTTATÁSOK — 20 seed × 5 run, egyenként:
+    $seeds = @(1, 13, 99, 256, 1000, 3141, 5678, 9999, 31337, 77777, 67, 8876, 5982, 14, 1589, 6767, 10000, 83, 156894, 42)
     foreach ($seed in $seeds) {
-        .\run-batch.ps1 -Runs 3 -Seed $seed -DatasetId flexset
+        .\run-batch.ps1 -Runs 5 -Seed $seed -DatasetId flexset
     }
 
   AMIT FIGYELSZ:
@@ -20,6 +20,5 @@
   - Ha 8-10/10 seednél Warband/Combat → statisztikailag erős claim
   - Ha mix → az is érdekes adat, megmagyarázható
 
-  UTÁN: az eredménytáblát rakd be a thesis validáció fejezetébe
-  egy chi-square megjegyzéssel vagy csak a raw eloszlással.
-  Ez a 1.5 pont visszaszerzésének az útja.
+  UTÁN: az eredménytáblát rakd be egy markdownba a neurosim dokumentacio közé C:\Users\karol\OneDrive\Dokumentumok\Dolgozat\premadegraph\docs\neurosim
+  egy chi-square megjegyzéssel vagy csak a raw eloszlással. 

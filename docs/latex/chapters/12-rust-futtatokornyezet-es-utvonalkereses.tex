@@ -163,7 +163,7 @@ A modul teljesen géppel olvasható választ ad vissza, többek között:
     \item opcionálisan klaszterszintű összegzést.
 \end{itemize}
 
-Ez a rész a rendszerben továbbra is megvalósított analitika, de nem a dolgozat egyik fő empirikus pillére. A formális projekció működik és reprodukálható; a korlát az, hogy az \texttt{enemyWeight} nem elég megbízható negatív társas kötés ahhoz, hogy a kapott arányokat erős szociális következtetésként kezeljem. Emiatt a modul a módszertani reflexió és a kísérleti diagnosztika része marad.
+Ez a rész a rendszerben továbbra is megvalósított analitika, de nem a dolgozat egyik fő empirikus pillére. A formális projekció működik és reprodukálható; a korlát az, hogy az \texttt{enemyWeight} nem elég megbízható negatív társas kötés ahhoz, hogy a kapott arányokat erős szociális következtetésként kezelje a dolgozat. Emiatt a modul a módszertani reflexió és a kísérleti diagnosztika része marad.
 
 \section{Asszortativitás mint megvalósított analitika}
 
@@ -200,4 +200,4 @@ A Graph V2 clusteringAlgorithmVersion (\texttt{bounded-ally-groups-v2}) egy 20-a
 
 \section{Kísérleti futtatók és robusztusság}
 
-A Rust rétegben külön parancs és backend-végpont létezik az asszortativitás randomizációs szignifikanciatesztjéhez, valamint a signed-balance érzékenységvizsgálathoz. Ezek létezése azért fontos, mert a projekt nem áll meg az első leíró számnál, hanem támogatja a robusztussági és nullmodell-szerű összehasonlításokat is. A dolgozatban ezt úgy kezelem, mint kutatási infrastruktúrát: az asszortativitás központi eredmény, a signed-balance pedig azt dokumentálja, hol húzódik az előjeles projekció értelmezési határa.
+A Rust rétegben külön parancs és backend-végpont létezik az asszortativitás randomizációs szignifikanciatesztjéhez, valamint a signed-balance érzékenységvizsgálathoz. Ezek létezése azért fontos, mert a projekt nem áll meg az első leíró számnál, hanem támogatja a robusztussági és nullmodell-szerű összehasonlításokat is. A dolgozat ezt kutatási infrastruktúraként kezeli: az asszortativitás központi eredmény, a signed-balance pedig azt dokumentálja, hol húzódik az előjeles projekció értelmezési határa.

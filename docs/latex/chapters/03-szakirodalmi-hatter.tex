@@ -16,7 +16,7 @@ A jelen projektben a közösségfogalom nem öncélú. Azért fontos, mert a tö
 
 A korai Python oldali populációs klaszterezés a NetworkX \texttt{greedy\_modularity\_communities} eljárását használta, amely a Clauset--Newman--Moore féle mohó modularitásmaximalizálási megközelítésre épül \cite{clauset2004,networkx_greedy}. Ez a választás prototípusként tudatos kompromisszum volt: nem a leglátványosabb, hanem gyorsan magyarázható és reprodukálható megoldás. A jelenlegi futásidejű gráfállapotot (amelyen az útvonalkeresés és az analitikák futnak) a Rust motor önállóan, a meccs-JSON fájlokból és az SQLite-adatbázisból építi fel; a Python pipeline szerepe ezért legacy/populációs közösségek és kompatibilitási exportok előállítása, nem a teljes gráfreprezentáció előállítása.
 
-A dolgozatban ezért nem azt állítom, hogy ez az egyetlen vagy minden helyzetben legjobb közösségdetektáló eljárás, hanem azt, hogy a jelenlegi rendszerben ez adja a legvédhetőbb kiindulópontot a közösségek strukturált tárolására és vizsgálatára.
+A dolgozat ezért nem azt állítja, hogy ez az egyetlen vagy minden helyzetben legjobb közösségdetektáló eljárás, hanem azt, hogy a jelenlegi rendszerben ez adja a legvédhetőbb kiindulópontot a közösségek strukturált tárolására és vizsgálatára.
 
 A modularitás-optimalizáció ismert korlátai sem hagyhatók figyelmen kívül. Fortunato és Barthelemy klasszikus eredménye szerint a modularitásra építő közösségdetektálás felbontási korlátba ütközhet, vagyis a kisebb, de valós szerkezetek egy része a globális optimum érdekében összeolvadhat \cite{fortunato_barthelemy2007}. Ez a jelen projektben azért releváns, mert a \texttt{python\_population} klasztereket nem szabad ontológiai „igazi közösségként” kezelni. Sokkal pontosabb azt mondani, hogy a választott gráf, súlymodell és heurisztika mellett ezek adják a legjobb, reprodukálható populációs közösségképet.
 
@@ -39,7 +39,7 @@ A modern signed-network irodalom azért is hasznos háttér, mert rámutat: az e
 
 \section{Asszortativitás}
 
-Newman munkája az asszortatív keveredést olyan hálózati jelenségként írja le, amikor a kapcsolódó csomópontok hasonló vagy éppen eltérő tulajdonságúak \cite{newman2003}. A jelen projektben ezt a gondolatot a játékosok teljesítménymutatóira alkalmazom: nem azt kérdezem, hogy a magas fokszámú csúcsok kapcsolódnak-e egymáshoz, hanem azt, hogy a gráfban összekapcsolt játékosok hasonló \texttt{opscore} vagy \texttt{feedscore} értékeket hordoznak-e.
+Newman munkája az asszortatív keveredést olyan hálózati jelenségként írja le, amikor a kapcsolódó csomópontok hasonló vagy éppen eltérő tulajdonságúak \cite{newman2003}. A jelen projekt ezt a gondolatot a játékosok teljesítménymutatóira alkalmazza: nem az a kérdés, hogy a magas fokszámú csúcsok kapcsolódnak-e egymáshoz, hanem az, hogy a gráfban összekapcsolt játékosok hasonló \texttt{opscore} vagy \texttt{feedscore} értékeket hordoznak-e.
 
 Ez azért különösen hasznos, mert:
 
@@ -49,7 +49,7 @@ Ez azért különösen hasznos, mert:
     \item a gráf jelentésétől függően más és más eredményt adhat.
 \end{itemize}
 
-Éppen ezért a dolgozatban két gráfmódot is megkülönböztetek:
+Éppen ezért a dolgozat két gráfmódot is megkülönböztet:
 
 \begin{itemize}
     \item \texttt{social-path}: csak a pozitív, szövetségesi támaszú kapcsolatokra épít,

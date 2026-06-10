@@ -519,7 +519,7 @@ Ez az eredmény két dolgot igazol egyszerre: egyrészt hogy a \texttt{clusters.
 
 \begin{itemize}
   \item A klaszter-derivált priorok mérhetően eltérő szimulált viselkedést produkálnak különböző adatkészletek esetén.
-  \item A Flexset inicializáció mindkét tesztelt seednél konvergens viselkedési kimenetelhez vezet (Warband/Combat archetípus, alacsony agresszió, magas migráció).
+  \item A Flexset inicializáció mindkét tesztelt seednél azonos viselkedési kimenetelhez vezetett (Warband/Combat archetípus, alacsony agresszió, magas migráció); szisztematikus seed-sweep még nem készült el.
   \item A SoloQ inicializáció seedenként változékony viselkedési kimenetelt produkál.
   \item A futtatások reprodukálhatók: azonos seed és adatkészlet esetén a győztes és a teljes final\_summary rekord bit-azonos marad.
   \item A törzsi viselkedés esemény-naplókkal alátámasztható: minden állítás (kaszkádháborúk, trilaterális koalíciók, sorozatos védelmi győzelmek) konkrét JSONL-bejegyzésekre hivatkozik.
@@ -959,20 +959,6 @@ run67sq7777 & SoloQ & 7777 & Tribe 70 & Supply/Resource & 0{,}68 & 0{,}87 & 2541
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.9\textwidth]{assets/neurosim/run67fl7777-fl-s7777-tick2538-last.png}
-\caption{Flexset, seed=7777, tick=2538: Tribe 355, Warband/Combat, 37\,666 tile}
-\label{fig:neurosim-final-fl7777}
-\end{figure}
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.9\textwidth]{assets/neurosim/run67fl42-fl-s42-tick2487-last.png}
-\caption{Flexset, seed=42, tick=2487: Tribe 596, Warband/Combat, 39\,369 tile}
-\label{fig:neurosim-final-fl42}
-\end{figure}
-
-\begin{figure}[h]
-\centering
 \includegraphics[width=0.9\textwidth]{assets/neurosim/run67sq42-sq-s42-tick2046-last.png}
 \caption{SoloQ, seed=42, tick=2046: Tribe 89, Vanguard/Risk, 6\,356 tile}
 \label{fig:neurosim-final-sq42}
@@ -985,17 +971,40 @@ run67sq7777 & SoloQ & 7777 & Tribe 70 & Supply/Resource & 0{,}68 & 0{,}87 & 2541
 \label{fig:neurosim-final-sq7777}
 \end{figure}
 
-\subsection*{Kulcsmegállapítás: konvergencia és variabilitás}
+\subsection*{Győztes archetípus-eloszlás és variabilitás}
 
-A legfontosabb eredmény a flexset és a soloq futtatások közötti konvergencia--variabilitás különbség. A két flexset futtatás eltérő seed mellett ugyanarra a győztes viselkedési archetípusra futott ki: mindkét esetben Warband/Combat profilú entitás maradt életben. A győztesek agressziója alacsony volt, 0{,}13--0{,}18 közötti tartományban, miközben a migrációs hajtóerő nagyon magas maradt, 0{,}87--0{,}88 körül. A kapcsolódó izolációs értékek szintén magasak, megközelítőleg 0{,}88 körüliek voltak. Ez olyan stratégiai mintát ír le, amely nem folyamatos támadással, hanem területfoglalással, önálló pozíciótartással és felhalmozott harci kompetenciával nyert.
+A négy kísérleti futtatást egy 103 seed alapú soloq sweep egészíti ki, amely a kisebb (140 törzses) adatkészleten statisztikailag érdemi mintán vizsgálja a győztes archetípusok eloszlását. A sweep minden futtatása Empire polity-szintű győztessel zárult (103/103). Az archetípus-eloszlás:
 
-A SoloQ futtatások ezzel szemben nem konvergáltak egyetlen archetípusra. Seed=42 mellett Tribe 89 Vanguard/Risk profillal nyert, alacsony agressziós és alacsony migrációs végállapottal; seed=7777 mellett Tribe 70 Supply/Resource profillal, magasabb agresszióval és magas migrációval zárta a futtatást. A két SoloQ győztes neurális profilja eltért egymástól, és az A\_combat felhalmozódási mintájuk sem ugyanazt a pályát követte: a seed=42 futtatásban a döntő szerep a védelmi túléléshez és célzott kockázatvállaláshoz kötődött, míg a seed=7777 futtatásban a resource-központú túlélés és az endgame-ben megnyíló opportunista ablak volt meghatározó.
+\begin{table}[H]
+\centering
+\caption{Győztes archetípus-eloszlás a soloq 103-seed sweep alapján}
+\label{tab:soloq-sweep-archetypes}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Archetípus} & \textbf{Futtatások} & \textbf{Arány} \\
+\midrule
+Warband   & 36 & 35{,}0\% \\
+Supply    & 23 & 22{,}3\% \\
+Council   & 20 & 19{,}4\% \\
+Vanguard  & 14 & 13{,}6\% \\
+Pathfinders & 10 & 9{,}7\% \\
+\midrule
+\textbf{Összesen} & 103 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Ez a divergencia a mögöttes gráfstruktúra különbségéből értelmezhető. A flexset adatkészlet szervezettebb, ismétlődő kapcsolatmintákat hordoz, míg a soloq adatkészlet inkább egyéni teljesítményprofilokat rögzít tartós co-queue struktúra nélkül. A szimulációs különbség ezért nem pusztán seed-zajként, hanem a klaszterpriorok eltérő szerkezetének következményeként olvasható.
+Az átlagos befejezési tick 2308{,}57; az átlagos győztes terület 8\,338 tile. A leggyakoribb győztes klaszter 6 alkalommal fordult elő; a leggyakoribb győztes törzs-ID szintén 6 alkalommal szerepelt. Ez \emph{mixed convergence} képet mutat: a Warband archetípus enyhe pluralitással vezet (35\%), de nem rendelkezik erős, seed-független dominanciával.
+
+A SoloQ futtatások tehát nem konvergálnak egyetlen archetípusra. Seed=42 mellett Tribe 89 Vanguard/Risk profillal nyert, alacsony agressziós és alacsony migrációs végállapottal; seed=7777 mellett Tribe 70 Supply/Resource profillal, magasabb agresszióval és magas migrációval zárta a futtatást. A két SoloQ győztes neurális profilja eltért egymástól, és az A\_combat felhalmozódási mintájuk sem ugyanazt a pályát követte: a seed=42 futtatásban a döntő szerep a védelmi túléléshez és célzott kockázatvállaláshoz kötődött, míg a seed=7777 futtatásban a resource-központú túlélés és az endgame-ben megnyíló opportunista ablak volt meghatározó. A 103-seed sweep ezt a képet megerősíti: a soloq változékony győztes-profilt produkál.
+
+A két tesztelt flexset futtatás (seed=42 és seed=7777) ezzel szemben ugyanarra az archetípusra futott ki: mindkét esetben Warband/Combat profilú entitás győzött alacsony agresszióval (0{,}13--0{,}18) és magas migrációval (0{,}87--0{,}88). Ez konzisztens mintázat a vizsgált seedeken, bár a flexset szisztematikus sweepje még nem készült el.
+
+Ez a különbség a mögöttes gráfstruktúrából értelmezhető. A flexset adatkészlet szervezettebb, ismétlődő kapcsolatmintákat hordoz, míg a soloq adatkészlet inkább egyéni teljesítményprofilokat rögzít tartós co-queue struktúra nélkül. A szimulációs eltérés ezért nem pusztán seed-zajként, hanem a klaszterpriorok eltérő szerkezetének következményeként olvasható.
 
 \subsection*{Értelmezési keret}
 
-A Flex Queue klaszterek koordinált csapatjátékot kódolnak. A flexset gráfban az alliance jellegű minták, a komplementer szerepek és az ismétlődő co-queue kapcsolatok nem egyetlen játékos izolált teljesítményét, hanem visszatérő együttjátszási struktúrákat írnak le. Amikor ezekből klaszterprofilok készülnek, a szimuláció olyan entitásokat inicializál, amelyekben a harci kompetencia, a területi önfenntartás és a magas izoláció egyszerre jelenhet meg. A két flexset futtatás Warband/Combat konvergenciája ebben az értelmezésben nem azt jelenti, hogy ez a profil objektíven jobb minden környezetben, hanem azt, hogy ebben a klaszterezési és szabálykörnyezetben stabilan újra megjelent.
+A Flex Queue klaszterek koordinált csapatjátékot kódolnak. A flexset gráfban az alliance jellegű minták, a komplementer szerepek és az ismétlődő co-queue kapcsolatok nem egyetlen játékos izolált teljesítményét, hanem visszatérő együttjátszási struktúrákat írnak le. Amikor ezekből klaszterprofilok készülnek, a szimuláció olyan entitásokat inicializál, amelyekben a harci kompetencia, a területi önfenntartás és a magas izoláció egyszerre jelenhet meg. A két tesztelt flexset futtatás Warband/Combat kimenetele ebben az értelmezésben nem azt jelenti, hogy ez a profil objektíven jobb minden környezetben, hanem azt, hogy a vizsgált két seednél ez a szabálykörnyezet és klaszterezési struktúra ezt a győztes profilt hozta létre.
 
 A SoloQ klaszterek más jellegű információt hordoznak. Ezek nem tartós társas csapatstruktúrát, hanem rangsorolt egyéni teljesítményprofilokat sűrítenek. A SoloQ inicializáció ezért kevésbé ad át olyan koordinált társas mintát, amely több seed alatt is ugyanabba a túlélési stratégiába húzná a rendszert. Ennek megfelelően a seed=42 futtatás Vanguard/Risk, a seed=7777 futtatás Supply/Resource győztest produkált, vagyis a szimulált kimenet változékonyabb lett.
 
@@ -1023,7 +1032,7 @@ győzelem, nincs béke. A rendszer így alkalmas eszköz az evolúciós szelekci
 nyomás vizsgálatára: a szabályrendszer minden esetben egyértelmű, ellenőrizhető
 és reprodukálható eredményt kényszerít ki.
 
-A Tribal NeuroSim demonstrálja, hogy eltérő szociális hálózati struktúrákból - szervezett Flex Queue csapatokból versus egyéni SoloQ rangsorolt játékosoktól - származó, gráf-derivált klaszterprofilok mérhetően eltérő emergáló túlélési stratégiákat produkálnak, amikor azonos szabályok alatt evolúciós többügynök-szimulációba kerülnek. A flexset adatkészlet mindkét tesztelt seednél konvergens, alacsony agressziójú Warband archetípushoz vezet; a soloq adatkészlet seedenként változékony archetípusokat produkál. Ez a viselkedési divergencia a mögöttes gráfstruktúra tükröződéseként értelmezhető, nem valódi teljesítmény-fölény bizonyítékaként.
+A Tribal NeuroSim demonstrálja, hogy eltérő szociális hálózati struktúrákból -- szervezett Flex Queue csapatokból versus egyéni SoloQ rangsorolt játékosoktól -- származó, gráf-derivált klaszterprofilok mérhetően eltérő emergáló túlélési stratégiákat produkálnak, amikor azonos szabályok alatt evolúciós többügynök-szimulációba kerülnek. A flexset adatkészlet mindkét tesztelt seednél alacsony agressziójú Warband/Combat győztest hozott; a soloq 103-seed sweep mixed convergence-t mutat, Warband enyhe pluralitással (35\%), de erős seed-független dominancia nélkül. Ez a viselkedési különbség a mögöttes gráfstruktúra tükröződéseként értelmezhető, nem valódi teljesítmény-fölény bizonyítékaként.
 
 \bigskip
 

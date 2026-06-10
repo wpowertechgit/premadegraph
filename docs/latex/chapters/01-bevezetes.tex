@@ -6,13 +6,13 @@ A kompetitív online játékok egyik visszatérő problémája, hogy a résztvev
 
 A \emph{League of Legends} különösen érdekes terep ehhez, mert egyszerre tartalmaz rendkívül gazdag mérkőzésadatokat, ismétlődő csapattársi és ellenfél-kapcsolatokat, valamint olyan társas mintázatokat, amelyek gráfként ábrázolhatók és elemezhetők. Ha egy játékos hosszabb időn keresztül ugyanazokkal az emberekkel kerül egy meccsbe (akár szövetségesként, akár ellenfélként), akkor ebből egy olyan kapcsolati háló építhető fel, amely túlmutat az egyetlen mérkőzés pillanatnyi statisztikáin.
 
-Ebből a felismerésből indult a dolgozat: nem egyszerűen egy újabb meccsnéző vagy statisztikai felületet akartam készíteni, hanem egy olyan rendszert, amely a valós mérkőzéstörténetből játékoshálót épít, ezt a hálót gráfelméleti és rendszerszintű szemlélettel elemzi, majd az eredményeket egy vizuálisan erős, ugyanakkor védhető frontend felületen mutatja meg.
+Ebből a felismerésből indult a dolgozat: a cél nem egyszerűen egy újabb meccsnéző vagy statisztikai felület volt, hanem egy olyan rendszer, amely a valós mérkőzéstörténetből játékoshálót épít, ezt a hálót gráfelméleti és rendszerszintű szemlélettel elemzi, majd az eredményeket egy vizuálisan erős, ugyanakkor védhető frontend felületen mutatja meg.
 
 \section{Motiváció}
 
-A projekt eredeti motivációja személyes és technikai egyszerre. Játékosként újra és újra felmerült bennem a kérdés, hogy vajon a visszatérő negatív tapasztalatok mennyire egyediek, mennyire mintázatszerűek, és egyáltalán látszik-e valami abból a hálózatból, amelynek részeként ezek a meccsek zajlanak. Informatikai oldalról pedig kifejezetten vonzott az a gondolat, hogy a Riot API által biztosított részletes meccsadatokból nemcsak táblázatokat, hanem gráfokat, klasztereket, útvonalakat és teljesítményalapú hálózati mutatókat is lehessen kinyerni.
+A projekt mögött részben személyes indíttatás húzódik. Rangsorolt meccsek után visszatérő kérdés volt, hogy a sorozatos negatív találkozások véletlen-e, vagy van mögöttük valami szerkezet -- esetleg ugyanazok az emberek kerülnek újra és újra egymás mellé, csak ezt a matchmaking felülete nem mutatja meg. Ez önmagában persze nem tudományos kérdés, de kiindulópontként elég volt. Ha a Riot API részletes meccsadatokat ad, és ezek ismétlődő játékoskapcsolatokat tartalmaznak, akkor ezekből elvileg gráf építhető -- és ha gráf van, akkor már van mit elemezni.
 
-A projekt időközben jóval nagyobb rendszerré nőtt, mint egy egyszerű adatvizualizáció. A jelenlegi állapotban már külön adatgyűjtő réteg, normalizált pontszámítási pipeline, SQLite perzisztencia, Rust-alapú gráfépítés és futtatókörnyezet, többoldalas React frontend, valamint kutatási jellegű gráfanalitikai modulok dolgoznak együtt. A Python réteg elsősorban adatgyűjtési, prototípus- és legacy-kompatibilitási szerepben maradt meg.
+A rendszer végül jóval nagyobbra nőtt, mint amire számítottam. Ami kezdetben gyors adatvizualizációnak indult, az fokozatosan külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és legacy-kompatibilitási szerepben maradt meg -- ez nem tervezett döntés volt, hanem a fejlesztés természetes következménye.
 
 \section{A dolgozat célja}
 
@@ -27,11 +27,11 @@ A dolgozat célja egy olyan, valós mérkőzésadatokra épülő, többkomponens
     \item az eredményeket interaktív, de nem UI-első szemlélettel mutatja meg.
 \end{itemize}
 
-A hangsúly tudatosan azon van, hogy a rendszer ne csak érdekes látvány legyen, hanem szakdolgozati szempontból is védhető legyen: világos adatútvonalakkal, expliciten dokumentált döntésekkel, reprodukálható kimenetekkel és óvatos interpretációval.
+Fontos szempont volt végig, hogy a rendszer ne csak vizuálisan legyen érdekes, hanem a mögötte lévő döntések is megindokolhatók legyenek: honnan jönnek az adatok, hogyan számolódnak a pontszámok, mit jelent pontosan egy él a gráfban, és mit nem.
 
 \section{Kutatási kérdések}
 
-A jelen dolgozatban a következő kutatási kérdésekre keresem a választ:
+A jelen dolgozat a következő kutatási kérdésekre keres választ:
 
 \begin{itemize}
     \item Hogyan építhető fel valós League of Legends mérkőzéstörténetből egy olyan játékosháló, amely nem pusztán az együtt játszást, hanem az ellenfél-kapcsolatokat is megőrzi?
