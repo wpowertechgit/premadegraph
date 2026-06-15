@@ -64,8 +64,6 @@ A Rust réteghez tartozó \texttt{engine-spec} kimenet különösen hasznos a do
     \item a \texttt{battle-path} bármely ismétlődő ally vagy enemy kapcsolaton átmehet.
 \end{itemize}
 
-Ez a fajta explicitség nem csak fejlesztői kényelmi funkció. A szakdolgozatban ez segít megmutatni, hogy a rendszer viselkedése nem rejtett, hanem leírható és ellenőrizhető.
-
 Ehhez szorosan kapcsolódik a \texttt{main.rs} \texttt{serve} módja is, amely stdin/stdout alapú kérés-válasz borítékokkal működik. Ez lehetővé teszi, hogy ugyanaz a Rust motor önálló parancssori eszközként és backend mögötti alfolyamatként is használható legyen. A rendszer így nem keveri össze a gráfmagot a webszerver-felelősséggel: a Rust réteg végrehajtó marad, a HTTP-szintű integráció pedig a Node oldalán történik.
 
 \section{Egzakt A* és alsó becslések}
@@ -176,9 +174,7 @@ Az \texttt{assortativity.rs} modul a kiválasztott metrika és gráfmód mellett
     \item \texttt{battle-path}.
 \end{itemize}
 
-A válasz nem csak egyetlen szám, hanem tartalmazza az analizált élmennyiséget, a kihagyások okait, a klaszteren belüli és klaszterek közötti bontást, valamint az erős és gyenge kapcsolatok szerinti bontást is. Ez erősíti a dolgozat védhetőségét: nem „díszanalitika”, hanem ellenőrizhető kimenet keletkezik.
-
-Egy ilyen modul szakdolgozati értékét nem pusztán az adja, hogy „kiad egy korrelációt”, hanem az, hogy a kimenetben a mintaképzés is látható. A kihagyott élek, a hiányzó metrikák és a minimum match-count szabályok nélkül az asszortativitás sokkal kevésbé lenne védhető, mert nem lenne világos, milyen adatokon képződött az eredmény.
+A válasz nem csak egyetlen szám, hanem tartalmazza az analizált élmennyiséget, a kihagyások okait, a klaszteren belüli és klaszterek közötti bontást, valamint az erős és gyenge kapcsolatok szerinti bontást is. A kihagyott élek, a hiányzó metrikák és a minimum match-count szabályok nélkül az asszortativitás eredménye nem lenne egyértelműen reprodukálható.
 
 \section{A Graph V2 artifact-pipeline és a Rust motor összefüggése}
 

@@ -28,7 +28,7 @@ A jelenlegi állapot alapján a projekt legfontosabb erősségei:
 
 \section{Fenyegetések a validitásra}
 
-Egy védhető szakdolgozatban legalább ennyire fontos kimondani a korlátokat is. A jelen projekt legfontosabb validitási kockázatai:
+A jelen projekt legfontosabb validitási kockázatai:
 
 \begin{itemize}
     \item a dataset nem reprezentálja a teljes játékospopulációt;
@@ -52,9 +52,9 @@ Ezek a korlátok azonban nem rombolják le a dolgozatot. Inkább kijelölik azt 
 
 Ezek a fenyegetések azonban nem cáfolják a projektet. Inkább megmutatják, hogy meddig lehet erős állításokat tenni, és hol kell tudatosan visszafogni az interpretációt. A dolgozat védhetőségét végső soron éppen ez a rétegzett őszinteség erősíti.
 
-\section{Miért értékes a projekt szakdolgozatként?}
+\section{A projekt összetevői}
 
-A projekt értéke nem csak abban áll, hogy ``sok mindent tud''. A valódi érték az, hogy több informatikai terület kapcsolódik össze benne:
+A projekt több informatikai területet fog össze:
 
 \begin{itemize}
     \item adatgyűjtés és API-használat,
@@ -63,8 +63,6 @@ A projekt értéke nem csak abban áll, hogy ``sok mindent tud''. A valódi ért
     \item algoritmusok és teljesítmény,
     \item frontend és vizuális kommunikáció.
 \end{itemize}
-
-Ez a kombináció azért erős, mert minden réteg hozzájárul a végső állításhoz. Ha bármelyik hiányozna, a dolgozat jóval gyengébb lenne: pusztán frontendként látványos lenne, pusztán algoritmusként kontextustalan, pusztán adatelemzésként pedig bemutatási réteg nélkül maradna.
 
 Ehhez hozzáadódik a reprodukálhatósági érték is. A rendszer fő eredményei nem kézzel összeollózott prezentációs pillanatképekből állnak, hanem olyan pipeline-okból, amelyek a nyers meccs-JSON-tól a normalizált játékosprofilon és a perzisztált klasztereken át a Rust-analitikáig követhetők. A bemutatott állításokhoz végrehajtható technikai út is tartozik.
 

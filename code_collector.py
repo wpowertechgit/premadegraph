@@ -9,7 +9,7 @@ ALLOWED_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.sql', '.css', '.txt
 
 INCLUDE_MARKDOWN = False
 INCLUDE_LATEX = False
-MARKDOWN_ONLY = True
+MARKDOWN_ONLY = False
 
 # Ezeket mindenképp KIZÁRJA (Blacklist - biztonsági háló)
 IGNORED_EXTENSIONS = {'.json', '.log', '.html', '.pyc','.txt','.css'}
