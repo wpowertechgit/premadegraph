@@ -10,24 +10,17 @@ Ebből a felismerésből indult a dolgozat: a cél nem egyszerűen egy újabb me
 
 \section{Motiváció}
 
-A projekt mögött részben személyes indíttatás húzódik. Rangsorolt meccsek után visszatérő kérdés volt, hogy a sorozatos negatív találkozások véletlen-e, vagy van mögöttük valami szerkezet -- esetleg ugyanazok az emberek kerülnek újra és újra egymás mellé, csak ezt a matchmaking felülete nem mutatja meg. Ez önmagában persze nem tudományos kérdés, de kiindulópontként elég volt. Ha a Riot API részletes meccsadatokat ad, és ezek ismétlődő játékoskapcsolatokat tartalmaznak, akkor ezekből elvileg gráf építhető -- és ha gráf van, akkor már van mit elemezni.
+A projekt mögött részben személyes indíttatás húzódik. Rangsorolt meccsek után visszatérő kérdés volt, hogy a sorozatos negatív találkozások véletlen-e, vagy van mögöttük valami szerkezet: esetleg ugyanazok az emberek kerülnek újra és újra egymás mellé, csak ezt a matchmaking felülete nem mutatja meg. Ez önmagában persze nem tudományos kérdés, de kiindulópontként elég volt. Ha a Riot API részletes meccsadatokat ad, és ezek ismétlődő játékoskapcsolatokat tartalmaznak, akkor ezekből elvileg gráf építhető, és ha gráf van, akkor már van mit elemezni.
 
-A rendszer végül jóval nagyobbra nőtt, mint amire számítottam. Ami kezdetben gyors adatvizualizációnak indult, az fokozatosan külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és legacy-kompatibilitási szerepben maradt meg -- ez nem tervezett döntés volt, hanem a fejlesztés természetes következménye.
+A rendszer végül jóval nagyobbra nőtt, mint amire számítottam. Ami kezdetben gyors adatvizualizációnak indult, az fokozatosan külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és legacy-kompatibilitási szerepben maradt meg. Ez nem tervezett döntés volt, hanem a fejlesztés természetes következménye.
+
+A növekedés egy ponton egy váratlan irányba is kinyílt. Amikor a gráfelemzési pipeline klaszterprofil-exportokat kezdett gyártani, felmerült, hogy ezek a profilok ágens-alapú szimulációban is felhasználhatók: ebből nőtt ki a Tribal NeuroSim kísérlet, amelyben a két adatkészlet klaszterei azonos szimulációs feltételek alatt versenyeznek egymással. Ez a kiterjesztés a dolgozat utolsó fejezeteiben kerül kifejtésre.
 
 \section{A dolgozat célja}
 
-A dolgozat célja egy olyan, valós mérkőzésadatokra épülő, többkomponensű rendszer bemutatása, amely:
+A dolgozat egy valós mérkőzésadatokra épülő, több komponensű rendszer tervezésének, implementációjának és vizsgálatának dokumentációja. A rendszer League of Legends mérkőzéstörténetből játékoskapcsolati gráfot épít: az ismétlődő együtt- és egymás ellen játszásból él jön létre, amelyhez szerepkör-érzékeny teljesítménymutatók tartoznak. A gráf elemzése kiterjed klaszteresítésre, core-periphery szerkezet vizsgálatára, asszortativitásra és Brandes-féle centralitásra, mindezt Rust-alapú, determinisztikus és újrafuttatható implementációban.
 
-\begin{itemize}
-    \item League of Legends meccsekből játékosok közötti kapcsolatokat gyűjt és tisztít,
-    \item a játékosokhoz szerepkör-érzékeny teljesítménymutatókat rendel,
-    \item az ismétlődő együtt- és egymás ellen játszásból gráfot épít,
-    \item a gráfot klaszterekre, útvonalakra, core-periphery mintázatokra és kutatási célú metrikus kapcsolatokra bontja,
-    \item a számításigényes részeket determinisztikus, exportálható és újrafuttatható módon kezeli,
-    \item az eredményeket interaktív, de nem UI-első szemlélettel mutatja meg.
-\end{itemize}
-
-Fontos szempont volt végig, hogy a rendszer ne csak vizuálisan legyen érdekes, hanem a mögötte lévő döntések is megindokolhatók legyenek: honnan jönnek az adatok, hogyan számolódnak a pontszámok, mit jelent pontosan egy él a gráfban, és mit nem.
+Végig szempont volt, hogy az implementáció minden rétege megindokolható legyen: honnan jönnek az adatok, hogyan számolódnak a pontszámok, mit jelent pontosan egy él a gráfban, és mit nem. A két adatkészlet, a Flex Queue és a SoloQ, összehasonlítása ennek a szemléletnek a legkonkrétabb eredménye. A pipeline fejlődésének egy pontján a klaszterprofilok egy kísérleti kiterjesztés alapjává is váltak: a Tribal NeuroSim szimulációjában a gráfból levezetett profilok törzsi entitásokként jelennek meg, ami lehetőséget teremt annak vizsgálatára, hogy a két adatkészlet eltérő struktúrája azonos szimulációs szabályrendszer alatt mérhető különbséget okoz-e.
 
 \section{Kutatási kérdések}
 
@@ -37,23 +30,15 @@ A jelen dolgozat a következő kutatási kérdésekre keres választ:
     \item Hogyan építhető fel valós League of Legends mérkőzéstörténetből egy olyan játékosháló, amely nem pusztán az együtt játszást, hanem az ellenfél-kapcsolatokat is megőrzi?
     \item Milyen módon lehet a játékosok teljesítményét úgy pontozni, hogy az figyelembe vegye a tényleges szerepkört, de közben megmaradjon értelmezhetőnek?
     \item Mennyiben indokolt a rendszer különböző rétegeit Python, SQLite, Node.js, Rust és React komponensekre bontani?
-    \item Mutat-e a jelenlegi gráf pozitív asszortativitást a \texttt{opscore} és \texttt{feedscore} tekintetében?
-    \item Miben különbözik a \texttt{flexset} és a \texttt{soloq} kapcsolati szerkezete, és mennyiben írható le a \texttt{flexset} asszociatív core-periphery játékosgráfként?
+    \item Mutat-e a jelenlegi gráf pozitív asszortativitást az \textit{opscore} és \textit{feedscore} tekintetében?
+    \item Miben különbözik a \textit{flexset} és a \textit{soloq} kapcsolati szerkezete, és mennyiben írható le a \textit{flexset} asszociatív core-periphery játékosgráfként?
 \end{itemize}
 
 \section{A dolgozat hozzájárulása}
 
-A dolgozat gyakorlati és szakmai hozzájárulásai a jelenlegi implementáció alapján a következők:
+A dolgozat elsősorban rendszerintegráló munkát dokumentál: a hozzájárulás nem egyetlen új algoritmusban rejlik, hanem abban, ahogy a rétegek egymáshoz illeszkednek és hogyan lesznek az eredmények empirikusan védhető állításokká. A Rust-alapú gráfanalitika (útvonalkeresés, asszortativitás, párhuzamos Brandes-centralitás), a regiszteralapú, több adatkészleten működő gyűjtési architektúra, és a szerepkörérzékeny \textit{opscore}/\textit{feedscore} normalizáció önálló tervezési döntések eredménye. A \textit{flexset} és \textit{soloq} empirikus összehasonlítása, az asszociatív core-periphery értelmezéssel együtt, a konkrét adatokból levezethető és reprodukálható megfigyelés.
 
-\begin{itemize}
-    \item több-adatkészletes, regiszter-alapú mérkőzésgyűjtési és feldolgozási architektúra;
-    \item szerepkörérzékeny, adatbázis-alapú \texttt{opscore}/\texttt{feedscore} normalizáció;
-    \item Rust-központú Graph V2 gráfépítés, klaszterezés és artifact-export SQLite perzisztenciával;
-    \item Rust oldali útvonalkeresés BFS, Dijkstra, kétirányú keresés, egzakt A*, asszortativitás és Brandes-központisági támogatással;
-    \item \texttt{flexset} és \texttt{soloq} dataset-összehasonlítás asszociatív gráfértelmezéssel;
-    \item játékosteljesítményre számolt asszortativitási elemzés több gráfmódban;
-    \item előre kiszámított 3D globális gráfnézet és többoldalas, kutatásbarát frontend.
-\end{itemize}
+Kísérleti jellegű, de a pipeline szerves folytatásaként értelmezendő hozzájárulás a Tribal NeuroSim kiterjesztés, amelyben a gráfból levezetett klaszterprofilok ágens-alapú szimulációban vizsgálhatók. A kísérlet kerete exploratív: nem kísérel meg közvetlen előrejelzést valódi meccskimenetelekre, de reprodukálható, seed-alapú futtatásokban megmutatja, hogy a két adatkészlet strukturális különbségei eltérő szimulációs viselkedésben jelennek-e meg.
 
 \begin{figure}[H]
     \centering

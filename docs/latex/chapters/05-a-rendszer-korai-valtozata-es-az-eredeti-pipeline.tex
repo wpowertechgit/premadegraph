@@ -1,71 +1,201 @@
-\chapter{A rendszer korai változata és az eredeti pipeline}
+\chapter{A rendszer felépítése és evolúciója}
 
-\section{A korai projekt jellege}
+\section{A korai változat}
 
-A repository története alapján a rendszer első változata jóval közelebb állt egy adatvezérelt játékosnézőhöz és kísérleti gráf-exportáló eszközhöz, mint a jelenlegi, több rétegre bontott kutatási platformhoz. Ebben a szakaszban a cél elsősorban az volt, hogy:
+Az eredeti rendszer jóval közelebb állt egy adatvezérelt játékosnézőhöz, mint a jelenlegi kutatási platformhoz. A hangsúly az volt, hogy a Riot API-ból érkező nyers adatok egy helyre kerüljenek, a játékosokhoz legalább alapvető pontszámok rendelődjenek, és a kapcsolatokból egyszerű gráfkimenet szülessen.
 
-\begin{itemize}
-    \item a Riot API-ból érkező nyers mérkőzésadatok egy helyre kerüljenek;
-    \item a játékosokhoz legalább alapvető pontszámok rendelődjenek;
-    \item a kapcsolatokból egyszerű gráf és klaszterkimenet szülessen;
-    \item a projekt vizuálisan is megmutatható legyen.
-\end{itemize}
+A korai pontozási logika (\textit{add\_new\_players.js}) egyszerű képletekkel dolgozott: a \textit{feedscore} a halálokat büntette a kill/assist mennyiségéhez képest, az \textit{opscore} öléseket, asszisztokat, aranyat és vision score-t vett figyelembe. Nyers volt, de megmutatta, hogy a puszta KDA-logikán túl is számolható részben kompozit mutató. Ebből nőtt ki a jelenlegi, szerepkörérzékeny rendszer.
 
-Ez a korai szakasz nem eldobandó előtörténet, hanem a jelenlegi rendszer kiindulópontja. A dolgozat azért tartja meg hangsúlyosan, mert ebből érthető meg, miért alakult ki később a többnyelvű architektúra és a szigorúbb perzisztenciamodell.
-
-\section{Az első pontozási logika}
-
-Az eredeti \texttt{add\_new\_players.js} egyszerűbb, kézzel összeállított képletekkel dolgozott. A korai \texttt{feedscore} lényegében a halálokat büntette a kill és assist mennyiségéhez képest, míg az első \texttt{opscore} főként a következő komponensekre támaszkodott:
-
-\begin{itemize}
-    \item ölések,
-    \item asszisztok,
-    \item arany,
-    \item vision score.
-\end{itemize}
-
-Ez a kezdeti modell nyers volt, de fontos előnye volt: gyorsan megmutatta, hogy a tiszta KDA-logikán túl is lehet értelmes, legalább részben kompozit teljesítménymutatót számolni. Később ebből nőtt ki az artifact-szintű és szerepkörérzékeny rendszer.
-
-\section{A korai gráfépítés és export}
-
-A korai \texttt{build\_graph.py} és a hozzá kapcsolódó exportlépések alapvetően Python-központúak voltak. A hangsúly ekkor még a gyors láthatóságon és nem a perzisztens újrafelhasználhatóságon volt. A pipeline:
-
-\begin{itemize}
-    \item meccsekből kapcsolati gráfot épített,
-    \item összefüggő komponenseket és részgráfokat vizsgált,
-    \item HTML és PyVis exportokat készített,
-    \item gyors vizuális ellenőrzést tett lehetővé.
-\end{itemize}
-
-Ez a megközelítés jó prototípus volt, de rövid időn belül látszott a korlátja: a klaszterek és gráfnézetek csak exportként éltek tovább, és nem váltak a rendszer belső, lekérdezhető objektumaivá.
-
-\section{A korábbi régiós és ország-alapú ág kialakulása}
-
-A projekt korai időszakában erősebb szerepet kapott az a gondolat is, hogy a klaszterekből ország- vagy régiószintű következtetések szülessenek. Ennek nyomai ma is megtalálhatók a \texttt{fetch\_clusters.py}, \texttt{assign\_countries.py} és \texttt{conclude.py} szkriptekben. A megközelítés lényege az volt, hogy a klaszterek tagneveiből valamilyen földrajzi címke becsülhető, majd ehhez aggregált teljesítményadatok rendelhetők.
-
-Ez a gondolat önmagában izgalmas, de a dolgozat mostani állapotában már világos, hogy módszertanilag bizonytalanabb, mint a közvetlenül a gráfstruktúrára és a meccsadatokra támaszkodó elemzések. Emiatt ez a vonal nem törlődik ki a történetből, hanem kifejezetten korábbi, exploratív modulként kerül kezelésre.
-
-\section{Miért kellett a rendszert továbbépíteni?}
-
-A korai változat legfontosabb korlátai a következők voltak:
-
-\begin{itemize}
-    \item egyetlen adatbázis és egyetlen meccskönyvtár köré szerveződött;
-    \item a klaszterek és exportok nem voltak igazán első osztályú perzisztens objektumok;
-    \item a pontozás még nem volt kellően szerepkörérzékeny;
-    \item a futásidejű útvonalkeresés és a nehezebb gráfanalitika nem vált el élesen a frontend-logikától.
-\end{itemize}
-
-Ezek a hiányok nem kudarcot jeleztek, hanem természetes érési pontokat. A jelenlegi rendszer legjobban akkor érthető, ha nem egyetlen pillanatfelvételként, hanem ilyen fokozatos evolúció eredményeként nézzük.
-
-Visszatekintve a projekt korai szakaszának legtermészetesebb csapdája az \emph{akkumulatív script-architectúra} lett volna, amelyben minden új feature egy újabb script formájában kerül be, és az egész rendszer globális állapottól függ. Ez a minta sok hasonló méretű adat-kutatási projektben megfigyelhető. Azzal, hogy a projekt tudatosan bevezette a dataset-absztrakciót, a Rust-szintű analitikai elválasztást és a perzisztens klasztermodellt, elkerülte ezt a csapdát.
-
-Döntő fordulópontot jelentett az a felismerés, hogy \emph{a kutatási analitikának nem szabad a frontend-állapottól függenie}. Ha az asszortativitás kiszámítása frontend-kérésre, a böngészőben lévő adatokból történne, akkor egyrészt nem lenne reprodukálható, másrészt nagyon érzékeny lenne a felhasználói interakcióra. A Rust-oldali, parancssori futtathatóság ezt a problémát gyökeresen oldja meg.
-
-\section{Miért kellett a régi szövegréteget is megtartani?}
-
-Szakdolgozatírás közben könnyű lenne azt a hibát elkövetni, hogy a projekt korábbi állapota egyszerűen ``lecserélődik'' a jelenlegi, erősebb verzióra. A dolgozat ezt tudatosan kerüli. A korai pipeline, a \texttt{conclude.py}-szerű ág és a régi klaszterértelmezések azért maradnak a dolgozatban, mert ezek adják meg a fejlődés irányát. A mostani rendszer nem légüres térben született, hanem ezekből nőtt ki.
-
-A country-alapú ág (a \texttt{assign\_countries.py} és a \texttt{conclude.py} modulok) jelenleg elavultnak tekinthető: az ország-hozzárendelés megbízhatósága nem elegendő ahhoz, hogy a projekt fő állításai erre épüljenek, és a kód aktív karbantartás nélkül is a repositoryban marad mint történeti dokumentum. Ugyanakkor az a gondolat, hogy a klasztereket értelmezési egységként kezeljük - és ne csak vizuális exportként -, ebből az ágból nőtt ki. Ebben az értelemben az ott szerzett tapasztalat a jelenlegi klasztermodel egyik alapköve.
+A korai \textit{build\_graph.py} Python-központú volt: meccsekből kapcsolati gráfot épített, HTML és PyVis exportokat készített. A klaszterek és gráfnézetek csak exportként éltek, nem belső, lekérdezhető objektumokként. Ebből az időszakból maradt a \textit{fetch\_clusters.py}/\textit{assign\_countries.py}/\textit{conclude.py} ország-ág is, amely klaszternevekből próbált földrajzi következtetéseket levonni: módszertanilag bizonytalan vonal, de innen nőtt ki az a szemlélet, hogy a klasztereket értelmezési egységekként kezeljük. Ezen az úton váltak a klaszterprofilok végül a Tribal NeuroSim szimulációs bemenetének alapjává.
 
 \diagramfigure{A korai Python-alapú adatgyűjtő és gráfépítő pipeline adatáramlása}{old python graph dataflow diagram.pdf}
+
+\section{A jelenlegi architektúra}
+
+A projekt jelenlegi architektúrája hibrid. A fő komponensek: Python (adatgyűjtés, gráfépítés, legacy-exportok), SQLite (központi perzisztencia), Node.js/Express (API-héj és orchesztráció), Rust (útvonalkeresés, gráfanalitika, globális artifact-export), React/Vite (frontend és vizualizáció), C\# ASP.NET Core (különálló adatbázis-böngésző) és a Tribal NeuroSim szimulációs motor, amelynek bemenete a gráf-pipeline klaszterartifaktumaiból származik. A rendszer \textit{docker-compose.yml} segítségével konténerizált formában is futtatható: a backend és a frontend külön konténerben indul, a fejlesztői és prod-közelű futtatás egyaránt támogatott.
+
+Az alábbi komponensdiagram a teljes rendszer magas szintű szerkezetét mutatja be: a Python adatgyűjtő és gráfépítő worker-eket, a Node.js/Express API réteget, a Rust analitikai motort, a React/Vite frontendet és a C\# ASP.NET Core adatbázis-böngészőt, valamint az ezeket összekötő kommunikációs csatornákat és tárolási egységeket. A diagram jól mutatja, hogy a frontend--Rust Pathfinder összeköttetés a Node.js API-n keresztül fut: a frontend közvetlenül nem hívja a Rust motort, hanem HTTP-végpontokon keresztül kommunikál a Node rétegrel, amely a Rust folyamatot stdin/stdout csatornán keresztül vezérli.
+
+\clearpage
+\begingroup
+\special{papersize=210mm,430mm}
+\special{pdf:put @thispage << /MediaBox [0 0 595.276 1218.898] >>}
+\thispagestyle{empty}
+\enlargethispage{150mm}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=355mm,keepaspectratio]{full system diagram.pdf}
+\caption{A teljes rendszer komponensdiagramja - Python worker-ek, Node.js API, Rust analitikai motor, React frontend és C\# adatbázis-böngésző}
+\end{figure}
+\clearpage
+\endgroup
+\special{papersize=210mm,297mm}
+
+\section{Technológiai munkamegosztás}
+
+A Python kiváló az adatgyűjtéshez, a JSON-feldolgozáshoz és a hálózatépítés gyors iterációjához. A Rust sokkal alkalmasabb a nagyméretű, ismételten meghívott gráfalgoritmusokhoz, ahol fontos a determinisztikus viselkedés, a teljesítmény és a strukturált export. Az SQLite kis projektméret mellett is kényelmesen biztosítja a perzisztenciát, a React pedig jó eszköz a demo- és elemzőfelületek építéséhez. A Python és Rust közti munkamegosztás éles: Python megtartja a gyors adatmanipuláció előnyeit, Rust a stabil futásidejű gráfmagot kapta. A kettő közé a Node/Express réteg került, amely szerződéses API-határként működik.
+
+\subsection{A C\# böngésző különállása}
+
+A C\# / ASP.NET Core adatbázis-böngésző különálló eszközként él, nem a React frontend részeként. A fő frontend kutatási és vizualizációs célú (gráfnézetek, pathfinder, analitikák), a böngésző adatbázis-inspekciós eszköz (nyers táblasorok, JSON-értékek, szűrés, lapozás). Ezek különböző felhasználói igényeket elégítenek ki, és különböző stack-et igényelnek. Az ASP.NET Core-os megközelítés JavaScriptes kliensoldali logika nélkül is stabil, könnyen telepíthető eszközt ad.
+
+\subsection{Elvetett architekturális alternatívák}
+
+\begin{table}[H]
+\centering
+\caption{Fontos architekturális alternatívák és elutasításuk oka}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{3.6cm} X}
+\toprule
+\textbf{Alternatíva} & \textbf{Rövid előny} & \textbf{Miért nem ez lett a végső irány?} \\
+\midrule
+Minden Pythonban & Gyorsabb kezdeti iteráció & A futásidejű gráfalgoritmusoknál és a nagyobb exportoknál gyengébb teljesítmény- és memóriakontroll \\
+Minden Rustban & Erős típusosság és egységes motor & A gyűjtés és a gyors kísérletezés jelentősen nehezebbé és lassabbá vált volna \\
+Frontend-központú számítás & Egyszerűbb demoarchitektúra & A böngészőre tolta volna a számításigényes gráfmunkát, gyengítve a reprodukálhatóságot \\
+Szerveres SQL-adatbázis & Erősebb többfelhasználós modell & A projekt lokális, bemutatható és kutatásorientált természete mellett az SQLite kedvezőbb kompromisszum maradt \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{A Node/Express réteg szerepe}
+
+A \textit{backend/server.js} alapján a Node rétegnek önálló felelőssége van: dataset-regisztert kezel és aktív datasetet választ, futás közbeni kulcsokat és környezeti útvonalakat központosít, háttércollector folyamatokat indít és monitoroz, HTTP-végpontokat biztosít a Rust parancsok fölé, és a bird's-eye artifaktumokat és egyéb cache-eket konzisztensen szolgálja ki. Ez a köztes réteg csökkenti a frontend és a számítási mag közti csatolást. A böngészőnek nem kell folyamatindítással, fájlrendszer-útvonalakkal vagy dataset-propagálással foglalkoznia.
+
+\section{Evolúciós fázisok}
+
+Az architektúra fejlődése három jól elkülöníthető fázisban írható le.
+
+\begin{enumerate}
+    \item \textbf{Korai script-fázis}: a hangsúly a nyers adat begyűjtésén, a gyors score-számításon és a kezdeti gráfexporton volt.
+    \item \textbf{Perzisztens pipeline-fázis}: megjelent az igény arra, hogy a klaszterek és játékosprofilok ne csak pillanatnyi exportként, hanem visszatölthető adatstruktúraként éljenek tovább.
+    \item \textbf{Kutatási platform-fázis}: a Rust analitika, a multi-dataset modell és a külön research oldalak megjelenésével a projekt már nem csak vizualizációs eszköz, hanem kísérleti környezet lett.
+\end{enumerate}
+
+\section{Több-adatkészletes architektúra}
+
+A korábbi, egyetlen adatbázisra és egyetlen meccsmappára épülő modell helyett a jelenlegi rendszer már több, egymástól független adatkészletet támogat. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON könyvtárral és cache könyvtárral.
+
+A regiszterben négy dataset szerepel. A \textit{default} az eredeti, vegyes queue-tartalmú alapkorpusz, amely a korai fejlesztési előtörténetet őrzi, kutatási célra nem alkalmas. A \textit{smoke-test-dataset} a pipeline gyors infrastruktúra-validálására szolgál, anélkül hogy a főadatokat érintené. A \textit{flexset} EUNE Master$+$ Flex Queue meccsekből áll, kifejezetten premade és ismétlődő csapattársi kapcsolatok tanulmányozására. A \textit{soloq} EUNE Master$+$ Solo/Duo Queue meccsekből áll kontroll- és teljesítmény-alapvonal céljából; az aktív dataset jelenleg a \textit{soloq}. A \textit{flexset} és a \textit{soloq} egymással párban értelmezhetők: az előbbi a premade és csoportos játékhoz kötődő társas jeleket erősíti, az utóbbi ugyanannak a szervernek egyénibb, kevésbé premade-fókuszú meccstörténetét képviseli.
+
+\begin{table}[H]
+\centering
+\caption{A több-adatkészletes architektúra logikai elemei}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}X}
+\toprule
+\textbf{Elem} & \textbf{Szerep} \\
+\midrule
+Dataset registry & Az elérhető adatkészletek metaadatait és az aktív dataset kijelölését tárolja \\
+Raw database & A gyűjtéshez és kezdeti beolvasáshoz szükséges játékosadatok \\
+Refined database & A normalizált pontszámokat, klasztereket és származtatott mezőket tartalmazza \\
+Matches directory & A tényleges meccs-JSON állományok helye \\
+Cache directory & Futás közbeni vagy előre generált artifaktumok tárolása \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{A dataset mint életciklus-egység}
+
+A dataset a jelenlegi rendszerben nem statikus mappát, hanem együtt mozgó állapotcsomagot jelent. Egy új dataset létrehozása után több, egymástól elválasztható fázison mehet keresztül:
+
+\begin{enumerate}
+    \item nyers seed és játékosállapot kialakítása;
+    \item match collector futtatása;
+    \item PUUID-alapú normalizálás és score-frissítés;
+    \item legacy Python export vagy populációs klaszterperzisztencia, ha az adott futás ezt igényli;
+    \item Rust runtime-felépítés, Graph V2 artifact-export és bird's-eye export;
+    \item kutatási analitikák lefuttatása.
+\end{enumerate}
+
+Ez a bontás azért erős, mert világos köztes állapotokat ad. Egy asszortativitási vagy központisági futtatásnak nem kell újra elindítania a Riot API-gyűjtést, és egy klaszterezési változtatásnak sem kell a teljes pipeline-t újraépítenie.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{dataset lifecycle riotapi to analytical output.pdf}
+\caption{Egy dataset teljes életciklusának diagramja a Riot API-tól az analitikai kimenetig}
+\end{figure}
+
+\subsection{A dataset-választás propagálása}
+
+A dataset-választás nem áll meg a Node-szinten. A backend a kiválasztott datasetből környezeti változókat képez a Rust futtatókörnyezet felé (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}), amelyeket a Rust runtime fogyaszt. Nincs külön "frontend igazság" és "Rust igazság" ugyanarról az adatállapotról: a dataset-választás a teljes végrehajtási láncon végigmegy, és a frontend által mutatott eredmény ugyanabból a datasetből jön, amelyen a kutatási analitika fut.
+
+\section{A jelenlegi adatállapot}
+
+Az aktív adatállapot 2026. április 28-án közvetlenül a repository aktuális állapotából lett ellenőrizve. Az aktív dataset a \textit{soloq}. Az ellenőrzött fő adatállományok és adatbázisok adatai:
+
+\textbf{Flexset dataset (EUNE Master+ Flex Queue):}
+\begin{itemize}
+    \item meccs-JSON állományok: \textbf{4981} fájl a \textit{backend/data/matches/flexset/} könyvtárban;
+    \item Graph V2 összegző jelentés: \textit{matchCount: 4980} (egy fájl eltérés ellenőrizendő);
+    \item nyers adatbázis (\textit{players.db}): \textbf{15\,147} játékos;
+    \item finomított adatbázis (\textit{playersrefined.db}): \textbf{15\,421} játékos, \textbf{599} klaszter, \textbf{5741} klasztertag.
+\end{itemize}
+
+\textbf{SoloQ dataset (EUNE Master+ Solo/Duo Queue, aktív):}
+\begin{itemize}
+    \item meccs-JSON állományok: \textbf{2001} fájl a \textit{backend/data/matches/soloq/} könyvtárban;
+    \item Graph V2 összegző jelentés: \textit{matchCount: 2000};
+    \item nyers adatbázis (\textit{players.db}): \textbf{2822} játékos;
+    \item finomított adatbázis (\textit{playersrefined.db}): \textbf{6768} játékos, \textbf{140} klaszter, \textbf{1538} klasztertag.
+\end{itemize}
+
+A soloq dataset klaszterei jellemzően \emph{duo párokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül. Ez strukturálisan különbözik a flexset klasztereitől, ahol akár ötfős premade csapat is kialakulhat rendszeresen ismétlődő együttsként.
+
+A jelen dolgozat nem hipotetikus rendszert ír le, hanem egy olyan állapotot, amelyben a pipeline két, egymással összehasonlítható, eltérő queue-szemantikájú, valós adatokkal feltöltött és ténylegesen lefuttatott kutatási korpusszal rendelkezik.
+
+A meccsszámban megfigyelhető egy-fájlos eltérés (4981 fájl vs. 4980 matchCount a Graph V2 összegzőben) metodikai megjegyzést igényel: ez feltehetően egy olyan meccsfájl, amelyet a gyűjtő letöltött, de a Graph V2 pipeline valamilyen validációs szűrőn kizárt. Ez nem kritikus eltérés, de jól mutatja, hogy a pipeline nem pusztán fájlszámlálás alapján dolgozik.
+
+\section{Perzisztencia és relációs modell}
+
+A projekt egyik legfontosabb érése az volt, hogy a klaszterek kikerültek a „csak JSON export" kategóriából, és első osztályú adatbázis-objektumokká váltak. A jelenlegi séma három központi táblára épül \cite{sqlite}: \textit{players}, \textit{clusters} és \textit{cluster\_members}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{sqlite-project-er-diagram.png}
+\caption{A fő SQLite adatbázis egyedkapcsolati diagramja}
+\end{figure}
+
+\subsection{Az SQLite konfiguráció}
+
+Az SQLite ebben a projektben nem egyszerűségi választás, hanem jó kompromisszum: nem igényel külön adatbázisszerver-felügyeletet, a séma könnyen verziózható, lokálisan gyors, és demóhoz sem kell külön infrastruktúra. A normalizáló pipeline nem alapbeállításokkal használja: \textit{WAL} naplózást, \textit{NORMAL} szinkronizációt, memóriabeli ideiglenes tárolást és foreign key támogatást állít be. Ez lokálisan futó, ismételten újraíró, de nem többszáz egyidejű felhasználót kiszolgáló analitikai adattárhoz jó arány sebesség, stabilitás és hordozhatóság között.
+
+\subsection{A \textit{players} tábla}
+
+A \textit{players} tábla jóval több egy egyszerű névjegyzéknél. A fő mezőcsoportok: azonosítók és névmezők; aggregált teljesítménymutatók (\textit{feedscore}, \textit{opscore}); mintanagyságot leíró mezők (\textit{match\_count}, \textit{matches\_processed}); szerepkör és szerepkör-bizonyosság; artifact-szintű komponensek. A 2026. április 24-én vizsgált állapotban a tábla \textbf{25\,618} játékost tartalmazott.
+
+\begin{table}[H]
+\centering
+\caption{Szerepkör-eloszlás a vizsgált \textit{players} állapotban}
+\begin{tabular}{lr}
+\toprule
+\textbf{Szerepkör} & \textbf{Játékosok száma} \\
+\midrule
+TOP & 4571 \\
+MIDDLE & 4517 \\
+JUNGLE & 4484 \\
+BOTTOM & 4471 \\
+UTILITY & 4455 \\
+UNKNOWN & 3120 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Az \textit{UNKNOWN} kategória (3120 játékos) szándékos: a rendszer nem erőltet lane-hozzárendelést ott, ahol a nyers adat nem kellően megbízható. A \textit{backend/normalize\_players\_by\_puuid.js} nem tiszta, egyszer lezárt sémával számol, hanem deklarálja a kanonikus oszlopkészletet és szükség esetén a történetileg felhalmozott eltérésekhez is alkalmazkodik. A score-réteg, a szerepkörmezők és az artifact-szintű komponensek nem egyszerre kerültek be a modellbe, ezért a normalizáló modul egyben migrációs réteg is.
+
+\subsection{Klasztermodell}
+
+A klaszterek perzisztenciáját a \textit{clusters} és \textit{cluster\_members} páros adja. A \textit{clusters} tábla főbb elemei: \textit{cluster\_id}, \textit{cluster\_type}, \textit{algorithm}, \textit{size}, \textit{summary\_json}, térbeli koordináták, build-verzió és frissítési idő. A \textit{cluster\_members} tábla a tagsági és szerepkörjellegű információt tárolja: klaszter-játékos összerendelést, \textit{is\_bridge}, \textit{is\_star}, \textit{is\_best\_op}, \textit{is\_worst\_feed} jelzőket, és szerepköri összegzést \textit{role\_json} formában.
+
+A \textit{backend/cluster\_persistence.py} a klasztereket \textit{cluster\_type} szerint cseréli: egy új \textit{python\_population} build felülírja a régi Python-klasztereket, de nem nyúl a \textit{rust\_pathfinding} családhoz. Így ugyanazon adatbázisban több klasztercsalád él együtt anélkül, hogy egy újrafuttatás mindent elsöpörne. A \textit{summary\_json}, \textit{role\_json}, \textit{build\_version} és \textit{updated\_at} mezők a kutatási visszakövethetőséget is javítják.
+
+\subsection{A két klasztercsalád}
+
+A rendszerben két klasztercsalád él párhuzamosan. A \textit{python\_population} típusú klaszterek a Python gráfépítési pipeline kimenetei: NetworkX-alapú modularitás-maximalizálás, kemény méretkorlát nélkül, közösségdetektálási perspektívával. A \textit{rust\_pathfinding} típusú klaszterek a Rust motor futásidejű klaszterezéséből jönnek: ally-kapcsolatokon alapuló erős-összefüggési szegmensek, maximum 20 tagos korláttal, pathfinding és vizualizációs célra optimalizálva. Az \textit{orbitScore} és \textit{orbitRadius} értékek kizárólag a Rust klaszterekre értelmezhetők.
+
+A két família egymást kiegészíti: a Python klaszterek adnak egy moduláris alapú közösségstruktúrát, a Rust klaszterek ennek futásidejű, vizualizáció-kompatibilis változatát. A klaszterprofilok aggregált teljesítménymutatói (\textit{opscore} és részmetrikák klaszterszinten) egyben a Tribal NeuroSim szimulációjának genomszekvencia-bemenetét is alkotják: minden szimulált törzs egy ilyen adatbázis-klaszter profilja alapján indul.
+
+A két kutatási dataset klaszterstruktúrája lényegesen eltér. A flexset finomított adatbázisában \textbf{599} klaszter és \textbf{5741} tagsági rekord van, a Graph V2 artifaktumban \textbf{1531} látható klaszter, átlagos méret \textbf{3.750}, legnagyobb \textbf{20}. A soloq-ban \textbf{140} klaszter és \textbf{1538} tagsági rekord van, a Graph V2 artifaktumban \textbf{870} látható klaszter, átlagos méret \textbf{1.768}, legnagyobb \textbf{20}. A flexset átlagos klasztermérete közel duplája a soloq-énak, ami empirikusan is alátámasztja, hogy a Flex Queue erősebb ismétlődő csoportkapcsolatokat termel.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{relational model diagram.pdf}
+\caption{Relációs modell a klaszter- és játékosperzisztenciához (\textit{players}, \textit{clusters}, \textit{cluster\_members})}
+\end{figure}
