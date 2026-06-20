@@ -100,7 +100,7 @@ a fenntartható korlátot:
 
 \subsection*{Populáció és erőforrásmodell}
 
-A törzs populációja és élelmiszer-készlete tickenként kölcsönösen hat egymásra. Az élelmiszerfogyasztás arányos a populációval; ha a fogyasztás meghaladja a termelést, az éhhalál mechanizmusa csökkenti a populációt. A \texttt{resource\_drive} hajtóerő - amelynek értelmezése a 23.2.~alszekciójában kerül kifejtésre - modulálja a gyűjtési rátát: magas értékű törzsek aktívabban keresnek élelmiszer-forrást, alacsony értékű törzsek a harci vagy migrációs prioritások miatt elfogadják az alacsonyabb gyűjtési hatékonyságot.
+A törzs populációja és élelmiszer-készlete tickenként kölcsönösen hat egymásra. Az élelmiszerfogyasztás arányos a populációval; ha a fogyasztás meghaladja a termelést, az éhhalál mechanizmusa csökkenti a populációt. A \textit{resource\_drive} hajtóerő - amelynek értelmezése a 23.2.~alszekciójában kerül kifejtésre - modulálja a gyűjtési rátát: magas értékű törzsek aktívabban keresnek élelmiszer-forrást, alacsony értékű törzsek a harci vagy migrációs prioritások miatt elfogadják az alacsonyabb gyűjtési hatékonyságot.
 
 A fenntartható egyensúly feltétele:
 \begin{equation}
@@ -161,11 +161,11 @@ Empire  & $\geq 3000$  & $\geq 100$ tile  & $> 0{,}75$     & Végső győzelmi s
 \end{tabular}
 \end{table}
 
-A settlement modell a polity szinthez kötött: minden szintlépés egy-egy settlement-csomópontot nyit meg a vizuális felületen. A MonoGame HUD-ban például a \texttt{C1 M0 F12} jelölés azt jelenti, hogy az adott törzs 1 várossal, 0 erőddel és 12 farmmal rendelkezik - ezek a fejlettségi mutató közvetlen leolvasási pontjai. A settlement-szám egyszerre tükrözi a polity szintet és az erőforrás-infrastruktúra méretét.
+A settlement modell a polity szinthez kötött: minden szintlépés egy-egy settlement-csomópontot nyit meg a vizuális felületen. A MonoGame HUD-ban például a \textit{C1 M0 F12} jelölés azt jelenti, hogy az adott törzs 1 várossal, 0 erőddel és 12 farmmal rendelkezik - ezek a fejlettségi mutató közvetlen leolvasási pontjai. A settlement-szám egyszerre tükrözi a polity szintet és az erőforrás-infrastruktúra méretét.
 
 \subsection*{Szövetség, fuzionálás és kihalás}
 
-A diplomácia bináris, amint azt a 23.4.~alszekció részletezi: vagy teljes háború, vagy kölcsönös szövetség, esetleg fuzionálás. Szövetség esetén a felek megnemtámadási jelzést adnak a neurális bemenetükre, de önállóak maradnak - a \texttt{legközelebbi\_szövetséges\_távolsága} bemeneti jel csökken, ami alacsonyabb isolation- és magasabb csapatkoordinációs nyomást jelent. A javított futásokban ezek a formális szövetségek ritkák: a rendszer inkább abszorpciós végjátékot produkál, ahol a nagyobb törzs ellenállással vagy ellenállás nélkül olvasztja be a kisebbet. Fuzionálás feltétele mindkét félnél: goal\_drive $> 0{,}55$, egyik sem áll éppen háborúban, és isolation $< 0{,}75$. Fuzionáláskor a két genomot fitnesz-súlyozott örökléssel vonják össze (lásd 23.3.~alszekció).
+A diplomácia bináris, amint azt a 23.4.~alszekció részletezi: vagy teljes háború, vagy kölcsönös szövetség, esetleg fuzionálás. Szövetség esetén a felek megnemtámadási jelzést adnak a neurális bemenetükre, de önállóak maradnak - a \textit{legközelebbi\_szövetséges\_távolsága} bemeneti jel csökken, ami alacsonyabb isolation- és magasabb csapatkoordinációs nyomást jelent. A javított futásokban ezek a formális szövetségek ritkák: a rendszer inkább abszorpciós végjátékot produkál, ahol a nagyobb törzs ellenállással vagy ellenállás nélkül olvasztja be a kisebbet. Fuzionálás feltétele mindkét félnél: goal\_drive $> 0{,}55$, egyik sem áll éppen háborúban, és isolation $< 0{,}75$. Fuzionáláskor a két genomot fitnesz-súlyozott örökléssel vonják össze (lásd 23.3.~alszekció).
 
 Kihalás esetén a törzs összes tile-ját visszafoglalják, majd tombstone rekord rögzíti az utolsó állapotot: genomot, leszármazást, harci rekordot és a kihalás okát. A leszármazási DAG - ahol minden törzs szülői linkeket tárol, nem teljes ancestry stringeket - technikailag egy irányított aciklikus gráf. A hex szomszédosság és a leszármazási lánc egyaránt gráf-struktúra; mindkét fogalom elvi háttere a 12-13.~fejezetekben kerül kifejtésre; itt kizárólag a szimulációs tartományra vonatkozó mechanikai alkalmazásuk releváns.
 
@@ -195,7 +195,7 @@ A post-mortem analízis öt architektúrális döntést tett kötelezővé:
 \begin{enumerate}
   \item \textbf{Rust authority:} A teljes szimulációs logika Rust-ba kerül. A frontend kizárólag renderelési kliens - nem fut szimulációt, nem tárol érdemi állapotot.
   \item \textbf{Kötelező eseménybusz:} Minden állapotátmenet strukturált eseményt bocsát ki, append-only naplóba. A végső térképállapot önmagában nem bizonyíték - az audit trail kötelező.
-  \item \textbf{Tombstone ledger:} Minden kihaló törzs tombstone rekordot kap (kihalási ok, utolsó genom, leszármazás, utolsó populáció és területszám). A szellemháborúk megszüntetésének feltétele, hogy a halál pillanatában az összes aktív háborúra \texttt{WarCancelled} esemény kerüljön.
+  \item \textbf{Tombstone ledger:} Minden kihaló törzs tombstone rekordot kap (kihalási ok, utolsó genom, leszármazás, utolsó populáció és területszám). A szellemháborúk megszüntetésének feltétele, hogy a halál pillanatában az összes aktív háborúra \textit{WarCancelled} esemény kerüljön.
   \item \textbf{Területi modell overhaul:} Bináris tile-tulajdonlás helyett törtrészes irányítás (lásd 24.1.~alszekció), vitatott zónák és terjeszkedési költségmodell.
   \item \textbf{MonoGame desktop kliens:} A böngésző prototípus memóriaszivárgásra hajlamos; a MonoGame C\# kliens FrameV1 bináris protokollon csatlakozik a Rust szerverhez, determinisztikus tick-szinkronnal.
 \end{enumerate}
@@ -215,8 +215,8 @@ A v3-as rendszer implementációja diszkrét task-futtatásokon keresztül zajlo
 \textbf{Task} & \textbf{Dátum} & \textbf{Fő változás} \\
 \hline
 TaskR1 & 2026-05-06 & LineageRegistry (DAG ID rendszer); seed-entitás regisztráció; O(1) szülőlánc-lekérdezés \\
-TaskR2 & 2026-05-06 & TombstoneLedger; ghost-war javítás (\texttt{WarCancelled} státusz); halott törzsek ~100 byte-os rekordra csökkentve \\
-TaskR4 & 2026-05-06 & Törtrészes tile-irányítás; \texttt{TileControl} struktúra; vitatott zóna $-40\%$ büntetés \\
+TaskR2 & 2026-05-06 & TombstoneLedger; ghost-war javítás (\textit{WarCancelled} státusz); halott törzsek ~100 byte-os rekordra csökkentve \\
+TaskR4 & 2026-05-06 & Törtrészes tile-irányítás; \textit{TileControl} struktúra; vitatott zóna $-40\%$ büntetés \\
 TaskR7 & 2026-05-06 & FrameV1 bináris protokoll; TNS3 envelope; little-endian; tile, háborús és esemény-delta szekciók \\
 TaskR8 & 2026-05-07 & Hex-távolság; tereptől függő foglalási cost; overextension büntetés; 75 tickes integrációs periód \\
 TaskM1 & 2026-05-08 & C\# FrameV1 dekóder; TNS3 envelope-parsírozás; backward-compatible V0 fallback \\
@@ -230,17 +230,17 @@ TaskM9 & 2026-05-10 & MonoGame integráció; leszármazási inspektor panel (L);
 
 Az első teljes v3 futtatás (2026-05-14, 0-777 tick) statikusnak bizonyult: 599 törzs egyike sem halt meg, egyetlen háború sem zárult le, minden törzs pontosan 1 tile-t tartott fenn. A diagnózis három egymást erősítő hibát tárt fel.
 
-\textbf{1. Kétszeres normalizálás:} A \texttt{server.js} már 0-1 közé normalizálta az artifaktum-értékeket (osztás 4,5-tel vagy 5,0-val). A Rust \texttt{TribeStats::from\_profile} ezután ismét 10-zel osztott, így az értékek 10$\times$ kicsik lettek. Az A\_combat értéke $\approx 0{,}03$ volt $0{,}3$ helyett. A harci veszteség: $0{,}03 \times 6000 \times 0{,}02 = 3{,}6$ egység/forduló - ekkora kár mellett egyetlen törzs sem halhatott meg háborúban. A javítás: az extra osztás eltávolítása.
+\textbf{1. Kétszeres normalizálás:} A \textit{server.js} már 0-1 közé normalizálta az artifaktum-értékeket (osztás 4,5-tel vagy 5,0-val). A Rust \textit{TribeStats::from\_profile} ezután ismét 10-zel osztott, így az értékek 10$\times$ kicsik lettek. Az A\_combat értéke $\approx 0{,}03$ volt $0{,}3$ helyett. A harci veszteség: $0{,}03 \times 6000 \times 0{,}02 = 3{,}6$ egység/forduló - ekkora kár mellett egyetlen törzs sem halhatott meg háborúban. A javítás: az extra osztás eltávolítása.
 
-\textbf{2. Migrációs oszcilláció:} A migrációs override azonnal aktiválódott minden \texttt{Settling} vagy \texttt{Foraging} állapotban lévő törzsre, amelynél migration\_drive $> 0{,}55$ és aggression $< 0{,}55$. Ez végtelen ciklust okozott: Settling → Migrating (0 tick után) → célpont elérve → Settling → azonnal Migrating. A törzsek ~15\%-a soha nem töltötte el a \texttt{apply\_territory\_expansion} által megkövetelt minimális időt \texttt{Settling} állapotban, ezért nem igényelt tile-okat. Javítás: \texttt{ticks\_in\_state >= 15} feltétel hozzáadása a migrációs override elé.
+\textbf{2. Migrációs oszcilláció:} A migrációs override azonnal aktiválódott minden \textit{Settling} vagy \textit{Foraging} állapotban lévő törzsre, amelynél migration\_drive $> 0{,}55$ és aggression $< 0{,}55$. Ez végtelen ciklust okozott: Settling → Migrating (0 tick után) → célpont elérve → Settling → azonnal Migrating. A törzsek ~15\%-a soha nem töltötte el a \textit{apply\_territory\_expansion} által megkövetelt minimális időt \textit{Settling} állapotban, ezért nem igényelt tile-okat. Javítás: \textit{ticks\_in\_state >= 15} feltétel hozzáadása a migrációs override elé.
 
-\textbf{3. Terjeszkedési küszöb:} A terjeszkedési feltétel \texttt{resource\_drive < 0.25} volt, ami a törzsek $\approx 63\%$-át kizárta a terjeszkedésből. A küszöb \texttt{0.10}-re csökkentése után a törzsek $\approx 95\%$-a válhatott jogosulttá tile-igénylésre.
+\textbf{3. Terjeszkedési küszöb:} A terjeszkedési feltétel \textit{resource\_drive < 0.25} volt, ami a törzsek $\approx 63\%$-át kizárta a terjeszkedésből. A küszöb \textit{0.10}-re csökkentése után a törzsek $\approx 95\%$-a válhatott jogosulttá tile-igénylésre.
 
-Az ezt követő \textit{post-first-run} javítási körben (2026-05-16) három további hiba javítása történt: (1) a kihaló törzsek tile-jai korábban semleges státuszba kerültek ahelyett, hogy a hódítóra szállnának; (2) az \texttt{AtWar} állapotban lévő törzsek nem tudtak élelmiszert gyűjteni, így a nagy birodalmak éhhalálban pusztultak el ahelyett, hogy harci veszteség döntötte volna el a háborút - ez a \textit{starvation cascade} jelenség; (3) a valós flexset klaszterprofilok minden artifaktumon $0{,}89$-$0{,}99$ értékeket mutattak, ami viselkedési monokultúrát okozott: minden törzs \textit{Warband} archetípussal indult. A $[0{,}6, 1{,}0]$ véletlenszerű artifaktum-skálázás - determinisztikus, genome-seed alapú - megszüntette ezt.
+Az ezt követő \textit{post-first-run} javítási körben (2026-05-16) három további hiba javítása történt: (1) a kihaló törzsek tile-jai korábban semleges státuszba kerültek ahelyett, hogy a hódítóra szállnának; (2) az \textit{AtWar} állapotban lévő törzsek nem tudtak élelmiszert gyűjteni, így a nagy birodalmak éhhalálban pusztultak el ahelyett, hogy harci veszteség döntötte volna el a háborút - ez a \textit{starvation cascade} jelenség; (3) a valós flexset klaszterprofilok minden artifaktumon $0{,}89$-$0{,}99$ értékeket mutattak, ami viselkedési monokultúrát okozott: minden törzs \textit{Warband} archetípussal indult. A $[0{,}6, 1{,}0]$ véletlenszerű artifaktum-skálázás - determinisztikus, genome-seed alapú - megszüntette ezt.
 
 \subsection*{Determinizmus-hiba visszautalása}
 
-A 22.4.~szekcióban részletesen tárgyalt determinizmus-hiba - az SQLite-ból rendezés nélkül betöltött klasztersorrend véletlenszerűsége és annak javítása (\texttt{clusters.sort\_by(|a, b| a.id.cmp(\&b.id))}) - szintén ebbe az iteratív újratervezési folyamatba illeszkedik. Az igazolás (CLI tick=100 és MonoGame tick=100 azonos kimenete: \texttt{alive=593, City:41, Tribe:552}) a liveness-fix utáni állapotra vonatkozik, és a reprodukálható futtatások előfeltételét képezi.
+A 22.4.~szekcióban részletesen tárgyalt determinizmus-hiba - az SQLite-ból rendezés nélkül betöltött klasztersorrend véletlenszerűsége és annak javítása (\textit{clusters.sort\_by(|a, b| a.id.cmp(\&b.id))}) - szintén ebbe az iteratív újratervezési folyamatba illeszkedik. Az igazolás (CLI tick=100 és MonoGame tick=100 azonos kimenete: \textit{alive=593, City:41, Tribe:552}) a liveness-fix utáni állapotra vonatkozik, és a reprodukálható futtatások előfeltételét képezi.
 
 % ==========================================================================
 \section{A szimuláció teljes matematikai modellje}
@@ -340,7 +340,7 @@ Egyetlen harci körben a védő vesztesége:
 \Delta p_j \;\sim\; \mathrm{Poisson}(\lambda_{ij}), \qquad
 \lambda_{ij} \;=\; a_{c,i}\cdot|\partial\mathcal{T}_i \cap \partial\mathcal{T}_j|\cdot\mu_{\text{combat}}
 \end{equation}
-ahol $a_{c,i}$ a támadó \texttt{A\_combat} értéke, $|\partial\mathcal{T}_i \cap \partial\mathcal{T}_j|$
+ahol $a_{c,i}$ a támadó \textit{A\_combat} értéke, $|\partial\mathcal{T}_i \cap \partial\mathcal{T}_j|$
 a kontaktzóna (szomszédos tile-párok száma a két terület határán), és $\mu_{\text{combat}} = 0{,}02$
 az alap harci szorzó. A várható veszteség tickenként: $\mathbb{E}[\Delta p_j] = \lambda_{ij}$.
 Magas $a_{c,i}$ és széles kontaktzóna esetén ez gyorsan vezet totális elfoglaláshoz, ami
@@ -392,7 +392,7 @@ A szimulációs kísérlet tudományos értéke nem abban áll, hogy a rendszer 
 
 \textbf{Determinisztikus seed-ek.} Minden futtatás egy egész szám seed értékkel inicializálódik. Azonos seed és azonos adatkészlet esetén a szimuláció minden egyes törzsi döntést, minden háborús kimenetelt és minden kihalási eseményt ugyanabban a sorrendben reprodukál. Ez a tulajdonság teszi lehetővé, hogy futtatások között összehasonlítás legyen érvényes: ha két futttatás ugyanolyan seed-del, de eltérő adatkészlettel indul, a különbség egyértelműen az inicializációs klaszterprofilnak tudható be.
 
-\textbf{Nem elegendő, hogy „lefutott".} A validáció feltétele, hogy az adott futtatás $N$-ből $N$ esetben azonos \texttt{final\_summary} rekordot állítson elő - azonos győztes TribeId-vel, azonos polity-szinttel, azonos tombstone-számmal. Egy egyszeri futás, amelynek eredményét nem lehet megismételni, nem tekinthető empirikus bizonyítéknak; csupán egy megfigyelt eseménynek.
+\textbf{Nem elegendő, hogy „lefutott".} A validáció feltétele, hogy az adott futtatás $N$-ből $N$ esetben azonos \textit{final\_summary} rekordot állítson elő - azonos győztes TribeId-vel, azonos polity-szinttel, azonos tombstone-számmal. Egy egyszeri futás, amelynek eredményét nem lehet megismételni, nem tekinthető empirikus bizonyítéknak; csupán egy megfigyelt eseménynek.
 
 \textbf{Esemény-alapú értelmezés.} Minden törzs-viselkedésre vonatkozó állítás - hogy egy törzs opportunistán csapott le, hogy egy trilaterális háborúban koordinálatlanul vett részt, hogy sorozatos védelmi győzelmeket aratott - kizárólag a naplóbejegyzésekre épülhet. A végső térképkép önmagában nem bizonyít semmit: két különböző belső dinamika ugyanolyan területi végeredménnyel zárulhat. Az eseménybusz (lásd 22.3.~alszekció) és a JSONL naplók a forrásadatok; az értelmezések ezekből vannak levezetve.
 
@@ -456,7 +456,7 @@ Ezek az adatok azt támasztják alá, hogy az F2 ponton a neurális aktivitás �
 A 2026.~május~16-i post-first-run javítási kör után a validáció fókusza áthelyeződött:
 nem az volt a kérdés, hogy a kimenetek aktívak-e, hanem az, hogy a teljes világ
 visszaellenőrizhetően és determinisztikusan konvergál-e. Ebben a körben a kihalt törzsek
-területe már öröklődött, az \texttt{AtWar} állapot nem okozott éhhalál-kaszkádot,
+területe már öröklődött, az \textit{AtWar} állapot nem okozott éhhalál-kaszkádot,
 az artifact skálázás megszüntette a Warband-monokultúrát, és a tombstone rekordok
 alapító PUUID szinten is auditálhatóbbá váltak.
 
@@ -495,13 +495,13 @@ ragad be szövetségi vagy békés deadlockba.
 \subsection*{Batch determinizmus-ellenőrzés}
 % --------------------------------------------------------------------------
 
-A determinizmus-javítás (lásd 22.4.~alszekció) helyességét batch futtatásokkal igazoltuk. A \texttt{run-batch.ps1} szkript képes $N$ párhuzamos fejnélküli futtatást azonos seed értékkel elindítani, és minden futtatás \texttt{final\_summary} rekordját JSON-ként rögzíteni. Az ellenőrzés feltétele: mind az $N$ rekordban azonos \texttt{TribeId} és azonos \texttt{PolityBehavior} értéknek kell szerepelnie.
+A determinizmus-javítás (lásd 22.4.~alszekció) helyességét batch futtatásokkal igazoltuk. A \textit{run-batch.ps1} szkript képes $N$ párhuzamos fejnélküli futtatást azonos seed értékkel elindítani, és minden futtatás \textit{final\_summary} rekordját JSON-ként rögzíteni. Az ellenőrzés feltétele: mind az $N$ rekordban azonos \textit{TribeId} és azonos \textit{PolityBehavior} értéknek kell szerepelnie.
 
 Két batch-ellenőrzés elvégzése igazolta a javítás helyességét:
 
-\textbf{Flexset, seed=42}: öt párhuzamos fejnélküli futtatás mindegyikében Tribe 596 (Warband/Combat viselkedési archetípus) győzött. A győztes \texttt{TribeId}, a \texttt{winner\_tier} és a \texttt{total\_ticks} értékek minden futtatásban bit-azonosak voltak.
+\textbf{Flexset, seed=42}: öt párhuzamos fejnélküli futtatás mindegyikében Tribe 596 (Warband/Combat viselkedési archetípus) győzött. A győztes \textit{TribeId}, a \textit{winner\_tier} és a \textit{total\_ticks} értékek minden futtatásban bit-azonosak voltak.
 
-\textbf{SoloQ, seed=7777}: a jelen fejezetben elemzett \texttt{run67sq7777} teljes futtatási logja szerint Tribe 70 győzött, tick=2541-nél. Ez a konkrét kísérleti narratíva ezért Tribe 70-et tekinti a seed=7777 SoloQ futtatás győztesének.
+\textbf{SoloQ, seed=7777}: a jelen fejezetben elemzett \textit{run67sq7777} teljes futtatási logja szerint Tribe 70 győzött, tick=2541-nél. Ez a konkrét kísérleti narratíva ezért Tribe 70-et tekinti a seed=7777 SoloQ futtatás győztesének.
 
 \begin{lstlisting}[language={}, caption={Batch determinizmus-ellenőrzés parancssora}]
 # 5 futtatas azonos seed-del, eredmeny JSONL-be
@@ -509,7 +509,7 @@ Két batch-ellenőrzés elvégzése igazolta a javítás helyességét:
 # Kimenet: final_summary sorok mind azonos winner_id-t es behavior-t mutatnak
 \end{lstlisting}
 
-Ez az eredmény két dolgot igazol egyszerre: egyrészt hogy a \texttt{clusters.sort\_by} javítás valóban megszüntette a véletlenszerű klasztersorrendből fakadó divergenciát, másrészt hogy a neurális hálózat és a szimulációs motor együttes viselkedése determinisztikus a teljes futtatás hosszán keresztül - nemcsak az első 100 tickre, amelyet a MonoGame-CLI összehasonlítás igazolt.
+Ez az eredmény két dolgot igazol egyszerre: egyrészt hogy a \textit{clusters.sort\_by} javítás valóban megszüntette a véletlenszerű klasztersorrendből fakadó divergenciát, másrészt hogy a neurális hálózat és a szimulációs motor együttes viselkedése determinisztikus a teljes futtatás hosszán keresztül - nemcsak az első 100 tickre, amelyet a MonoGame-CLI összehasonlítás igazolt.
 
 % --------------------------------------------------------------------------
 \subsection*{Mit támogat a validáció - és mit nem}
@@ -889,7 +889,7 @@ A végjáték legfontosabb fordulata tick=2340-nél történt: Tribe 99, a köz�
 \end{figure}
 
 % ==========================================================================
-\section{Miért képesek kisebb törzsek nagyobbakat legyőzni}
+\section{Kisebb törzsek győzelme nagyobb entitások felett}
 \label{sec:neurosim-26-upset}
 % ==========================================================================
 
@@ -1048,8 +1048,8 @@ a rendszer ugyanolyan módszertannal alkalmazható lenne.
 
 \subsection*{A leképezhető artifact-priorok általánosítása}
 
-Az öt artifact (\texttt{A\_combat}, \texttt{A\_resource}, \texttt{A\_map\_objective},
-\texttt{A\_risk}, \texttt{A\_team}) nem más, mint öt normált teljesítménymutatóból
+Az öt artifact (\textit{A\_combat}, \textit{A\_resource}, \textit{A\_map\_objective},
+\textit{A\_risk}, \textit{A\_team}) nem más, mint öt normált teljesítménymutatóból
 álló vektor. Bármilyen domain, ahol hasonló dimenziók értelmezhetők, potenciális
 transzfer-forrás:
 

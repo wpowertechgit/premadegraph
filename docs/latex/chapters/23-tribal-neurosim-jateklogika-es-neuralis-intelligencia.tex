@@ -48,7 +48,7 @@ levezetett klaszterszintű teljesítménymutatókat kap inicális genomszekvenci
 
 Ezek az értékek a 10.~fejezetben bemutatott klaszterezési eljárásból erednek,
 és lineáris normalizációval (\(v / 10{,}0\)) kerülnek a \([0,\,1]\) tartományba.
-Az inicializálás során minden törzshöz egy \texttt{Genome::new(11,~7)} struktúra jön létre -
+Az inicializálás során minden törzshöz egy \textit{Genome::new(11,~7)} struktúra jön létre -
 11~bemeneti csomóponttal, 7~kimeneti csomóponttal és 84~kezdeti kapcsolattal -,
 amelynek súlyait a klaszterstatisztikák befolyásolják.
 A Flexset és a SoloQ adatkészletek eltérő klaszterstatisztikái eltérő iniciális genomokat
@@ -75,7 +75,7 @@ empirikus összehasonlítását és a 24.~fejezet futtatási narratíváit).
   \label{fig:neurosim-sq42-firstempire}
 \end{figure}
 
-\subsection*{Miért nem backpropagation}
+\subsection*{Gradiensmentes evolúció backpropagation helyett}
 
 A neurális hálózat nem prediktív modell és nem osztályozó - \textit{személyiség- és
 hajtóerő-generátor}. Hét kimeneti értéke (\textit{aggression}, \textit{resource\_drive},
@@ -92,12 +92,12 @@ A fitnesz ebből következik, nem fordítva.
 \subsection*{Genomcache és teljesítményszempont}
 
 A fordított (\textit{compiled}) genomcache tick-ek között újrafelhasználódik:
-a \texttt{genome.compile()} hívás egy \texttt{CompiledGenome}-ot állít elő,
+a \textit{genome.compile()} hívás egy \textit{CompiledGenome}-ot állít elő,
 amely a topológiai előre-átmeneti lépéstervet tárolja.
-A \texttt{CompiledGenome::activate(\&inputs[0..11])} meghívása minden tickben elvégzi
+A \textit{CompiledGenome::activate(\&inputs[0..11])} meghívása minden tickben elvégzi
 a neurális inferenciát anélkül, hogy a hálózatot újraépítené.
 A cache csak mutációkor (minden ezer tickenként, generációs határponton)
-és polity-fúziókor (\texttt{Genome::inherit\_from()} hívásakor) érvénytelenítődik,
+és polity-fúziókor (\textit{Genome::inherit\_from()} hívásakor) érvénytelenítődik,
 amikor a két törzs genomjából fitnesz-súlyozott keveréssel keletkezik az örökös genomja.
 
 A következő szekcióban a konkrét bemenet-kimenet architektúrát és a 11~bemeneti jel
@@ -115,7 +115,7 @@ torzításokat, amelyek a törzs következő döntéseinek valószínűségi elo
 
 \subsection*{A 11 bemeneti jel}
 
-A \texttt{CompiledGenome::activate()} hívás 11~értékből álló vektort kap.
+A \textit{CompiledGenome::activate()} hívás 11~értékből álló vektort kap.
 Az első négy dinamikus: értékük tickenként változik a szimulált világ aktuális
 állapotától függően. A következő öt invariáns: a klaszter-derivált artifact priorokból
 jönnek létre inicializáláskor, és csak generációs határpontokon (minden 1000.~ticknél)
@@ -130,17 +130,17 @@ frissülnek, mutáció eredményeként. Az utolsó két bemeneti jel szintén di
     \hline
     \textbf{Index} & \textbf{Változónév} & \textbf{Leírás} & \textbf{Jelleg} \\
     \hline
-    0 & \texttt{food\_ratio}         & Élelmiszerkészlet / populáció         & Dinamikus \\
-    1 & \texttt{pop\_ratio}          & Populáció / maximális kapacitás        & Dinamikus \\
-    2 & \texttt{territory}           & Igényelt tile-ok száma / 100           & Dinamikus \\
-    3 & \texttt{feed\_risk}          & Éhhalál-közelség (1{,}0 = kritikus)   & Dinamikus \\
-    4 & \texttt{a\_combat}           & Harci teljesítmény-artifact             & Invariáns* \\
-    5 & \texttt{a\_resource}         & Erőforrás/gazdaság-artifact             & Invariáns* \\
-    6 & \texttt{a\_map\_objective}   & Objektívkontroll-artifact               & Invariáns* \\
-    7 & \texttt{a\_team}             & Csapatkoordinációs artifact             & Invariáns* \\
-    8 & \texttt{nearest\_enemy}      & Legközelebbi ellenfél hex-távolsága    & Dinamikus \\
-    9 & \texttt{nearest\_ally}       & Legközelebbi szövetséges hex-távolsága & Dinamikus \\
-   10 & \texttt{a\_risk}             & Kockázattűrési artifact                 & Invariáns* \\
+    0 & \textit{food\_ratio}         & Élelmiszerkészlet / populáció         & Dinamikus \\
+    1 & \textit{pop\_ratio}          & Populáció / maximális kapacitás        & Dinamikus \\
+    2 & \textit{territory}           & Igényelt tile-ok száma / 100           & Dinamikus \\
+    3 & \textit{feed\_risk}          & Éhhalál-közelség (1{,}0 = kritikus)   & Dinamikus \\
+    4 & \textit{a\_combat}           & Harci teljesítmény-artifact             & Invariáns* \\
+    5 & \textit{a\_resource}         & Erőforrás/gazdaság-artifact             & Invariáns* \\
+    6 & \textit{a\_map\_objective}   & Objektívkontroll-artifact               & Invariáns* \\
+    7 & \textit{a\_team}             & Csapatkoordinációs artifact             & Invariáns* \\
+    8 & \textit{nearest\_enemy}      & Legközelebbi ellenfél hex-távolsága    & Dinamikus \\
+    9 & \textit{nearest\_ally}       & Legközelebbi szövetséges hex-távolsága & Dinamikus \\
+   10 & \textit{a\_risk}             & Kockázattűrési artifact                 & Invariáns* \\
     \hline
   \end{tabular}
   \begin{flushleft}
@@ -148,7 +148,7 @@ frissülnek, mutáció eredményeként. Az utolsó két bemeneti jel szintén di
   \end{flushleft}
 \end{table}
 
-A \texttt{nearest\_enemy} és \texttt{nearest\_ally} jelek \([0,\,1]\) tartományba
+A \textit{nearest\_enemy} és \textit{nearest\_ally} jelek \([0,\,1]\) tartományba
 normalizált hex-távolságok; értékük~1{,}0, ha nincs elérhető ellenfél, illetve szövetséges.
 Ezzel a két jel a törzs térbeli elszigeteltségét kódolja: a közelben lévő ellenség
 alacsony értéket, a magányos elhelyezkedés magas értéket jelent.
@@ -162,7 +162,7 @@ alacsony értéket, a magányos elhelyezkedés magas értéket jelent.
 
 \subsection*{A 7 kimeneti hajtóerő}
 
-A hálózat kimenete \texttt{tanh} aktivációs függvényen keresztül keletkezik,
+A hálózat kimenete \textit{tanh} aktivációs függvényen keresztül keletkezik,
 így minden érték a \([-1,\,1]\) tartományba esik.
 A kimenetek az állapotgép küszöbértékeit modulálják; az állapotgép a küszöböket
 determinisztikusan ellenőrzi, de a küszöbök teljesülési valószínűsége a hajtóerőktől függ.
@@ -175,13 +175,13 @@ determinisztikusan ellenőrzi, de a küszöbök teljesülési valószínűsége 
     \hline
     \textbf{Változónév} & \textbf{Viselkedési hatás} & \textbf{Aktiválási küszöb} \\
     \hline
-    \texttt{aggression}      & Háborúindítási valószínűség modulálása       & $> 0{,}45$ \\
-    \texttt{resource\_drive} & Területterjeszkedési prioritás                & $> 0{,}25$ \\
-    \texttt{goal\_drive}     & Szövetségkezdeményezés, polity-fejlesztés     & $> 0{,}55$ / $> 0{,}50$ \\
-    \texttt{migration\_drive}& Migráció indítása (\textit{Settling} állapotból) & $> 0{,}55$ \\
-    \texttt{raid\_drive}     & Opportunista háború gyengébb szomszéd ellen  & $> 0{,}35$ \\
-    \texttt{isolation}       & Szövetségajánlat elutasítása                 & $> 0{,}75$ \\
-    \texttt{expansion\_speed}& Tile-igénylési sebesség (hűtési idő módosítás) & Folytonos \\
+    \textit{aggression}      & Háborúindítási valószínűség modulálása       & $> 0{,}45$ \\
+    \textit{resource\_drive} & Területterjeszkedési prioritás                & $> 0{,}25$ \\
+    \textit{goal\_drive}     & Szövetségkezdeményezés, polity-fejlesztés     & $> 0{,}55$ / $> 0{,}50$ \\
+    \textit{migration\_drive}& Migráció indítása (\textit{Settling} állapotból) & $> 0{,}55$ \\
+    \textit{raid\_drive}     & Opportunista háború gyengébb szomszéd ellen  & $> 0{,}35$ \\
+    \textit{isolation}       & Szövetségajánlat elutasítása                 & $> 0{,}75$ \\
+    \textit{expansion\_speed}& Tile-igénylési sebesség (hűtési idő módosítás) & Folytonos \\
     \hline
   \end{tabular}
 \end{table}
@@ -195,20 +195,20 @@ egyéb feltételektől (szomszéd jelenléte, élelmiszertartalék, ticks\_in\_s
 is függ. Három jellemző összefüggés:
 
 \begin{itemize}
-  \item \textbf{Opportunista háború:} \texttt{raid\_drive}~$> 0{,}35$ \textit{és}
-    \texttt{food\_ratio}~$> 0{,}5$ \textit{és} gyengébb szomszéd létezik
-    $\Rightarrow$ \texttt{AtWar} állapotátmenet, céltörzs = leggyengébb
-    szomszéd (\texttt{pop~$\times$~a\_combat} alapján).
-  \item \textbf{Migráció:} \texttt{migration\_drive}~$> 0{,}55$ \textit{és}
-    legalább 15~tick eltelt \texttt{Settling} állapotban
-    $\Rightarrow$ célpont kiválasztása (\texttt{pick\_migration\_dest}),
+  \item \textbf{Opportunista háború:} \textit{raid\_drive}~$> 0{,}35$ \textit{és}
+    \textit{food\_ratio}~$> 0{,}5$ \textit{és} gyengébb szomszéd létezik
+    $\Rightarrow$ \textit{AtWar} állapotátmenet, céltörzs = leggyengébb
+    szomszéd (\textit{pop~$\times$~a\_combat} alapján).
+  \item \textbf{Migráció:} \textit{migration\_drive}~$> 0{,}55$ \textit{és}
+    legalább 15~tick eltelt \textit{Settling} állapotban
+    $\Rightarrow$ célpont kiválasztása (\textit{pick\_migration\_dest}),
     majd lépésenként hexagonális elmozdulás.
-  \item \textbf{Szövetség-blokkolás:} \texttt{isolation}~$> 0{,}75$
+  \item \textbf{Szövetség-blokkolás:} \textit{isolation}~$> 0{,}75$
     $\Rightarrow$ a szövetségajánlat elutasítódik, még akkor is, ha
-    \texttt{goal\_drive} egyébként szövetséget indítana.
+    \textit{goal\_drive} egyébként szövetséget indítana.
 \end{itemize}
 
-Az \texttt{expansion\_speed} kimenet közvetlen numerikus módosító: a tile-igénylés
+Az \textit{expansion\_speed} kimenet közvetlen numerikus módosító: a tile-igénylés
 hűtési idejét (\textit{expansion cooldown}) arányosan csökkenti, így a magas értékű
 törzsek gyorsabban terjeszkednek azonos élelmiszertartalék és populáció mellett.
 
@@ -253,13 +253,13 @@ a törzsek állapotgépének (\ref{tab:neurosim-f2-outputs}.~táblázat).
     \hline
     \textbf{Kimeneti hajtóerő} & \textbf{Domináns aktiváció (db)} & \textbf{Arány} \\
     \hline
-    \texttt{migration\_drive} & 6\,526 & 38{,}4\% \\
-    \texttt{goal\_drive}      & 3\,127 & 18{,}4\% \\
-    \texttt{expansion\_speed} & 3\,060 & 18{,}0\% \\
-    \texttt{isolation}        & 1\,823 & 10{,}7\% \\
-    \texttt{resource\_drive}  & 1\,546 &  9{,}1\% \\
-    \texttt{raid\_drive}      &   634 &  3{,}7\% \\
-    \texttt{aggression}       &   258 &  1{,}5\% \\
+    \textit{migration\_drive} & 6\,526 & 38{,}4\% \\
+    \textit{goal\_drive}      & 3\,127 & 18{,}4\% \\
+    \textit{expansion\_speed} & 3\,060 & 18{,}0\% \\
+    \textit{isolation}        & 1\,823 & 10{,}7\% \\
+    \textit{resource\_drive}  & 1\,546 &  9{,}1\% \\
+    \textit{raid\_drive}      &   634 &  3{,}7\% \\
+    \textit{aggression}       &   258 &  1{,}5\% \\
     \hline
     \textbf{Összesen}         & 16\,974 & 100\% \\
     \hline
@@ -276,10 +276,10 @@ hogy a fitnesz-függvény már ebben a korai állapotban is elkezdte szétválas
 a törzseket. A későbbi futások értelmezéséhez azonban a javított, determinisztikus
 logokra kell támaszkodni, nem erre az F2-es mérésre.
 
-Az \texttt{aggression} hajtóerő alacsony részesedése (1{,}5\%) nem hibajelzés:
-a direkt agressziót a \texttt{raid\_drive} és a \texttt{goal\_drive} egyaránt
+Az \textit{aggression} hajtóerő alacsony részesedése (1{,}5\%) nem hibajelzés:
+a direkt agressziót a \textit{raid\_drive} és a \textit{goal\_drive} egyaránt
 átfedik, más aktiválási feltétellel. A migráció dominanciája (38{,}4\%) pedig
-összhangban van a flexset klaszterprofilok magas \texttt{A\_map\_objective}
+összhangban van a flexset klaszterprofilok magas \textit{A\_map\_objective}
 értékeivel, amelyek a térhasználatot és mozgást ösztönzik.
 
 \begin{figure}[h]
@@ -307,20 +307,20 @@ mozgás volt, háborúk is folytak -, de fitnesz-differenciáció nem keletkezet
 A vizsgálat három egymást erősítő hibát tárt fel.
 
 Első hiba: a törzs-statisztikák kétszeres normalizálása.
-A \texttt{server.js} már \([0,\,1]\) tartományra hozta az artifact értékeket,
+A \textit{server.js} már \([0,\,1]\) tartományra hozta az artifact értékeket,
 majd a Rust engine ismét elosztotta őket 10-zel.
-Ennek eredménye: az \texttt{a\_combat} értéke a várható $\approx0{,}3$ helyett
+Ennek eredménye: az \textit{a\_combat} értéke a várható $\approx0{,}3$ helyett
 $\approx0{,}03$ lett, így minden harci forduló mindössze $0{,}03 \times 6000 \times 0{,}02 = 3{,}6$
 veszteséget okozott - a háborúk soha nem öltek meg senkit.
 
 Második hiba: a migráció-hajtóerő oszcilláció.
-A \texttt{Settling} állapotból azonnali migrációs átmenet tüzelt, ha
-\texttt{migration\_drive}~$> 0{,}55$, és a törzs visszaérkezése után
+A \textit{Settling} állapotból azonnali migrációs átmenet tüzelt, ha
+\textit{migration\_drive}~$> 0{,}55$, és a törzs visszaérkezése után
 ismét tüzelt. A törzsek körülbelül 15\%-a így soha nem maradt elég ideig
-\texttt{Settling} állapotban ahhoz, hogy területet igényeljen.
+\textit{Settling} állapotban ahhoz, hogy területet igényeljen.
 
 Harmadik hiba: túl konzervatív terjeszkedési küszöb.
-A \texttt{resource\_drive}~$< 0{,}25$ feltétel a törzsek $\approx63$\%-át zárta
+A \textit{resource\_drive}~$< 0{,}25$ feltétel a törzsek $\approx63$\%-át zárta
 ki a terjeszkedésből.
 
 Mindhárom hibajavítás után a neurális kimenet \textit{mérhetően differenciált}
@@ -357,10 +357,10 @@ A komponensek:
   \item \textbf{polity\_tier} - az elért politikai szint numerikusan kódolva:
     Tribe\,=\,1, City\,=\,2, Duchy\,=\,3, Kingdom\,=\,4, Empire\,=\,5.
     A magasabb polity-szint küszöbfeltételekhez kötött (populáció, terület,
-    \texttt{goal\_drive}), ezért önmagában is a koordinált stratégia jelzője.
+    \textit{goal\_drive}), ezért önmagában is a koordinált stratégia jelzője.
   \item \textbf{war\_record} - a megnyert háborúk száma. Minden győzelem
     hozzáadódik a törzs harci tapasztalatához és a 23.1~szekcióban ismertetett
-    \texttt{A\_combat} artifact értékéhez (ld. az artifact felhalmozódásáról szóló
+    \textit{A\_combat} artifact értékéhez (ld. az artifact felhalmozódásáról szóló
     részt lejjebb).
 \end{itemize}
 
@@ -418,14 +418,14 @@ történik, az örökös létrehozásakor.
 
 \subsection*{Fuzionálás és fitnesz-súlyozott genomöröklés}
 
-Két törzs fuzionálhat, ha mindkettőre teljesül: \texttt{goal\_drive}~$> 0{,}55$,
-egyik sem tartózkodik \texttt{AtWar} állapotban, és mindkettőre
-\texttt{isolation}~$< 0{,}75$.
+Két törzs fuzionálhat, ha mindkettőre teljesül: \textit{goal\_drive}~$> 0{,}55$,
+egyik sem tartózkodik \textit{AtWar} állapotban, és mindkettőre
+\textit{isolation}~$< 0{,}75$.
 Ez utóbbi feltétel közvetlen összefüggésben áll a 23.2~szekcióban ismertetett
-\texttt{isolation} hajtóerővel: az erősen izolacionista genomú törzs blokkolja
+\textit{isolation} hajtóerővel: az erősen izolacionista genomú törzs blokkolja
 a szövetségajánlatot, ezért fuzionálásra sem kerülhet sor.
 
-A fuzionálásból keletkező örökös genomja a \texttt{Genome::inherit\_from(parent\_a,
+A fuzionálásból keletkező örökös genomja a \textit{Genome::inherit\_from(parent\_a,
 parent\_b, fitness\_a, fitness\_b)} hívással jön létre: fitnesz-súlyozott keverék,
 amelyben az erősebb szülő genomja dominálja az örökséget.
 Minden tile, populáció és élelmiszerkészlet az örökös törzshöz kerül.
@@ -437,12 +437,12 @@ A genomcache a fuzionáláskor érvénytelenítődik (ld. 23.1~szekció),
 
 \subsection*{Leszármazási DAG és LineageRegistry}
 
-Minden törzs nyilvántartja az \texttt{entity\_id $\to$ [parent\_ids]} leképezést.
+Minden törzs nyilvántartja az \textit{entity\_id $\to$ [parent\_ids]} leképezést.
 A seed-entitásoknál - vagyis az inicializáláskor közvetlenül klaszterprofilból
-létrehozott törzsek esetén - a szülő \texttt{u32::MAX} sentinel értéket kap;
+létrehozott törzsek esetén - a szülő \textit{u32::MAX} sentinel értéket kap;
 ezek a leszármazási DAG gyökerei.
 
-A TaskR1 implementációs futtatás (2026.~május~6.) vezette be a \texttt{LineageRegistry}
+A TaskR1 implementációs futtatás (2026.~május~6.) vezette be a \textit{LineageRegistry}
 struktúrát:
 
 \begin{lstlisting}[language={}, caption={A LineageRegistry kompakt adatstruktúrája.},
@@ -478,10 +478,10 @@ a törzspopuláció legtöbb tagja 2--4 generáción belül elérhető az azonos
 
 A REST endpointok:
 \begin{itemize}
-  \item \texttt{GET /api/lineage/resolve/\{entity\_id\}} - a szülőlánc DAG visszaadása
-  \item \texttt{GET /api/lineage/seed/\{entity\_id\}} - visszakövetés az eredeti
+  \item \textit{GET /api/lineage/resolve/\{entity\_id\}} - a szülőlánc DAG visszaadása
+  \item \textit{GET /api/lineage/seed/\{entity\_id\}} - visszakövetés az eredeti
     klaszterazonosítóig
-  \item \texttt{GET /api/lineage/stats} - az összes entitás száma és
+  \item \textit{GET /api/lineage/stats} - az összes entitás száma és
     seed-klaszter megoszlása
 \end{itemize}
 
@@ -490,15 +490,15 @@ a tombstone rekord és a LineageRegistry kombinációján keresztül.
 
 \subsection*{Artifact felhalmozódás mint harci tapasztalat}
 
-Az \texttt{A\_combat} érték nem marad rögzített az inicializálás utáni szinten.
+Az \textit{A\_combat} érték nem marad rögzített az inicializálás utáni szinten.
 Minden megnyert háború után növekszik: a törzs tényleges harci tapasztalata
 kumulálódik a genomba, fokozatosan felülírva a klaszter-derivált iniciális priort.
 Ez a legfontosabb különbség az inicializálási állapot és a futtatás végi érték között:
-egy alacsony \texttt{A\_combat}-tal induló törzs - ha elegendő védelmi győzelmet arat -
+egy alacsony \textit{A\_combat}-tal induló törzs - ha elegendő védelmi győzelmet arat -
 képes magas harci tapasztalatot felhalmozni.
 
 A legmarkánsabb bizonyíték erre a Flexset seed=7777 futtatás győztese, Tribe~355.
-A futtatás végén (tick=2538) mért \texttt{A\_combat}~$= 0{,}98$ szinte pontosan
+A futtatás végén (tick=2538) mért \textit{A\_combat}~$= 0{,}98$ szinte pontosan
 a lehetséges maximum - holott a törzs nem különösen magas iniciális harci priorral
 indult. A 2538~tick során megnyert összes védelmi háború kumulált hatása emelte az
 értéket a telítési határra.
@@ -564,19 +564,19 @@ hozama $0{,}70 \times 0{,}60 = 0{,}42$, azaz a névleges igény 42\%-a. Ez a bü
 belső egyensúly-zavaró erőként hat: a neurális hálózat kénytelen mérlegelni, hogy
 a csökkentett hozamú közös használat még mindig kedvezőbb-e a háborúnál, vagy a
 vita feloldásának - erővel vagy visszavonulással - van kisebb összköltése.
-Az \texttt{A\_risk} artifact (\ref{tab:neurosim-inputs}.~táblázat, 10.~index)
+Az \textit{A\_risk} artifact (\ref{tab:neurosim-inputs}.~táblázat, 10.~index)
 közvetlenül befolyásolja ezt a mérlegelést: alacsony kockázattűrés esetén a törzs
 hamarabb választja a konfrontációt a büntetett megosztott használat felett.
 
 \subsection*{Opportunista és stagnálási háború}
 
-Az opportunista háború mechanizmusa célirányos: \texttt{raid\_drive}~$> 0{,}35$
-és \texttt{food\_ratio}~$> 0{,}5$ és létezik a térképen gyengébb szomszéd
-(alacsonyabb \texttt{pop~$\times$~a\_combat} szorzattal) - ha mindhárom feltétel
+Az opportunista háború mechanizmusa célirányos: \textit{raid\_drive}~$> 0{,}35$
+és \textit{food\_ratio}~$> 0{,}5$ és létezik a térképen gyengébb szomszéd
+(alacsonyabb \textit{pop~$\times$~a\_combat} szorzattal) - ha mindhárom feltétel
 teljesül, a törzs háborút indít a leggyengébb azonosított szomszéd ellen.
-A szelektivitás szándékos: a magas \texttt{raid\_drive} nem jelent vaktában
+A szelektivitás szándékos: a magas \textit{raid\_drive} nem jelent vaktában
 agresszív viselkedést, hanem kalkulált opportunizmust. Ez egyezik a 23.2~szekcióban
-ismertetett \texttt{raid\_drive}-\texttt{aggression} különbségtétellel: az előbbi
+ismertetett \textit{raid\_drive}-\textit{aggression} különbségtétellel: az előbbi
 célzott, az utóbbi indiscriminate.
 
 A stagnálási háború mechanizmusa ezzel szemben kényszert vezet be. Ha a szimuláció
@@ -594,10 +594,10 @@ biztosította, hogy minden futtatás konvergál egyetlen túlélőhöz.
 
 Maynard Smith és Price evolúciós játékelméleti keretrendszere \cite{maynardsmithprice1973},
 \cite{maynardsmith1982} kínál egy értelmezési vonatkoztatási pontot a megfigyelt
-viselkedési mintákhoz: a magas \texttt{raid\_drive} és magas \texttt{aggression}
+viselkedési mintákhoz: a magas \textit{raid\_drive} és magas \textit{aggression}
 kombinációja Hawk-típusú viselkedési pozícióként azonosítható - a törzs aktívan keresi
-a konfliktust és maximalizálja az erőforrásfoglalást. A magas \texttt{isolation} és magas
-\texttt{goal\_drive} kombinációja ezzel szemben Dove-típusú pozíciónak tekinthető:
+a konfliktust és maximalizálja az erőforrásfoglalást. A magas \textit{isolation} és magas
+\textit{goal\_drive} kombinációja ezzel szemben Dove-típusú pozíciónak tekinthető:
 a törzs kerüli a közvetlen konfrontációt, és belső fejlesztésre összpontosít.
 Hangsúlyozni kell azonban, hogy ez \textit{viselkedési megfigyelés}, nem megoldott
 evolúciós egyensúly: a szimuláció nem implementálja a Hawk-Dove kifizetési mátrix
@@ -657,17 +657,17 @@ vezette a döntéshez, amelyek véletlenszerűen egybeestek.
 Tribe\_596 nyerte a háborút tick=2424-en; a kétfrontos nyomás döntő szerepet
 játszott abban, hogy tribe\_557 - amelyik egyébként a legnagyobb területet kontrollálta -
 nem tudott védekezni. Az artifact felhalmozódás szempontjából (ld.~23.3~szekció)
-ezt az eseményt a \texttt{A\_combat} értékek is tükrözik: tribe\_596 védelmi
+ezt az eseményt a \textit{A\_combat} értékek is tükrözik: tribe\_596 védelmi
 győzelmei tickek százain át formálták azt a harci tapasztalatot, amellyel a
 döntő pillanatban nyert.
 
 \textbf{SoloQ 42, ticks 1926-1935 - Dove-erőd.}
-Tribe\_89 alacsony agresszióval (0{,}11) és magas \texttt{raid\_drive}-val (0{,}84)
+Tribe\_89 alacsony agresszióval (0{,}11) és magas \textit{raid\_drive}-val (0{,}84)
 kombinált Vanguard viselkedési profilt mutatott. Tick~1926-ban tribe\_132 támadta meg;
 tribe\_89 védekezőként nyert. Tick~1935-ben tribe\_36 és tribe\_130 egyszerre támadott -
 mindkettő ugyanabban a tickben halt meg, miközben tribe\_89 védekező pozíciójából
 nem mozdult. A három egymást követő védelmi győzelem 9 ticken belül azt illusztrálja,
-hogy a 23.2~szekcióban ismertetett \texttt{isolation} hajtóerő (0{,}68)
+hogy a 23.2~szekcióban ismertetett \textit{isolation} hajtóerő (0{,}68)
 kombinálva a magas raid-képességgel erős defenzív pozíciót teremt: a törzs nem
 szövetkezett, nem menekült, és nem kezdeményezett - de az összes beérkező Hawk-típusú
 támadást visszaverte.

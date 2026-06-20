@@ -85,7 +85,7 @@ Az implementáció a \textit{backend/scoring\_config.js}, a \textit{backend/lib/
 
 A modell öt artifactból épül fel. Minden artifact két alkategóriából áll, amelyek szerepkörönként eltérő súllyal járulnak hozzá az artifact értékéhez.
 
-\subsection{\textit{Combat Impact}}
+\subsection{Combat Impact}
 
 A \textit{Combat Impact} artifact azt méri, hogy a játékos mennyire hatékonyan konvertálta harcait, és mekkora sebzési nyomást volt képes fenntartani.
 
@@ -95,7 +95,7 @@ A második alkategória, a \emph{Damage Pressure}, a percenkénti sebzés és a 
 
 A TOP, JUNGLE és MIDDLE szerepköröknél a Fight Conversion kissé nagyobb súlyt kap; az ADC esetén a Damage Pressure dominál; a support esetén a Fight Conversion kapja a nagyobb súlyt, mert a support harckonverziós hozzájárulása értékelhetőbb, mint a jellemzően alacsony abszolút sebzése.
 
-\subsection{\textit{Risk Discipline}}
+\subsection{Risk Discipline}
 
 A \textit{Risk Discipline} artifact azt méri, hogy a játékos mennyire költségesen halt meg, és milyen túlélési minőséget produkált. Ez az artifact veszi át a korábbi halálokon alapuló mutató szerepét, de jóval kifejezőbben és részletesebben.
 
@@ -105,7 +105,7 @@ A második alkategória, a \emph{Survival Quality}, a meccs során életben töl
 
 Az ADC esetén a Death Cost súlya a legmagasabb, mert az ADC halálai különösen drágák csapaterőhöz képest. A többi szerepkörnél a két alkategória kisebb súlyarány-különbséggel szerepel.
 
-\subsection{\textit{Resource Tempo}}
+\subsection{Resource Tempo}
 
 A \textit{Resource Tempo} artifact a játékos gazdasági hatékonyságát és korai ritmusmegszerzési képességét értékeli.
 
@@ -113,7 +113,7 @@ Az \emph{Economy} alkategória a percenkénti aranytermelést, a CS-teljesítmé
 
 A \emph{Tempo} alkategória lanereket és junglert eltérően értékel. Lanerek esetén a korai CS előnyt, a korai arany/tapasztalat előnyt és az ösvényfázis végén fenntartott előnyt méri. Jungler esetén az első 10 percben megszerzett dzsungelmobokat, a korai rákok és buffok megszerzését veszi alapul.
 
-\subsection{\textit{Map and Objective Control}}
+\subsection{Map and Objective Control}
 
 A \textit{Map and Objective Control} artifact azt méri, hogy a játékos mennyire járult hozzá a térképkontrollhoz és az objektívumok megszerzéséhez.
 
@@ -125,7 +125,7 @@ Ez az artifact tartalmaz egy dinamikus dominancia-újrasúlyozást is: ha az \em
 
 A \textit{Map and Objective Control} artifact kapja a legmagasabb overflow-erősséget, mert az objektív- és struktúranyomás közvetlen nyerési feltétel lehet.
 
-\subsection{\textit{Team Enablement}}
+\subsection{Team Enablement}
 
 A \textit{Team Enablement} artifact a csapattársak számára teremtett értéket méri, mind az aktív cselekvő, mind a védelmező-kiszolgáló szerepben.
 

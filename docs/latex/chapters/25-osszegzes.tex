@@ -38,25 +38,25 @@ mellett. Ez a különbségtétel (mit mér a rendszer és mit nem) az egész pro
 \section{A fő eredmények}
 
 A dolgozat első nagy eredménye a több-adatkészletes adatgyűjtési és feldolgozási architektúra.
-A \texttt{flexset} és a \texttt{soloq} adatkészlet külön kezelése azért fontos, mert a két queue
+A \textit{flexset} és a \textit{soloq} adatkészlet külön kezelése azért fontos, mert a két queue
 nem ugyanazt a jelenséget méri. A Flex Queue alkalmasabb ismétlődő kapcsolati minták vizsgálatára,
 míg a SoloQ inkább kontrollként és egyéni teljesítményprofilként értelmezhető.
 
-A második fontos eredmény az \texttt{opscore} és \texttt{feedscore} metrikák használata.
+A második fontos eredmény az \textit{opscore} és \textit{feedscore} metrikák használata.
 Ezek nem tökéletes igazságmérők, hanem értelmezhető, szerepkörérzékeny pontszámok. Az értékük abban
 van, hogy a játékosok teljesítménye nem egyetlen nyers statisztikára szűkül, hanem több játékbeli
 szempontból válik összehasonlíthatóvá. Ez tette lehetővé, hogy a teljesítménymutatók később
 gráfanalitikai bemenetként is használhatók legyenek.
 
-A harmadik eredmény a játékoskapcsolati gráf és annak elemzése. A \texttt{flexset} adatkészleten
+A harmadik eredmény a játékoskapcsolati gráf és annak elemzése. A \textit{flexset} adatkészleten
 kirajzolódó szerkezet core-periphery jellegű: vannak sűrűbb, erősebben összekapcsolt magrészek,
 és sok lazább, kisebb periférikus csoport. Ez a megfigyelés nem azt jelenti, hogy a gráf teljes
 társas valóságot ír le, hanem azt, hogy az ismétlődő mérkőzéskapcsolatok nem véletlenül szétszórt
 pontokként jelennek meg.
 
-A negyedik eredmény az asszortativitási elemzés. Az \texttt{opscore} esetében pozitív kapcsolat
+A negyedik eredmény az asszortativitási elemzés. Az \textit{opscore} esetében pozitív kapcsolat
 figyelhető meg: a kapcsolt játékosok több esetben hasonlóbb teljesítményprofilt mutatnak, mint amit
-teljesen véletlen kapcsolatoknál várnánk. A \texttt{feedscore} viszont érzékenyebb a gráfmódra,
+teljesen véletlen kapcsolatoknál várnánk. A \textit{feedscore} viszont érzékenyebb a gráfmódra,
 ami jól mutatja, hogy az elemzésben a projekciós döntések nem technikai apróságok, hanem az
 eredmény értelmezését is alakítják.
 

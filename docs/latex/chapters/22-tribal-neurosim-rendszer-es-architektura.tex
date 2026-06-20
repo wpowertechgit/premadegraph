@@ -171,7 +171,7 @@ dinamikákat produkálnak ugyanabban az ABM keretben, ugyanazok alatt a szabály
 \section{Eseményvezérelt megfigyelhetőség}
 \label{sec:neurosim-24-observability}
 
-\subsection*{Miért nem elegendő a végső térképállapot}
+\subsection*{A végső térképállapot önmagában nem elegendő}
 
 Egy szimuláció tudományos értéke nem merül ki a végső állapot rögzítésében.
 Annak megállapítása, hogy melyik törzs nyert, önmagában nem magyarázza a nyerés okát.
@@ -203,27 +203,27 @@ A \textbf{globális eseménybusz} append-only gyűrűs pufferként működik: mi
 háborúdeklaráció, szövetségkötés, generációváltás és intervenciós esemény bekerül
 egy időrendezett naplóba. A bejegyzések strukturált rekordok: tartalmazzák az esemény típusát,
 a tick és generáció számát, az érintett törzs azonosítóját, és ahol releváns, az ellenfél
-vagy az érintett tile azonosítóját is. A bejegyzések a \texttt{GET /api/events/recent}
+vagy az érintett tile azonosítóját is. A bejegyzések a \textit{GET /api/events/recent}
 REST endpointon keresztül lekérdezhetők, alapértelmezésként az utolsó 50 bejegyzéssel.
 
 A \textbf{törzsenként napló} minden élő és kihalt törzshöz önálló eseményszálat tart fenn.
-A törzs halála nem törli a naplóját: a \texttt{GET /api/tribes/\{id\}/events}
+A törzs halála nem törli a naplóját: a \textit{GET /api/tribes/\{id\}/events}
 endpoint kihalt törzsek esetén is kiszolgál. Ez az utólagos értelmezhetőség
 architektúrájának alappillére: a teljes futtatás után visszakereshető, miért halt ki
 az adott törzs, milyen háborúkban vett részt, és melyik genomot vitte magával utolsó generációjáig.
 
 \subsection*{Tombstone rekordok: kihalt törzsek auditálható állapota}
 
-A TaskR2 implementáció bevezette a \texttt{TombstoneLedger} modult.
-Minden törzs halálakor egy \texttt{TombstoneRecord} kerül rögzítésre, amely tartalmazza:
+A TaskR2 implementáció bevezette a \textit{TombstoneLedger} modult.
+Minden törzs halálakor egy \textit{TombstoneRecord} kerül rögzítésre, amely tartalmazza:
 a törzs és klaszter azonosítóját, a halál tick-jét és generációját, a populációt és
 területet a halál pillanatában, a halál okát (\textit{cause}), a leszármazási összefoglalót,
 valamint az öt artifakt-pontszám pillanatfelvételét (\textit{final\_artifacts}).
 A rekord mérete ~100 bájt - a kihalt törzs teljes aktív állapotát felváltja
 ez a kompakt auditbejegyzés.
 
-A \texttt{cleanup\_tribe()} metódus atomikusan hajtja végre a törzs felszámolását:
-tombstone rögzítése, majd az összes aktív háború lezárása \texttt{WarCancelled}
+A \textit{cleanup\_tribe()} metódus atomikusan hajtja végre a törzs felszámolását:
+tombstone rögzítése, majd az összes aktív háború lezárása \textit{WarCancelled}
 státusszal, végül a területi igények visszavonása. Ez az atomikus végrehajtás
 szünteti meg a ghost war jelenséget: a halott törzs háborúi azonnal eltűnnek
 az aktív háborúk listájából.
@@ -238,30 +238,30 @@ vissza, nem aktív szimulációs objektumként.}
 
 \subsection*{Háborús eseménystruktúra}
 
-A TaskL implementáció bevezette a \texttt{WarState} adatstruktúrát, amely egy háborút
+A TaskL implementáció bevezette a \textit{WarState} adatstruktúrát, amely egy háborút
 teljes életciklusán át nyomon követ. Minden háborús rekord rögzíti a háborút indító
 és fogadó törzs azonosítóját, az indulás tick-jét, az aktuális státuszt
-(\texttt{Active}, \texttt{Peace}, \texttt{AttackerWon}, \texttt{DefenderWon}),
+(\textit{Active}, \textit{Peace}, \textit{AttackerWon}, \textit{DefenderWon}),
 a felek veszteségeit harci köröként frissítve, valamint az aktuális csatahelyszín tile-azonosítóját.
-A \texttt{GET /api/wars/active} endpoint az összes aktív háborút visszaadja
+A \textit{GET /api/wars/active} endpoint az összes aktív háborút visszaadja
 a eltelt tick-szám és kumulált veszteségekkel együtt. A háborúdeklaráció és a kimenetel
-(\texttt{WarDeclared}, \texttt{WarResolved}) mind a globális eseménybuszba, mind az
+(\textit{WarDeclared}, \textit{WarResolved}) mind a globális eseménybuszba, mind az
 érintett törzsek saját naplójába bekerül.
 
 \subsection*{JSONL napló a fejnélküli CLI futtatásokhoz}
 
-A headless (\texttt{--cli-run}) futtatási módban a szimuláció JSONL formátumú naplót ír
+A headless (\textit{--cli-run}) futtatási módban a szimuláció JSONL formátumú naplót ír
 a standard kimenetre. Három típusú bejegyzés váltakozik:
-(1)~\texttt{checkpoint} rekordok konfigurálható tick-intervallumonként - tartalmazzák
+(1)~\textit{checkpoint} rekordok konfigurálható tick-intervallumonként - tartalmazzák
 az élő törzsek számát, az aktív háborúkat, a polity-eloszlást és az aggregált
 fitnesz-statisztikákat;
 (2)~háborús esemény rekordok minden deklarációra és kimenetelre;
-(3)~egyetlen \texttt{final\_summary} bejegyzés a futtatás végén - rögzíti a győztest,
+(3)~egyetlen \textit{final\_summary} bejegyzés a futtatás végén - rögzíti a győztest,
 annak genomprofilját, viselkedési archetípusát, a teljes háborús mérleget, és
 az összes kihalt törzs tombstone-összesítőjét.
 
 Ez a napló teszi lehetővé a batch futtatások determinizmus-igazolását: öt párhuzamos
-fejnélküli futtatás azonos seed-del azonos \texttt{final\_summary} győztes rekordot kell
+fejnélküli futtatás azonos seed-del azonos \textit{final\_summary} győztes rekordot kell
 produkáljon, és ez az egyezés mérhetően ellenőrizhető.
 
 A végjáték értelmezéséhez a térképkép helyett a napló a döntő forrás. A seed=42
@@ -297,8 +297,8 @@ kiterjesztése a szimulációs tartományra.
 A \textbf{C\# MonoGame kliens} kizárólag vizualizáció és operátori felület:
 kamera, térkép-renderelés, törzsinspekciós panel, HUD, artifact-sávok, háborús jelzők.
 A kliens nem igazságforrás - a Rust által szolgáltatott keretadatot jeleníti meg,
-és lokális demó-harnesszel rendelkezik vizuális teszteléshez (\texttt{--empire-stress},
-\texttt{--dispute-stress}), de ez nem a valódi termék futtatási útja.
+és lokális demó-harnesszel rendelkezik vizuális teszteléshez (\textit{--empire-stress},
+\textit{--dispute-stress}), de ez nem a valódi termék futtatási útja.
 
 A \textbf{Node réteg} vékony közvetítő: összekötőhíd a MonoGame és a Rust szerver
 között, dataset-export, indítási konfiguráció és batch-orchestráció kezelője.
@@ -324,7 +324,7 @@ A Rust szerver és a MonoGame kliens bináris WebSocket kereteken kommunikál.
 A protokollt a TaskR7 Rust-oldali implementációja definiálta, a TaskM1 C\# dekóder
 implementálta.
 
-Minden keret egy 40 bájtos \texttt{TNS3} envelope-pal kezdődik (little-endian):
+Minden keret egy 40 bájtos \textit{TNS3} envelope-pal kezdődik (little-endian):
 
 \begin{table}[h]
 \centering
@@ -334,14 +334,14 @@ Minden keret egy 40 bájtos \texttt{TNS3} envelope-pal kezdődik (little-endian)
 \hline
 \textbf{Offset} & \textbf{Méret} & \textbf{Mező} \\
 \hline
-0  & 4 B & Magic: \texttt{"TNS3"} \\
-4  & 2 B & Version: \texttt{1} \\
-6  & 2 B & HeaderBytes: \texttt{40} \\
-8  & 2 B & PayloadKind: \texttt{2} (\texttt{FrameV1}) \\
+0  & 4 B & Magic: \textit{"TNS3"} \\
+4  & 2 B & Version: \textit{1} \\
+6  & 2 B & HeaderBytes: \textit{40} \\
+8  & 2 B & PayloadKind: \textit{2} (\textit{FrameV1}) \\
 10 & 2 B & Flags \\
 12 & 4 B & PayloadBytes \\
-16 & 8 B & Tick (\texttt{u64}) \\
-24 & 4 B & Generation (\texttt{u32}) \\
+16 & 8 B & Tick (\textit{u64}) \\
+24 & 4 B & Generation (\textit{u32}) \\
 28 & 4 B & RecordCount (élő törzsek száma) \\
 32+ & változó & V1 payload \\
 \hline
@@ -349,9 +349,9 @@ Minden keret egy 40 bájtos \texttt{TNS3} envelope-pal kezdődik (little-endian)
 \end{table}
 
 A payload section-alapú és önleíró: per-törzs rekordok (50 bájt/törzs)
-után opcionálisan tile-rekordok (\texttt{FLAG\_TILE\_DATA = 0x01}, 9 bájt/tile),
-háborús rekordok (\texttt{FLAG\_WAR\_DATA = 0x02}, 21 bájt/háború),
-és esemény-deltók (\texttt{FLAG\_EVENT\_DATA = 0x04}) következnek.
+után opcionálisan tile-rekordok (\textit{FLAG\_TILE\_DATA = 0x01}, 9 bájt/tile),
+háborús rekordok (\textit{FLAG\_WAR\_DATA = 0x02}, 21 bájt/háború),
+és esemény-deltók (\textit{FLAG\_EVENT\_DATA = 0x04}) következnek.
 A tile-rekordok csak elfoglalt vagy vitatott tile-okra szűkülnek,
 így a hasznos terhelés arányos az aktuális aktivitással, nem a teljes térképmérettel.
 
@@ -364,7 +364,7 @@ Miért hatékony ez a megközelítés? Három okból. Először: a JSON sorosít
 Egy 599-törzsös világ JSON-alapú frissítése tick-enként ~150--200~kB felesleges szöveges
 overhead-et generálna; a bináris FrameV1 ugyanezt 50~bájt/törzs + 9~bájt/aktív tile
 formátumban kezeli. Másodszor: szekció-szelektivitás. A tile-rekordok csak elfoglalt
-vagy vitatott tile-okra szűkülnek (\texttt{FLAG\_TILE\_DATA = 0x01}), így a payload
+vagy vitatott tile-okra szűkülnek (\textit{FLAG\_TILE\_DATA = 0x01}), így a payload
 arányos az aktivitással, nem a teljes térképmérettel. Harmadszor: szimulációs és
 UI-ciklus szétválasztása. A Rust szerver 40~ms alatt lekezel egy teljes 599-törzsös
 tick-et; a MonoGame kliens aszinkron dekódol és renderel, anélkül hogy blokkolná a
@@ -393,16 +393,16 @@ for other in &self.tribes {
 
 599 törzsnél ez O($n^2 \times \text{tiles}$) keresést jelentett minden 20-tickes kötegben.
 A megoldás két gyorsítótár bevezetése volt:
-\texttt{tile\_tribe\_idx} (\texttt{Vec<u32>}: tile~→~tulajdonos törzs indexe, O(1) lookup)
-és \texttt{tribe\_id\_to\_idx} (\texttt{HashMap<u32, usize>}: törzs id~→~tömb-index, O(1)).
+\textit{tile\_tribe\_idx} (\textit{Vec<u32>}: tile~→~tulajdonos törzs indexe, O(1) lookup)
+és \textit{tribe\_id\_to\_idx} (\textit{HashMap<u32, usize>}: törzs id~→~tömb-index, O(1)).
 A gyorsítótár tick elején újraépül: ~36\,100 + 599 ≈ 36\,700 egyszerű értékadás,
 amelyek után a szomszéddetektálás O($\text{my\_tiles} \times 4$) keresi a szomszédos
 tulajdonost.
 
 A vitás tile-ok nyilvántartójában O($n$) lineáris keresést szintén az O(1)
-\texttt{tribe\_id\_to\_idx} cache váltotta ki.
-A hot-path naplózást - 599 törzsnél tickenként százas nagyságrendű \texttt{println!}
-hívás - a \texttt{headless} flag gátolja le; I/O csak checkpoint- és eseménybejegyzéseknél
+\textit{tribe\_id\_to\_idx} cache váltotta ki.
+A hot-path naplózást - 599 törzsnél tickenként százas nagyságrendű \textit{println!}
+hívás - a \textit{headless} flag gátolja le; I/O csak checkpoint- és eseménybejegyzéseknél
 keletkezik.
 
 \subsection*{Determinizmus-hiba és javítása}
@@ -414,13 +414,13 @@ egy látens hiba miatt nem teljesült.
 \textbf{A hiba:} azonos seed egymást követő MonoGame futtatások között különböző
 győztest produkált.
 
-\textbf{Gyökérok:} a \texttt{set\_clusters()} metódus rendezés nélkül fogadta
-a klaszterlistát. A mögöttes SQLite-lekérdezés \texttt{ORDER BY} záradék hiányában
+\textbf{Gyökérok:} a \textit{set\_clusters()} metódus rendezés nélkül fogadta
+a klaszterlistát. A mögöttes SQLite-lekérdezés \textit{ORDER BY} záradék hiányában
 tetszőleges sorrendben adta vissza a sorokat, így a törzsek hex-rácsra való
 elhelyezési sorrendje futtatásról futtatásra változott.
 A szimuláció tick=0-ban divergált - egyetlen neurális döntés megszületése előtt.
 
-\textbf{Javítás:} egyetlen sor a \texttt{set\_clusters()} metódusban,
+\textbf{Javítás:} egyetlen sor a \textit{set\_clusters()} metódusban,
 a szimuláció inicializálása előtt:
 
 \begin{lstlisting}[language={},caption={Determinizmus-javítás: klaszterek rendezése azonosító szerint}]
@@ -440,19 +440,19 @@ körülmények között megismételhető.
 
 \subsection*{Fejnélküli CLI mód}
 
-A rendszer \texttt{--cli-run} flag-gel fejnélküli módban futtatható:
+A rendszer \textit{--cli-run} flag-gel fejnélküli módban futtatható:
 nincs HTTP szerver, nincs WebSocket stream, a szimuláció szinkron fut
 a végkimenetelig. Ez a mód a batch-validáció és az automatizált reprodukálhatóság-ellenőrzés
 elsődleges eszköze.
 
-Kimenet: \texttt{logs/neurosim-\{seed\}-\{dataset\}-\{nonce\}.jsonl}.
+Kimenet: \textit{logs/neurosim-\{seed\}-\{dataset\}-\{nonce\}.jsonl}.
 Három bejegyzéstípus váltakozik: checkpoint rekordok konfigurált tick-intervallumonként,
 háborús eseménybejegyzések minden deklarációra és kimenetelre,
-és egyetlen \texttt{final\_summary} sor a futtatás végén.
-A \texttt{final\_summary} tartalmazza a győztes azonosítóját, genomprofilját,
+és egyetlen \textit{final\_summary} sor a futtatás végén.
+A \textit{final\_summary} tartalmazza a győztes azonosítóját, genomprofilját,
 viselkedési archetípusát, a teljes háborús mérleget és a tombstone-összesítőt.
 
-Öt párhuzamos fejnélküli futtatás azonos seeddel azonos \texttt{final\_summary}
+Öt párhuzamos fejnélküli futtatás azonos seeddel azonos \textit{final\_summary}
 győztes rekordot kell produkáljon. Ez az egyezés mérhető és automatikusan ellenőrizhető,
 és erősebb bizonyíték, mint egy önmagában álló végjáték-screenshot.
 
@@ -467,9 +467,9 @@ A CLI futtatások teljes argumentumkészlete:
 --clusters <u32>     Szintetikus klaszterek szama (--use-dataset-export nelkul)
 \end{lstlisting}
 
-A \texttt{--require-dataset-export} flag biztosítja, hogy a batch validáció
+A \textit{--require-dataset-export} flag biztosítja, hogy a batch validáció
 soha ne fusson szintetikus adattal ha az a szándék valódi klaszterprofilok használata.
-A \texttt{--checkpoint-interval 500} érték 599 törzsnél körülbelül 5--7 bejegyzést
+A \textit{--checkpoint-interval 500} érték 599 törzsnél körülbelül 5--7 bejegyzést
 ír minden checkpoint-alkalomnál, ami az I/O overhead és az elemezhetőség optimális
 kompromisszuma volt a hosszú futtatásoknál.
 
@@ -489,9 +489,9 @@ a lényeges, mert ezek adják a reprodukálható JSONL naplókat.
 \textbf{Lépés} & \textbf{Feladat} & \textbf{Kimenet} \\
 \hline
 1 & PremadeGraph backend indítása & klaszterexport API \\
-2 & Rust backend release fordítása & \texttt{neurosim-backend.exe} \\
+2 & Rust backend release fordítása & \textit{neurosim-backend.exe} \\
 3 & Fejnélküli CLI futtatás & JSONL eseménynapló \\
-4 & Batch ellenőrzés & ismételhető \texttt{final\_summary} \\
+4 & Batch ellenőrzés & ismételhető \textit{final\_summary} \\
 5 & MonoGame kliens & élő FrameV1 vizualizáció \\
 6 & Docker stack & konténeres demonstráció \\
 \hline
@@ -499,8 +499,8 @@ a lényeges, mert ezek adják a reprodukálható JSONL naplókat.
 \end{table}
 
 A klaszterprofilokat a PremadeGraph backend szolgáltatja a
-\texttt{/api/neurosim/clusters} endpointon keresztül. A Rust bináris a
-\texttt{PREMADEGRAPH\_URL} és \texttt{PREMADEGRAPH\_DATASET\_ID} környezeti
+\textit{/api/neurosim/clusters} endpointon keresztül. A Rust bináris a
+\textit{PREMADEGRAPH\_URL} és \textit{PREMADEGRAPH\_DATASET\_ID} környezeti
 változókból olvassa ki, hogy flexset vagy soloq adatkészletből inicializáljon.
 
 \begin{lstlisting}[language={},basicstyle=\ttfamily\scriptsize,breaklines=true,caption={Egy helyre gyűjtött fejlesztői futtatási parancsok}]
@@ -527,10 +527,10 @@ minden checkpoint, háborús esemény, tombstone rekord és végső összegzés
 géppel visszaolvasható.
 
 A Docker Compose konfiguráció ugyanazt a szerződést tartja meg konténeres környezetben:
-a \texttt{neurosim} service csak akkor indul, ha a PremadeGraph backend healthcheck-je
+a \textit{neurosim} service csak akkor indul, ha a PremadeGraph backend healthcheck-je
 sikeres, és a klaszterexport endpoint elérhető.
-A seed a \texttt{NEUROSIM\_WORLD\_SEED} változóval vezérelhető;
-az adatkészlet a \texttt{PREMADEGRAPH\_URL} által mutatott backend aktív datasetje lesz,
-hacsak a \texttt{PREMADEGRAPH\_DATASET\_ID} expliciten meg nem adott.
+A seed a \textit{NEUROSIM\_WORLD\_SEED} változóval vezérelhető;
+az adatkészlet a \textit{PREMADEGRAPH\_URL} által mutatott backend aktív datasetje lesz,
+hacsak a \textit{PREMADEGRAPH\_DATASET\_ID} expliciten meg nem adott.
 
 \bigskip

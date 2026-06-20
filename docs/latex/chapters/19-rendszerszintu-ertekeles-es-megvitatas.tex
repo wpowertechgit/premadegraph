@@ -1,87 +1,27 @@
 \chapter{Rendszerszintű értékelés és megvitatás}
 
-\section{Mi bizonyult a legerősebb rendszertervezési döntésnek?}
+\section{A legfontosabb rendszertervezési döntések}
 
-Az egész projektet visszanézve a legerősebb döntésnek az tekinthető, hogy a különböző feladatok nem kerültek egyetlen univerzális technológiába kényszerítve. A rendszer nem eszközpreferencia, hanem minőségi attribútumok mentén fejlődött. A fontos attribútumok a következők voltak:
+Az egész projektet visszanézve a legerősebb döntésnek az tekinthető, hogy a különböző feladatok nem kerültek egyetlen univerzális technológiába kényszerítve. A rendszer nem eszközpreferencia, hanem minőségi attribútumok mentén fejlődött: reprodukálhatóság, magyarázhatóság, perzisztencia, futási teljesítmény és demo-koherencia. Ezeket ritkán lehet mindent ugyanazzal az eszközzel a legjobban kiszolgálni.
 
-\begin{itemize}
-    \item reprodukálhatóság,
-    \item magyarázhatóság,
-    \item perzisztencia,
-    \item futási teljesítmény,
-    \item demo- és védhetőségi koherencia.
-\end{itemize}
-
-Ezek közül ritkán lehet mindent ugyanazzal az eszközzel a legjobban kiszolgálni. A Python gyors iterációt és kényelmes adatfeldolgozást ad, a Rust teljesítményt és pontos gráfkontrollt, a Node/Express stabil integrációs felületet, a React pedig erős bemutathatóságot. A többnyelvűség tehát itt nem öncélú komplexitás, hanem funkcionális specializáció.
+A Python gyors iterációt és kényelmes adatfeldolgozást ad, a Rust teljesítményt és pontos gráfkontrollt, a Node/Express stabil integrációs felületet, a React pedig erős bemutathatóságot. A többnyelvűség tehát nem öncélú komplexitás, hanem funkcionális specializáció.
 
 \section{A rendszer erősségei}
 
-A jelenlegi állapot alapján a projekt legfontosabb erősségei:
+A projekt legfontosabb erőssége, hogy a teljes adatút végigkövethető a Riot API-tól a frontendig: nincsenek kézzel összeollózott közbenső lépések. A játékosprofilok explicit, ellenőrizhető képleteken és mezőkön alapulnak; a gráfépítés és klaszterezés nem csak vizuális export, hanem perzisztens objektum, amelynek bejárása és újraelőállítása determinisztikus. A Rust réteg valódi analitikai és futtatási értéket ad, nem csupán egy korábbi Python-szkript gyorsabb átírása. Az asszortativitás, a core-periphery gráfolvasat és a Brandes-centralitás valódi kutatási kérdésekké emelik a rendszert, amelyeket az implementáció közvetlenül tud megválaszolni.
 
-\begin{itemize}
-    \item a teljes adatút végigkövethető a Riot API-tól a frontendig;
-    \item a játékosprofilok explicit, ellenőrizhető képleteken és mezőkön alapulnak;
-    \item a gráfépítés és klaszterezés nem csak vizuális export, hanem perzisztens objektum;
-    \item a Rust réteg valódi analitikai és futtatási értéket ad, nem csak ``gyorsabb átírás'';
-    \item az asszortativitás, a core-periphery gráfolvasat és a Brandes-központiság valódi kutatási kérdésekké emelik a rendszert.
-\end{itemize}
+\section{Érvényességi fenyegetések}
 
-\section{Fenyegetések a validitásra}
+A projekt legfontosabb validitási kockázata, hogy a dataset nem reprezentálja a teljes játékospopulációt: a gyűjtés seed- és queue-függő, ezért a mintavétel nem véletlen. Az \textit{opscore} és \textit{feedscore} értelmezhető, de nem objektív igazságmérő: különösen az \textit{opscore} tartalmaz kézi szerepkör-súlyozást. A retired signed-balance ág nem kap fő empirikus szerepet, mert az enemy-él negatív társas kötésként való értelmezése nem elég erős. Az ország-elemzési ág sokkal bizonytalanabb, mint a közvetlen gráf- és meccsanalitika, és ezért nem képezi a főeredmények részét.
 
-A jelen projekt legfontosabb validitási kockázatai:
+Rétegenként szétbontva: a \textbf{mintavételi validitás} szempontjából a seedválasztás, a premade-probe és a queue-orientáció együtt nem véletlen mintát adnak a teljes játékospopulációból. A \textbf{mérési validitás} szempontjából az \textit{opscore} és \textit{feedscore} értelmezhetők, de konstrukciós döntésekre épülnek. A \textbf{projekciós validitás} szempontjából a gráfmód, az élküszöb és az ally/enemy kapcsolatértelmezés érdemben alakítja a végső analitikai mintát: a signed-balance emiatt csak módszertani határesetként kezelhető. A \textbf{klasztervaliditás} szempontjából a közösségdetektálás eredménye függ a választott gráftól, a küszöböléstől és a modularitás felbontási korlátjától \cite{fortunato_barthelemy2007}. A \textbf{temporális validitás} szempontjából a korpusz fokozatosan épülő archívum, ezért a teljes háló nem egyetlen szinkron időpillanat felvétele.
 
-\begin{itemize}
-    \item a dataset nem reprezentálja a teljes játékospopulációt;
-    \item a gyűjtés seed- és queue-függő;
-    \item a \texttt{feedscore} és \texttt{opscore} interpretálható, de nem ``igazságmérő'';
-    \item a signed-balance eredménye nem kap fő empirikus szerepet, mert az enemy-él negatív társas kötésként való értelmezése nem elég erős;
-    \item a country-ág sokkal bizonytalanabb, mint a közvetlen gráf- és meccsanalitika.
-\end{itemize}
-
-Ezek a korlátok azonban nem rombolják le a dolgozatot. Inkább kijelölik azt a határt, amelyen belül az állítások védhetők. Ezért is volt fontos, hogy a megvalósult és a jövőbeli elemek szigorúan külön legyenek kezelve.
-
-Érdemes a validitási kockázatokat rétegenként is szétbontani:
-
-\begin{itemize}
-    \item \textbf{Mintavételi validitás}: a seedválasztás, a premade-probe és a queue-orientáció együtt nem véletlen mintát adnak a teljes játékospopulációból.
-    \item \textbf{Mérési validitás}: a \texttt{feedscore} és \texttt{opscore} értelmezhető, de konstrukciós döntésekre épülő metrikák; különösen az \texttt{opscore} tartalmaz kézi szerepkör-súlyozást.
-    \item \textbf{Projekciós validitás}: a gráfmód, az élküszöb és az ally/enemy kapcsolatértelmezés érdemben alakítja a végső analitikai mintát; a signed-balance emiatt csak módszertani határesetként használható.
-    \item \textbf{Klasztervaliditás}: a közösségdetektálás eredménye függ a választott gráftól, a küszöböléstől és a modularitás felbontási korlátjától \cite{fortunato_barthelemy2007}.
-    \item \textbf{Időbeli validitás}: a korpusz fokozatosan épülő archívum, ezért a teljes háló nem egyetlen szinkron időpillanat felvétele.
-\end{itemize}
-
-Ezek a fenyegetések azonban nem cáfolják a projektet. Inkább megmutatják, hogy meddig lehet erős állításokat tenni, és hol kell tudatosan visszafogni az interpretációt. A dolgozat védhetőségét végső soron éppen ez a rétegzett őszinteség erősíti.
-
-\section{A projekt összetevői}
-
-A projekt több informatikai területet fog össze:
-
-\begin{itemize}
-    \item adatgyűjtés és API-használat,
-    \item adatbázistervezés,
-    \item hálózatkutatás,
-    \item algoritmusok és teljesítmény,
-    \item frontend és vizuális kommunikáció.
-\end{itemize}
-
-Ehhez hozzáadódik a reprodukálhatósági érték is. A rendszer fő eredményei nem kézzel összeollózott prezentációs pillanatképekből állnak, hanem olyan pipeline-okból, amelyek a nyers meccs-JSON-tól a normalizált játékosprofilon és a perzisztált klasztereken át a Rust-analitikáig követhetők. A bemutatott állításokhoz végrehajtható technikai út is tartozik.
+Ezek a fenyegetések nem rombolják le a dolgozatot. Inkább kijelölik azt a határt, amelyen belül az állítások védhetők, és a bírálat szempontjából sokkal erősebb pozíciót ad egy rétegzetten dokumentált korlát, mint egy rejtett módszertani gyengeség.
 
 \section{A megvalósult és a jövőbeli elemek szétválasztása}
 
-A dolgozat egyik tudatos módszertani döntése az volt, hogy a jelenleg implementált és a még csak tervezett elemeket nem keverem össze. A jelenlegi, ténylegesen megvalósult mag a következő:
+A dolgozat egyik tudatos módszertani döntése az volt, hogy a jelenleg implementált és a még csak tervezett elemeket nem keveri össze. A ténylegesen megvalósult mag a Riot API-ra épülő adatgyűjtésből, \textit{puuid}-alapú normalizálásból, \textit{feedscore}/\textit{opscore} számításból, legacy Python exportból és populációs közösségdetektálásból, SQLite klaszterperzisztenciából, Rust Graph V2 gráfépítésből, útvonalkeresésből, asszortativitásból, Brandes-centralitásból és 3D globális exportból áll. Ehhez adódik a databaseproject és C\# böngésző alprojekt, amely formálisan nem a főrendszer része, de valódi, futtatható eszközként él a repositoryban.
 
-\begin{itemize}
-    \item Riot API-ra épülő adatgyűjtés;
-    \item \texttt{puuid}-alapú normalizálás;
-    \item \texttt{feedscore}/\texttt{opscore} számítás;
-    \item legacy Python export és populációs közösségdetektálás;
-    \item SQLite klaszterperzisztencia;
-    \item Rust Graph V2 gráfépítés, útvonalkeresés, asszortativitás, központiság és 3D globális export;
-    \item asszortativitás és betweenness-központiság.
-\end{itemize}
-
-A jelenleg megvalósult mag tartalmazza a databaseproject és C\# böngésző alprojektet is, amely formálisan nem a főrendszer része, de valódi, futtatható eszközként él a repositoryban.
-
-Visszavont irányok (a korábbi tervdokumentumokban szerepeltek, jelenleg nem aktívak): temporal consistency/stabilitás és community cohesion vs. performance vizsgálat eltávolítva a jelenlegi scope-ból. A Brandes-központiság ezzel szemben már implementált modul, amelynek további feladata nem az alapalgoritmus megírása, hanem a benchmarkolás és a Graph V2 artifact-rétegbe illesztés.
+A temporal consistency és community cohesion vs. performance vizsgálatok eltávolítva a jelenlegi scope-ból. A Brandes-centralitás ezzel szemben már implementált modul, amelynek további feladata nem az alapalgoritmus megírása, hanem a benchmarkolás és a Graph V2 artifact-rétegbe illesztés.
 
 Ez a szétválasztás nem gyengíti, hanem erősíti a dolgozatot. A bírálat szempontjából sokkal védhetőbb egy olyan szöveg, amely pontosan kijelöli a rendszer jelenlegi határát, mint egy olyan, amely minden jó ötletet kész eredménynek próbál feltüntetni.
