@@ -1,0 +1,94 @@
+\chapter{Az opscore teljesítménymetrika}
+
+\noindent A gráfanalitikai elemzés alapanyagát egy értelmes, szerepkörérzékeny teljesítménypontszám jelenti. A League of Legends meccsek nyers adatai (ölések, halálok, arany, sebzés) önmagukban nem hordoznak elegendő szemantikát: egy support 2 halála nem ugyanolyan értelmű, mint egy ADC 2 halála. Az adatgyűjtési és PUUID-normalizálási mechanizmusok a kibővített verzió 4. fejezetében kerülnek részletezésre; itt az opscore metrika belső modelljét és formuláit tárgyaljuk.
+
+\section{A korábbi modell módszertani korlátai}
+
+A modell fejlesztése fokozatos módszertani finomítás eredménye volt. A kiindulópontot egy nyolc-artifactos rendszer adta, amely szerepkör-szorzókat alkalmazott, majd a kapott nyers összegeket az adatbázis percentilis-eloszlásához viszonyítva normalizálta a $[0,10]$ tartományra.
+
+Két alapvető gyengeség hamar felszínre került. Az adatbázis-relatív normalizálás problémája: ha az adatbázis túlnyomórészt nagyon erős játékosokat tartalmaz, a medián játékos is a skála közepe körüli értéket kap. A halálokon alapuló közelítés korlátai: a korábbi rendszer nem tudott különbséget tenni tank, support és feeder szerepe között.
+
+\section{A helyi, szerepkörérzékeny opscore modell}
+
+A jelenlegi \textit{opscore} modell a következő tervezési elvek mentén dolgozik: lokális, adatbázis-független értékelés; öt artifact, tíz alkategória; logaritmikus bővítés elité teljesítményeknél; rövid meccsek megbízhatósági kezelése.
+
+\section{Az öt artifact és alkategóriáik}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{opscore-artifacts.pdf}
+\caption{Az opscore artifact-szerkezete: öt fő dimenzió, tíz alkategória, szerepkörérzékeny súlyok}
+\end{figure}
+
+A modell öt artifactból épül fel. A \textbf{Combat Impact} a harckonverziót és sebzési nyomást méri. A \textbf{Risk Discipline} a halálok ``árát'' és túlélési minőséget értékeli. A \textbf{Resource Tempo} a gazdasági hatékonyságot és korai ritmust méri. A \textbf{Map and Objective Control} a térképkontrollt és objektívumszerzést értékeli. A \textbf{Team Enablement} a csapattársak számára teremtett értéket méri.
+
+\section{Matematikai formalizmus}
+
+\subsection{A szerepköri arány és az alapgörbe}
+
+Minden alkategória értékelésének kiindulópontja a megfigyelt érték és a szerepköri elvárás hányadosa:
+\begin{equation}
+r = \frac{x}{E_{\text{role}}}
+\end{equation}
+
+Az alapgörbe egy kétparaméteres, S-alakú válaszfüggvény:
+\begin{equation}
+m = \left(\frac{1-t}{t}\right)^{1/h}
+\end{equation}
+\begin{equation}
+B(r) = \frac{r^h}{r^h + m^h}
+\end{equation}
+ahol $t = 0{,}70$ és $h = 2$. A görbe konstruálása pontosan azt biztosítja, hogy $B(1) = t$.
+
+Pozitív mutatóknál:
+\begin{equation}
+S_+(r) = \min\!\left(c,\; B(r) + \lambda \cdot \ln\!\left(\max(1,\, r)\right)\right)
+\end{equation}
+ahol $\lambda = 0{,}50$ és $c = 2{,}20$. Negatív mutatóknál: $S_-(r) = S_+\!\left(\frac{1}{r}\right)$.
+
+\subsection{Időtartam-megbízhatóság}
+
+\begin{equation}
+R_D = \operatorname{clamp}_{[0,1]}\!\left(\frac{D - 12}{8}\right)
+\end{equation}
+ahol $D$ a meccs hossza percben. Az ingadozásra érzékeny percenkénti mutatóknál:
+\begin{equation}
+\tilde{S} = R_D \cdot S + (1 - R_D) \cdot 0{,}70
+\end{equation}
+
+\subsection{Artifact-aggregáció és bővítés}
+
+\begin{equation}
+A_i^{\text{alap}} = 2\,(w_1 \cdot S_1 + w_2 \cdot S_2)
+\end{equation}
+\begin{equation}
+\gamma = 0{,}5 + 0{,}5 \cdot R_D
+\end{equation}
+\begin{equation}
+A_i = \min\!\left(4{,}5,\; A_i^{\text{alap}} + \alpha_i \cdot \gamma \cdot \max\!\left(0,\; A_i^{\text{alap}} - 2\right)\right)
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption{Artifact-specifikus bővítési paraméterek ($\alpha_i$)}
+\label{tab:overflow_params}
+\begin{tabular}{lr}
+\toprule
+\textbf{Artifact} & $\boldsymbol{\alpha_i}$ \\
+\midrule
+\textit{Combat Impact}             & $0{,}25$ \\
+\textit{Risk Discipline}           & $0{,}25$ \\
+\textit{Resource Tempo}            & $0{,}25$ \\
+\textit{Map and Objective Control} & $0{,}35$ \\
+\textit{Team Enablement}           & $0{,}20$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{A végső opscore}
+
+\begin{equation}
+\text{opscore} = \min\!\left(10,\; \sum_{i=1}^{5} A_i\right)
+\end{equation}
+
+A szélső esetek és az elité carry meccsek kezelésének részletei, valamint a minta nagysági korlátok a kibővített verzió 7. fejezetében találhatók.

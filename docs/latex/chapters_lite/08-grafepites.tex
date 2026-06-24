@@ -1,0 +1,26 @@
+\chapter{Gráfépítés, klaszterezés és perzisztencia}
+
+\section{A jelenlegi gráfépítés szereposztása}
+
+A jelenlegi architektúrában az elsődleges, kutatható gráfállapotot a Rust réteg állítja elő. A Python oldal megőrzi az adatgyűjtés, gyors prototipizálás és kompatibilitási gráfgenerálás szerepét. A \textit{flexset} és \textit{soloq} összehasonlítás, az asszortativitás és a Graph V2 vizualizáció Rust-központú gráfmodellre támaszkodik.
+
+\section{Kapcsolataggregáció a Rust gráfmodellben}
+
+A Rust gráfmodell minden játékospárra külön őrzi a szövetségesi és ellenfél-oldali bizonyítékot:
+
+\begin{equation}
+w_{ally}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \in \{1,2\}: u \in T_{m,i} \land v \in T_{m,i}]
+\end{equation}
+\begin{equation}
+w_{enemy}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \neq j: u \in T_{m,i} \land v \in T_{m,j}]
+\end{equation}
+
+A domináns reláció \textit{ally}, ha \textit{allyWeight} $\geq$ \textit{enemyWeight}, különben \textit{enemy}. A Graph V2 eredményei elsősorban asszociatív játékosgráfként, nem szó szerinti barátsági vagy ellenségességi hálóként értelmezendők.
+
+\section{Szűrés, Graph V2 és bounded ally csoportok}
+
+A Graph V2 láthatósági küszöbe \textit{totalMatches} $\geq 2$: egyetlen közös mérkőzés még nem elég ahhoz, hogy egy kapcsolat a kutatási artifact-rétegben stabil élként jelenjen meg. A Graph V2 klaszterezés fő iránya a Rust oldali, determinisztikus \textit{bounded-ally-groups-v2} logika. A vizuális klaszterek mérete szándékosan korlátozott, legfeljebb körülbelül húsz játékosra.
+
+\section{Graph V2 artifaktumok mint igazságforrás}
+
+A Rust Graph V2 pipeline előkészített, datasethez kötött cache-artifaktumokat ír ki: a \textit{manifest.json} rögzíti a datasetet és a gráfépítő verziót; a bináris fájlok (\textit{node\_positions.f32}, \textit{edge\_pairs.u32}) a Three.js/WebGL réteg bemeneti állományai; a \textit{cluster\_meta.json} a klaszterazonosítókat tartalmazza. A Graph V2 artifact-réteg tekintendő a kutatási vizualizáció fő igazságforrásának.

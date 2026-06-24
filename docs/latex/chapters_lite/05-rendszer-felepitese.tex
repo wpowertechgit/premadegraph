@@ -1,0 +1,74 @@
+\chapter{A rendszer felépítése és evolúciója}
+
+\section{A korai változat}
+
+Az eredeti rendszer jóval közelebb állt egy adatvezérelt játékosnézőhöz, mint a jelenlegi kutatási platformhoz. A korai pontozási logika (\textit{add\_new\_players.js}) egyszerű képletekkel dolgozott. A korai \textit{build\_graph.py} Python-központú volt: meccsekből kapcsolati gráfot épített, HTML és PyVis exportokat készített. Ezen az úton váltak a klaszterprofilok végül a Tribal NeuroSim szimulációs bemenetének alapjává.
+
+\section{A jelenlegi architektúra}
+
+A projekt jelenlegi architektúrája hibrid. A fő komponensek: Python (adatgyűjtés, gráfépítés, legacy-exportok), SQLite (központi perzisztencia), Node.js/Express (API-héj és orchesztráció), Rust (útvonalkeresés, gráfanalitika, globális artifact-export), React/Vite (frontend és vizualizáció), C\# ASP.NET Core (különálló adatbázis-böngésző) és a Tribal NeuroSim szimulációs motor.
+
+A teljes rendszerarchitektúra komponensdiagramja a kibővített verzió 5. fejezetében található; a lite verzióban az általános architekturális leírást a szöveg tartalmazza.
+
+\begin{table}[H]
+\centering
+\caption{Fontos architekturális alternatívák és elutasításuk oka}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{3.6cm} X}
+\toprule
+\textbf{Alternatíva} & \textbf{Rövid előny} & \textbf{Miért nem ez lett a végső irány?} \\
+\midrule
+Minden Pythonban & Gyorsabb kezdeti iteráció & A futásidejű gráfalgoritmusoknál és a nagyobb exportoknál gyengébb teljesítmény- és memóriakontroll \\
+Minden Rustban & Erős típusosság és egységes motor & A gyűjtés és a gyors kísérletezés jelentősen nehezebbé és lassabbá vált volna \\
+Frontend-központú számítás & Egyszerűbb demoarchitektúra & A böngészőre tolta volna a számításigényes gráfmunkát, gyengítve a reprodukálhatóságot \\
+Szerveres SQL-adatbázis & Erősebb többfelhasználós modell & A projekt lokális, bemutatható és kutatásorientált természete mellett az SQLite kedvezőbb kompromisszum maradt \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Több-adatkészletes architektúra}
+
+A jelenlegi rendszer már több, egymástól független adatkészletet támogat. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON könyvtárral és cache könyvtárral.
+
+A dataset-választás nem áll meg a Node-szinten. A backend a kiválasztott datasetből környezeti változókat képez a Rust futtatókörnyezet felé (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{dataset lifecycle riotapi to analytical output.pdf}
+\caption{Egy dataset teljes életciklusának diagramja a Riot API-tól az analitikai kimenetig}
+\end{figure}
+
+\section{A jelenlegi adatállapot}
+
+Az aktív adatállapot 2026. április 28-án közvetlenül a repository aktuális állapotából lett ellenőrizve.
+
+\textbf{Flexset dataset (EUNE Master+ Flex Queue):}
+\begin{itemize}
+    \item meccs-JSON állományok: \textbf{4981} fájl;
+    \item finomított adatbázis (\textit{playersrefined.db}): \textbf{15\,421} játékos, \textbf{599} klaszter, \textbf{5741} klasztertag.
+\end{itemize}
+
+\textbf{SoloQ dataset (EUNE Master+ Solo/Duo Queue, aktív):}
+\begin{itemize}
+    \item meccs-JSON állományok: \textbf{2001} fájl;
+    \item finomított adatbázis (\textit{playersrefined.db}): \textbf{6768} játékos, \textbf{140} klaszter, \textbf{1538} klasztertag.
+\end{itemize}
+
+A soloq dataset klaszterei jellemzően \emph{duo párokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül.
+
+\section{Perzisztencia és relációs modell}
+
+A projekt egyik legfontosabb fejleménye az volt, hogy a klaszterek kikerültek a ``csak JSON export'' kategóriából, és első osztályú adatbázis-objektumokká váltak. A jelenlegi séma három központi táblára épül \cite{sqlite}: \textit{players}, \textit{clusters} és \textit{cluster\_members}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{sqlite-project-er-diagram.png}
+\caption{A fő SQLite adatbázis egyedkapcsolati diagramja}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{relational model diagram.pdf}
+\caption{Relációs modell a klaszter- és játékosperzisztenciához (\textit{players}, \textit{clusters}, \textit{cluster\_members})}
+\end{figure}
+
+A rendszerben két klasztercsalád él párhuzamosan. A \textit{python\_population} típusú klaszterek a Python gráfépítési pipeline kimenetei: NetworkX-alapú modularitás-maximalizálás, közösségdetektálási perspektívával. A \textit{rust\_pathfinding} típusú klaszterek a Rust motor futásidejű klaszterezéséből jönnek: ally-kapcsolatokon alapuló erős-összefüggési szegmensek, maximum 20 tagos korláttal. A klaszterprofilok aggregált teljesítménymutatói egyben a Tribal NeuroSim szimulációjának genomszekvencia-bemenetét is alkotják.

@@ -1,0 +1,61 @@
+\chapter{A két adatkészlet empirikus összehasonlítása: flexset versus soloq}
+
+\section{Az összehasonlítás módszertani szerepe}
+
+A projekt egyik legfontosabb kutatási-módszertani döntése az volt, hogy nem egyetlen adatkészlettel dolgozik, hanem egymással összehasonlítható, eltérő queue-szemantikájú korpuszokkal. A kutatási kérdés így fogalmazható meg: ha ugyanazon analitikai pipeline-t lefuttatjuk mindkét dataseten, mikor kapunk eltérő eredményt, és ez az eltérés értelmezhető-e a két queue eltérő mechanikájából?
+
+\section{A két dataset konstruktív különbségei}
+
+A Flex Queue (440-es queue ID) csapatszedést tesz lehetővé: játékosok 2--5 főig premade csapatot alkothatnak. Ez azt jelenti, hogy a szövetségesi pozícióban repeatedly megjelenő játékospárok egy része \emph{szándékolt ismétlődés}. Az ally/enemy arány (73.17\% ally a \textit{flexset}-en) részben ennek a mechanizmusnak a következménye.
+
+A Solo/Duo Queue (420-as queue ID) legfeljebb két fős premade-et engedélyez. Az ally/enemy arány (65.24\% ally a \textit{soloq}-on) alacsonyabb, ami összhangban van azzal, hogy a véletlenszerűbb meccsek kevesebb domináns szövetségesi kapcsolatot hoznak létre.
+
+\begin{table}[H]
+\centering
+\caption{A két dataset alapvető méretei}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{5cm} rr}
+\toprule
+\textbf{Mutató} & \textbf{flexset} & \textbf{soloq} \\
+\midrule
+Meccs-JSON állományok & 4981 & 2001 \\
+Nyers játékosok & 15\,147 & 2822 \\
+Finomított játékosok & 15\,421 & 6768 \\
+Klaszterek (DB) & 599 & 140 \\
+Klasztertagok (DB) & 5741 & 1538 \\
+Graph V2 látható csúcsok & 5741 & 1538 \\
+Graph V2 látható élek & 18\,548 & 4111 \\
+Átlagos élsúly & 3.405 & 2.364 \\
+Graph V2 ally/enemy arány & 73.17\% / 26.83\% & 65.24\% / 34.76\% \\
+Graph V2 klaszterek & 1531 & 870 \\
+Átlagos klaszterméret & 3.750 & 1.768 \\
+Legnagyobb klaszterméret & 20 & 20 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Az átlagos klaszterméret különbsége (3.750 vs. 1.768) tartalmas. A \textit{flexset}-en a csoportok átlagosan majdnem négytagúak, míg a \textit{soloq}-on szinte mindenütt kis, kétfős vagy egyedülálló klaszterek dominálnak. Ez a különbség a queue-mechanika közvetlen következménye.
+
+\section{A teljes összehasonlítás tanulságai}
+
+\begin{table}[H]
+\centering
+\caption{A két dataset összehasonlításának összefoglalója}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{5cm} X X}
+\toprule
+\textbf{Dimenzió} & \textbf{flexset} & \textbf{soloq} \\
+\midrule
+Queue-mechanika & Flex, premade-fókusz & Solo/Duo, egyénközpontú \\
+Átlagos élsúly & 3.405 (sűrűbb) & 2.364 (ritkább) \\
+Ally arány & 73.17\% & 65.24\% \\
+Átlagos klaszterméret & 3.750 & 1.768 \\
+Triádok/csomópont & 4.95 & 1.03 \\
+Core-periphery olvasat & Hídgazdag asszociatív mag és sok periférikus ally-sziget & Kisebb, véletlenszerűbb lokális csoportok \\
+Social-path opscore assz. & 0.2346 & 0.1750 \\
+Battle-path opscore assz. & 0.1461 & 0.1625 \\
+Feedscore battle-path assz. & $-0.0108$ & $-0.0366$ \\
+Kutatási szerep & Asszociatív gráf és teljesítménykapcsolat & Teljesítmény-alapvonal, kontroll \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Az összehasonlítás általános tanulsága: a \textit{flexset} az asszociatív játékosgráf és a visszatérő szövetségesi kapcsolatok természetesebb terepe, a \textit{soloq} pedig a teljesítmény-alapvonal és a kontroll-dataset szerepét tölti be. A \textit{battle-path opscore} értéke a \textit{soloq}-on magasabb (0.1625), mint a \textit{flexset}-en (0.1461). A \textit{social-path} módban a \textit{flexset} erősebb (0.2346 vs. 0.1750), ami a premade-szövetségesi mechanizmust tükrözi.

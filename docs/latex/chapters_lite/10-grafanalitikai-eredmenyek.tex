@@ -1,0 +1,104 @@
+\chapter{Gráfanalitikai eredmények: asszortativitás és betweenness centralitás}
+
+\section{Asszortativitás}
+
+\subsection{A számítási definíció}
+
+A jelenlegi implementáció numerikus asszortativitást számol Pearson-korreláció formájában:
+
+\begin{equation}
+r = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum_i (x_i-\bar{x})^2}\sqrt{\sum_i (y_i-\bar{y})^2}}
+\end{equation}
+
+Az irányítatlan éleket az implementáció mindkét endpoint-orientációval figyelembe veszi. A gráfmód alapján az él-súlyozás:
+\begin{equation}
+w(u,v) = \begin{cases}
+\textit{ally\_weight} & \text{ha } \textit{social-path} \\
+\textit{total\_matches} & \text{ha } \textit{battle-path}
+\end{cases}
+\end{equation}
+
+\subsection{Asszortativitási eredmények -- flexset}
+
+\begin{table}[H]
+\centering
+\caption{Asszortativitás -- \textit{flexset}}
+\begin{tabular}{llrr}
+\toprule
+\textbf{Gráfmód} & \textbf{Metrika} & \textbf{Korreláció} & \textbf{Mintaszám} \\
+\midrule
+\textit{social-path} & \textit{opscore} & 0.2346 & 61\,938 \\
+\textit{social-path} & \textit{feedscore} & 0.1816 & 61\,938 \\
+\textit{battle-path} & \textit{opscore} & 0.1461 & 179\,492 \\
+\textit{battle-path} & \textit{feedscore} & $-0.0108$ & 179\,492 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{f-assortavity-social-path-opfeedscore.png}
+\caption{\textit{flexset} social-path asszortativitás \textit{opscore} és \textit{feedscore} szerint. 15\,421 jogosult csomópont és 61\,938 elemzett él; globális együttható \textit{opscore} esetén 0.235, \textit{feedscore} esetén 0.182.}
+\end{figure}
+
+\subsection{Asszortativitási eredmények -- soloq}
+
+\begin{table}[H]
+\centering
+\caption{Asszortativitás -- \textit{soloq}}
+\begin{tabular}{llrr}
+\toprule
+\textbf{Gráfmód} & \textbf{Metrika} & \textbf{Korreláció} & \textbf{Mintaszám} \\
+\midrule
+\textit{social-path} & \textit{opscore} & 0.1750 & 37\,976 \\
+\textit{social-path} & \textit{feedscore} & 0.1012 & 37\,976 \\
+\textit{battle-path} & \textit{opscore} & 0.1625 & 84\,393 \\
+\textit{battle-path} & \textit{feedscore} & $-0.0366$ & 84\,393 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{sq-assortavity-social-path-opfeedscore.png}
+\caption{\textit{soloq} social-path asszortativitás \textit{opscore} és \textit{feedscore} szerint. 6\,768 jogosult csomópont és 37\,976 elemzett él; globális együttható \textit{opscore} esetén 0.175, \textit{feedscore} esetén 0.101.}
+\end{figure}
+
+\subsection{Értelmezés}
+
+Mindkét datasetben pozitív asszortativitás jelenik meg az \textit{opscore} mentén a \textit{social-path} módban, ami azt jelzi, hogy a szövetségesi kapcsolatokra épülő gráfban az összekapcsolt játékosok teljesítményprofilja nem véletlenszerűen keveredik. A \textit{feedscore} viselkedése jóval érzékenyebb a gráfmódra: social-path módban mindkét dataseten mérsékelt pozitív jel látható, de battle-path módban közel nullára esik.
+
+Az \textit{opscore} minden vizsgált módban pozitív marad, a \textit{feedscore} nem; ez a kompozit mutató erőssége az egyszerűbb halálközpontú képlettel szemben.
+
+\section{Betweenness centralitás}
+
+\subsection{A Brandes-algoritmus}
+
+A Brandes-algoritmus \cite{brandes2001} a hagyományos $O(n^3)$ komplexitású betweenness-számítást $O(nm)$-re csökkenti. Forráscsomópontonként: Dijkstra/BFS futtatás, majd visszaterjesztési lépésben:
+
+\begin{equation}
+\delta[s][v] \mathrel{+}= \frac{\sigma[s][v]}{\sigma[s][w]} \cdot (1 + \delta[s][w])
+\end{equation}
+
+Súlyozott módban az élköltség:
+\begin{equation}
+c(u,v) = \left\lceil \frac{10^6}{\max(1, w(u,v))} \right\rceil
+\end{equation}
+
+\subsection{Párhuzamos végrehajtás}
+
+A Rust \textit{rayon} könyvtára automatikus munkalopásos párhuzamosságot tesz lehetővé. A centralitás-modul a forráscsomópontok halmazát $k = \min(n, 4 \cdot \text{szálak száma})$ egyenlő méretű csomóponthalmazra osztja. A forráscsomópontok rendezése és a chunk-határok rögzítése garantálja, hogy azonos input esetén mindig ugyanaz a kimenet.
+
+\subsection{Eredmény}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.68\textheight,keepaspectratio]{brandes-result.png}
+\caption{Brandes betweenness centralitás eredményképernyő. 15\,421 runtime csomópontból 1\,716 projektált csomópont és 2\,766 elemzett él. Párhuzamos futás: 6.38 ms; soros baseline: 60.85 ms; gyorsulás: 9.54-szeres; 16 Rayon szál; soros-párhuzamos delta: 0.000000.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{graph-brandes-brokerinyellow.png}
+\caption{A betweenness centralitás alapján azonosított broker játékosok a gráfban, sárgával kiemelve.}
+\end{figure}
