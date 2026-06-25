@@ -1,0 +1,62 @@
+\chapter{A két adatkészlet összehasonlítása: flexset és soloq}
+
+Az elemzés két eltérő queue-típusból gyűjtött adatkészletre épül: a Flex Queue és a Solo/Duo Queue eltérő matchmaking-mechanikája eleve különböző gráfstruktúrát eredményez. Ha ugyanazt a pipeline-t mindkét dataseten lefuttatjuk, a kapott eltérés közvetlenül a queue-mechanikából vezethető le -- nem modellparaméter-különbségből.
+
+\section{A két dataset szerkezeti különbségei}
+
+A Flex Queue (440-es queue ID) csapatszedést tesz lehetővé: játékosok 2--5 főig premade csapatot alkothatnak. Ez azt jelenti, hogy a szövetségesi pozícióban ismételten megjelenő játékospárok egy része \emph{szándékolt ismétlődés}. Az ally/enemy arány (73.17\% ally a \textit{flexset}-en) részben ennek a mechanizmusnak a következménye.
+
+A Solo/Duo Queue (420-as queue ID) legfeljebb két fős premade-et engedélyez. Az ally/enemy arány (65.24\% ally a \textit{soloq}-on) alacsonyabb, ami összhangban van azzal, hogy a véletlenszerűbb meccsek kevesebb domináns szövetségesi kapcsolatot hoznak létre.
+
+\begin{table}[H]
+\centering
+\caption{A két dataset alapvető méretei}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|r|r|}
+\hline
+\textbf{Mutató} & \textbf{flexset} & \textbf{soloq} \\
+\hline
+Meccs-JSON állományok & 4981 & 2001 \\
+Nyers játékosok & 15\,147 & 2822 \\
+Finomított játékosok & 15\,421 & 6768 \\
+Klaszterek (DB) & 599 & 140 \\
+Klasztertagok (DB) & 5741 & 1538 \\
+Látható csúcsok & 5741 & 1538 \\
+Látható élek & 18\,548 & 4111 \\
+Átlagos élsúly & 3.405 & 2.364 \\
+Szövetségesi/ellenfél arány & 73.17\% / 26.83\% & 65.24\% / 34.76\% \\
+Vizualizációs klaszterek & 1531 & 870 \\
+Átlagos klaszterméret & 3.750 & 1.768 \\
+Legnagyobb klaszterméret & 20 & 20 \\
+\hline
+\end{tabularx}
+\end{table}
+
+A \textit{flexset} átlagos klasztermérete (3,750) több mint kétszerese a \textit{soloq}-énak (1,768): előbbiben jellemzően 3--4 fős csoportok, utóbbiban 1--2 fős duók dominálnak. A queue-mechanika közvetlenül magyarázza ezt: a Flex Queue-ban legfeljebb 5 fős premade csapatok mehetnek együtt, míg a Solo/Duo Queue-ban maximum kettő.
+
+\section{Összefoglalás}
+
+\begin{table}[H]
+\centering
+\caption{A két dataset összehasonlításának összefoglalója}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|X|X|}
+\hline
+\textbf{Dimenzió} & \textbf{flexset} & \textbf{soloq} \\
+\hline
+Queue-mechanika & Flex, premade-fókusz & Solo/Duo, egyénközpontú \\
+Átlagos élsúly & 3.405 (sűrűbb) & 2.364 (ritkább) \\
+Ally arány & 73.17\% & 65.24\% \\
+Átlagos klaszterméret & 3.750 & 1.768 \\
+Háromszög-struktúrák/csomópont\textsuperscript{†} & 4.95 & 1.03 \\
+Mag-periféria szerkezet\textsuperscript{‡} & Hídgazdag asszociatív mag és sok periférikus ally-sziget & Kisebb, véletlenszerűbb lokális csoportok \\
+Social-path opscore assz. & 0.2346 & 0.1750 \\
+Battle-path opscore assz. & 0.1461 & 0.1625 \\
+Feedscore battle-path assz. & $-0.0108$ & $-0.0366$ \\
+Kutatási szerep & Asszociatív gráf és teljesítménykapcsolat & Teljesítmény-alapvonal, kontroll \\
+\hline
+\end{tabularx}
+\end{table}
+
+\noindent\small{†~\textit{Háromszög-struktúrák} (triádok): ha az A játékos ismeri B-t és C-t, és B is ismeri C-t, ez egy zárt háromszög a hálózatban. Több ilyen zárt háromszög erősebb csoportkohézióra utal. \quad ‡~\textit{Mag-periféria} (core-periphery): a gráf belső magja sűrűn összekötött, a perifériás csúcsok csak néhány kapcsolattal rendelkeznek.}\normalsize
+
+\medskip
+A \textit{flexset} az asszociatív játékosgráf és a visszatérő szövetségesi kapcsolatok természetesebb terepe, a \textit{soloq} pedig a teljesítmény-alapvonal és a kontroll-dataset szerepét tölti be. A \textit{battle-path opscore} értéke a \textit{soloq}-on magasabb (0.1625), mint a \textit{flexset}-en (0.1461). A \textit{social-path} módban a \textit{flexset} erősebb (0.2346 vs. 0.1750), ami a premade-szövetségesi mechanizmust tükrözi.

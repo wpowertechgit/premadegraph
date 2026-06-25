@@ -55,7 +55,8 @@
       "Bash(./target/release/neurosim-backend.exe --cli-run --ticks 2000 --seed 7777 --clusters 599)",
       "Bash(./target/release/neurosim-backend.exe --cli-run --ticks 2000 --seed 7777 --clusters 599 --checkpoint-interval 250)",
       "Bash(pkill -f \"neurosim-backend\")",
-      "PowerShell(Stop-Process *)"
+      "PowerShell(Stop-Process *)",
+      "Bash(grep -n \"^\\\\\\\\\\\\\\\\chapter{\" c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/docs/latex/mainraw-monolith-snapshot.tex)"
     ]
   }
 }

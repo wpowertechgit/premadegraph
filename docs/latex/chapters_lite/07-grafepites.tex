@@ -1,0 +1,257 @@
+\chapter{A játékosháló felépítése, keresése és mérései}
+
+\section{A gráf felépítése}
+
+Az elsődleges gráfállapotot a Rust réteg állítja elő. A Python oldal megőrzi az adatgyűjtés, gyors prototipizálás és kompatibilitási gráfgenerálás szerepét. A \textit{flexset} és \textit{soloq} összehasonlítás, az asszortativitás és a gráfvizualizáció Rust-alapú gráfmodellre támaszkodik.
+
+\subsection{Kapcsolataggregáció}
+
+A Rust gráfmodell minden játékospárra külön őrzi a szövetségesi és ellenfél-oldali bizonyítékot:
+
+\begin{equation}
+w_{ally}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \in \{1,2\}: u \in T_{m,i} \land v \in T_{m,i}]
+\end{equation}
+\begin{equation}
+w_{enemy}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \neq j: u \in T_{m,i} \land v \in T_{m,j}]
+\end{equation}
+
+A domináns reláció \textit{ally}, ha \textit{allyWeight} $\geq$ \textit{enemyWeight}, különben \textit{enemy}. A gráf eredményei elsősorban asszociatív játékosgráfként, nem szó szerinti barátsági vagy ellenségességi hálóként értelmezendők.
+
+\subsection{A Rust gráfállapot}
+
+A Rust réteg a gráfot közvetlenül a meccs-JSON állományokból és a játékos-adatbázisból építi fel. A \textit{GraphState} a szomszédsági listák mellett tárolja a \textit{pair\_relations} szerkezetet, a játékosprofilok gyors elérését, a klasztertagságot, a landmark-távolságokat, a minimumköltségeket és az aktív datasethez tartozó snapshot-metaadatot.
+
+\subsection{Szűrés és a kutatási gráf}
+
+A kutatási gráf láthatósági küszöbe \textit{totalMatches} $\geq 2$: egyetlen közös mérkőzés még nem elég ahhoz, hogy egy kapcsolat stabil élként jelenjen meg. A klaszterezés fő iránya a Rust oldali, determinisztikus \textit{bounded-ally-groups} logika. A vizuális klaszterek mérete szándékosan korlátozott, legfeljebb körülbelül húsz játékosra.
+
+\subsection{A gráf artifact-rétege}
+
+A Rust gráf-export pipeline előkészített, datasethez kötött cache-artifaktumokat ír ki: a \textit{manifest.json} rögzíti a datasetet és a gráfépítő verziót; a bináris fájlok (\textit{node\_positions.f32}, \textit{edge\_pairs.u32}) a Three.js/WebGL réteg bemeneti állományai; a \textit{cluster\_meta.json} a klaszterazonosítókat tartalmazza. Ez az artifact-réteg tekintendő a kutatási vizualizáció fő igazságforrásának.
+
+\section{Útvonalkeresés és vizualizáció}
+
+\subsection{Keresési algoritmusok}
+
+A jelenlegi Rust futtatókörnyezet négy algoritmust támogat: BFS, Dijkstra, kétirányú keresés és A*. Az algoritmusok két élértelmezésben futhatnak: \textit{social-path} csak szövetségesi kapcsolatokon, \textit{battle-path} összes ismétlődő kapcsolaton.
+
+Az élköltség-modell: súlyozatlan módban minden él költsége fix $1000$. Súlyozott módban:
+\begin{equation}
+c(u,v)=\left\lceil \frac{1000}{w(u,v)} \right\rceil
+\end{equation}
+ahol $w(u,v)$ az adott útvonalmódnak megfelelő kapcsolaterősség.
+
+\begin{table}[H]
+\centering
+\caption{A Pathfinder Labban szereplő algoritmusok összevetése}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{2.8cm}|X|}
+\hline
+\textbf{Algoritmus} & \textbf{Mikor természetes?} & \textbf{Megjegyzés a projektben} \\
+\hline
+BFS & súlyozatlan legrövidebb út & Jó baseline, könnyen magyarázható \\
+Dijkstra & súlyozott utak & Referenciaalgoritmus a költség-alapú módokban \\
+Kétirányú keresés & nagyobb gráf, kevésbé irányított keresés & Gyakorlati gyorsítás bizonyos esetekben \\
+A* & jól kialakított alsó becsléssel & A projektben egzakt marad, nem csak vizuális heurisztika \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{Egzakt A* és ALT heurisztika}
+
+Az ALT (A* + Landmarks + Triangle inequality) heurisztika \cite{goldberg2005} elvéből indul ki: ha $L$ egy landmark-csomópont, akkor
+\begin{equation}
+d(u, t) \geq |d(L, t) - d(L, u)|
+\end{equation}
+minden $L$ landmarkra. A landmark-távolságok a \textit{GraphState} felépítésekor előre kiszámítódnak minden \textit{ModeKey} kombinációra, és az összes keresési kérésre újrafelhasználhatók. Az A* helyes legrövidebb utat ad; egységtesztek igazolják, hogy az A* eredménye egyezik a Dijkstra-eredménnyel minden releváns esetben.
+
+\subsection{Pathfinder Lab}
+
+A Pathfinder Lab a négy keresési algoritmus interaktív tesztkörnyezete: az eredmények lépésenként visszajátszhatók, a két útvonalmód (social-path, battle-path) közvetlenül összehasonlítható.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{pathfinder-replay-panel.png}
+\caption{A Pathfinder Lab replay panele: az útvonalösszegző, a léptetési vezérlők és a meglátogatott csomópontok statisztikái}
+\end{figure}
+
+Az alábbi táblázat ugyanazt a játékospárt mutatja be, kétféle keresési módban:
+
+\begin{table}[H]
+\centering
+\caption{BFS és súlyozott keresés összehasonlítása: ugyanazon játékospár, eltérő közelségi fogalmak}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{2cm}|X|}
+\hline
+\textbf{Algoritmus} & \textbf{Metrika} & \textbf{Eredmény} & \textbf{Értelmezés} \\
+\hline
+BFS & Minimális ugrásszám & 3 & Legrövidebb szociális lánc \\
+Dijkstra & Min. súlyozott költség & 8 & Legerősebb szövetségesi útvonal \\
+A* & Min. súlyozott költség & 8 & Egyezik Dijkstrával \\
+Kétirányú & Min. ugrásszám & 3 & Egyezik BFS-sel \\
+\hline
+\end{tabularx}
+\end{table}
+
+A BFS által talált 3-ugrás-os útvonal strukturálisan létezik, de gyenge vagy egyszeri meccsből eredő kapcsolatokon halad át. A Dijkstra súlyozott módban elkerüli ezeket, és helyette egy 8-ugrás-os útvonalat talál, amelyen minden él ismétlődő szövetségesi viszony.
+
+\begin{table}[H]
+\centering
+\caption{A négy algoritmus összehasonlítása a legfontosabb dimenziók mentén}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Algoritmus} & \textbf{Optimális?} & \textbf{Memória} & \textbf{Fő erősség a projektben} \\
+\hline
+BFS & Igen (súlyozatlan) & $O(n)$ & Egyszerű baseline, jól magyarázható replay \\
+Dijkstra & Igen (súlyozott) & $O(n + m)$ & Referencia-algoritmus, lexikografikus döntetlen-kezelés \\
+Kétirányú & Igen (súlyozatlan) & $O(n)$ & Potenciális gyorsulás klaszteres gráfon \\
+A* & Igen (heurisztika elfogadható) & $O(n)$ & Célirányos bejárás, egzakt eredmény \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{A 3D globális vizualizáció}
+
+A \textit{bird's-eye sphere} a teljes hálózat vizuális áttekintésére szolgál. A Rust réteg előre exportál minden fontos artifaktumot, és a frontend csak renderel.
+
+\begin{table}[H]
+\centering
+\caption{A bird's-eye export fő artifaktumai}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.2cm}|X|}
+\hline
+\textbf{Fájl} & \textbf{Szerep} \\
+\hline
+\textit{manifest.json} & Metaadatok, darabszámok, skálázási és generálási információk \\
+\textit{node\_meta.json} & Csomópontszintű leíró metaadatok, frontend-hozzárendelések \\
+\textit{node\_positions.f32} & Lebegőpontos koordináták tömbje a gyors rendereléshez \\
+\textit{node\_metrics.u32} & Tömörített numerikus csomóponti mutatók \\
+\textit{edge\_pairs.u32} & Él-végpontpárok tömbje \\
+\textit{edge\_props.u32} & Élhez tartozó kódolt tulajdonságok \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,keepaspectratio]{graph artifact package dataflow.pdf}
+\caption{A gráf artifaktumcsomag adatfolyama: a Rust-exportőr bináris és JSON-rétegeket ír, az Express API kiszolgálja, a frontend WebGL-renderelőbe fogyasztja}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{graph artifact components.pdf}
+\caption{A gráf-export pipeline bináris és JSON artifact-fájljainak szerkezete}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{birds-eye-current-state.png}
+\caption{A teljes hálózat 3D madártávlati nézete az előre generált Rust-artifaktumokra építve}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{flexset_associative_graph_clusters.png}
+\caption{Sűrűbb klaszterfoltok és a térbeli elkülönítés a globális nézetben}
+\end{figure}
+
+\section{Asszortativitás}
+
+\subsection{A számítási definíció}
+
+Az implementáció numerikus asszortativitást számol Pearson-korreláció formájában:
+
+\begin{equation}
+r = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum_i (x_i-\bar{x})^2}\sqrt{\sum_i (y_i-\bar{y})^2}}
+\end{equation}
+
+Az irányítatlan éleket az implementáció mindkét endpoint-orientációval figyelembe veszi. A gráfmód alapján az él-súlyozás:
+\begin{equation}
+w(u,v) = \begin{cases}
+\textit{ally\_weight} & \text{ha } \textit{social-path} \\
+\textit{total\_matches} & \text{ha } \textit{battle-path}
+\end{cases}
+\end{equation}
+
+\subsection{Asszortativitási eredmények: flexset}
+
+\begin{table}[H]
+\centering
+\caption{Asszortativitás: \textit{flexset}}
+\begin{tabular}{|l|l|r|r|}
+\hline
+\textbf{Gráfmód} & \textbf{Metrika} & \textbf{Korreláció} & \textbf{Mintaszám} \\
+\hline
+\textit{social-path} & \textit{opscore} & 0.2346 & 61\,938 \\
+\textit{social-path} & \textit{feedscore} & 0.1816 & 61\,938 \\
+\textit{battle-path} & \textit{opscore} & 0.1461 & 179\,492 \\
+\textit{battle-path} & \textit{feedscore} & $-0.0108$ & 179\,492 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{f-assortavity-social-path-opfeedscore.png}
+\caption{\textit{flexset} social-path asszortativitás \textit{opscore} és \textit{feedscore} szerint. 15\,421 jogosult csomópont és 61\,938 elemzett él; globális együttható \textit{opscore} esetén 0.235, \textit{feedscore} esetén 0.182.}
+\end{figure}
+
+\subsection{Asszortativitási eredmények: soloq}
+
+\begin{table}[H]
+\centering
+\caption{Asszortativitás: \textit{soloq}}
+\begin{tabular}{|l|l|r|r|}
+\hline
+\textbf{Gráfmód} & \textbf{Metrika} & \textbf{Korreláció} & \textbf{Mintaszám} \\
+\hline
+\textit{social-path} & \textit{opscore} & 0.1750 & 37\,976 \\
+\textit{social-path} & \textit{feedscore} & 0.1012 & 37\,976 \\
+\textit{battle-path} & \textit{opscore} & 0.1625 & 84\,393 \\
+\textit{battle-path} & \textit{feedscore} & $-0.0366$ & 84\,393 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{sq-assortavity-social-path-opfeedscore.png}
+\caption{\textit{soloq} social-path asszortativitás \textit{opscore} és \textit{feedscore} szerint. 6\,768 jogosult csomópont és 37\,976 elemzett él; globális együttható \textit{opscore} esetén 0.175, \textit{feedscore} esetén 0.101.}
+\end{figure}
+
+\subsection{Értelmezés}
+
+Mindkét datasetben pozitív asszortativitás jelenik meg az \textit{opscore} mentén a \textit{social-path} módban, ami azt jelzi, hogy a szövetségesi kapcsolatokra épülő gráfban az összekapcsolt játékosok teljesítményprofilja nem véletlenszerűen keveredik. A \textit{feedscore} viselkedése jóval érzékenyebb a gráfmódra: social-path módban mindkét dataseten mérsékelt pozitív jel látható, de battle-path módban közel nullára esik.
+
+Az \textit{opscore} minden vizsgált módban pozitív marad, a \textit{feedscore} nem; ez a kompozit mutató erőssége az egyszerűbb halálközpontú képlettel szemben.
+
+\section{Betweenness centralitás}
+
+\subsection{A Brandes-algoritmus}
+
+A Brandes-algoritmus \cite{brandes2001} a hagyományos $O(n^3)$ komplexitású betweenness-számítást $O(nm)$-re csökkenti. Forráscsomópontonként: Dijkstra/BFS futtatás, majd visszaterjesztési lépésben:
+
+\begin{equation}
+\delta[s][v] \mathrel{+}= \frac{\sigma[s][v]}{\sigma[s][w]} \cdot (1 + \delta[s][w])
+\end{equation}
+
+Súlyozott módban az élköltség:
+\begin{equation}
+c(u,v) = \left\lceil \frac{10^6}{\max(1, w(u,v))} \right\rceil
+\end{equation}
+
+\subsection{Párhuzamos végrehajtás}
+
+A Rust \textit{rayon} könyvtára automatikus munkalopásos párhuzamosságot tesz lehetővé. A centralitás-modul a forráscsomópontok halmazát $k = \min(n, 4 \cdot \text{szálak száma})$ egyenlő méretű csomóponthalmazra osztja. A forráscsomópontok rendezése és a chunk-határok rögzítése garantálja, hogy azonos input esetén mindig ugyanaz a kimenet.
+
+\subsection{Eredmény}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.68\textheight,keepaspectratio]{brandes-result.png}
+\caption{Brandes betweenness centralitás eredményképernyő. 15\,421 runtime csomópontból 1\,716 projektált csomópont és 2\,766 elemzett él. Párhuzamos futás: 6.38 ms; soros baseline: 60.85 ms; gyorsulás: 9.54-szeres; 16 Rayon szál; soros-párhuzamos delta: 0.000000.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{graph-brandes-brokerinyellow.png}
+\caption{A betweenness centralitás alapján azonosított broker játékosok a gráfban, sárgával kiemelve.}
+\end{figure}

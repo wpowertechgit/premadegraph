@@ -1,0 +1,77 @@
+\chapter{System Architecture and Evolution}
+
+\section{The Early Version}
+
+The original system was much closer to a data-driven player viewer than the current research platform. The early scoring logic (\textit{add\_new\_players.js}) used simple formulas. The early \textit{build\_graph.py} was Python-centred: it built a relationship graph from matches and produced HTML and PyVis exports. It was along this path that cluster profiles eventually became the basis for the Tribal NeuroSim simulation input.
+
+\section{The Current System}
+
+The system is built on several well-separated layers. Its components are: Python (data collection, graph construction, legacy exports), SQLite (central persistence), Node.js/Express (API shell and orchestration), Rust (pathfinding, graph analytics, global artifact export), React/Vite (frontend and visualisation), C\# ASP.NET Core (standalone database browser), and the Tribal NeuroSim simulation engine.
+
+The component diagram can be found in chapter 5 of the extended version \cite{premadegraph-full}; in the lite version the general description is provided in the text.
+
+\begin{table}[H]
+\centering
+\caption{Rejected approaches and rationale}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.5cm}|>{\raggedright\arraybackslash}p{3.6cm}|X|}
+\hline
+\textbf{Alternative} & \textbf{Brief advantage} & \textbf{Why it was not chosen} \\
+\hline
+Everything in Python & Faster initial iteration & Weaker performance and memory control for runtime graph algorithms and larger exports \\
+Everything in Rust & Strong typing and a unified engine & Collection and rapid experimentation would have become significantly harder and slower \\
+Frontend-centred computation & Simpler demo architecture & Would have pushed compute-intensive graph work to the browser, weakening reproducibility \\
+Server-side SQL database & Stronger multi-user model & Given the project's local, demonstrable, research-oriented nature, SQLite remained the better trade-off \\
+\hline
+\end{tabularx}
+\end{table}
+
+\section{Multi-Dataset Support}
+
+The implementation manages multiple independent datasets. Based on the \textit{backend/data/datasets.json} registry, each dataset has its own raw database, refined database, match JSON directory, and cache directory.
+
+Dataset selection does not stop at the Node layer. The backend derives environment variables from the selected dataset for the Rust runtime (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{dataset lifecycle riotapi to analytical output.pdf}
+\caption{Lifecycle diagram of a dataset from the Riot API to analytical output}
+\end{figure}
+
+\section{Current Data State}
+
+The active data state was verified directly from the current repository state on 28 April 2026.
+
+\begin{table}[H]
+\centering
+\caption{Current data state of the two datasets (28 April 2026)}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|r|r|}
+\hline
+\textbf{Metric} & \textbf{flexset} & \textbf{soloq} \\
+\hline
+Match JSON files & 4\,981 & 2\,001 \\
+Refined players & 15\,421 & 6\,768 \\
+Clusters & 599 & 140 \\
+Cluster members & 5\,741 & 1\,538 \\
+\hline
+\end{tabularx}
+\end{table}
+
+The soloq dataset clusters typically represent \emph{duo pairs}: since Solo/Duo Queue allows premades of at most two players, the vast majority of clusters that emerge from recurring connections contain only two or three players.
+
+\section{Persistence and the Relational Model}
+
+Clusters previously existed only in JSON export form; database integration made them first-class database objects. The schema is built around three central tables \cite{sqlite}: \textit{players}, \textit{clusters}, and \textit{cluster\_members}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{sqlite-project-er-diagram.png}
+\caption{Entity-relationship diagram of the main SQLite database}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.68\textwidth]{relational model diagram.pdf}
+\caption{Relational model for cluster and player persistence (\textit{players}, \textit{clusters}, \textit{cluster\_members})}
+\end{figure}
+
+Two cluster families coexist in the system. \textit{python\_population} type clusters are the output of the Python graph-building pipeline: NetworkX-based modularity maximisation with a community-detection perspective. \textit{rust\_pathfinding} type clusters come from the Rust engine's runtime clustering: strongly connected segments based on ally connections, capped at 20 members. The aggregated performance metrics of the cluster profiles also form the genome sequence input for the Tribal NeuroSim simulation.

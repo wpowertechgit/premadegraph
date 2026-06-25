@@ -1,0 +1,78 @@
+\chapter{Data Collection and the Riot API}
+
+The system's primary data source is the Riot Developer Portal and the associated League of Legends API suite \cite{riotportal,riotapi}. These enable identifying player accounts, querying match lists, downloading detailed match JSON files, and processing participant statistics.
+
+\section{Logic of the Riot API Endpoints Used}
+
+The current project uses several layers of the Riot API, but the most important design decision was making \textit{puuid} the central identifier of the system. The pipeline breaks down logically into the following steps:
+
+\begin{enumerate}
+    \item starting from an initial player or seed list, the system requests account information;
+    \item from the account, it retrieves a list of match identifiers;
+    \item for the match identifiers it downloads the detailed match JSON files;
+    \item from the participant rows it constructs a \textit{puuid}-based player profile and relationship data;
+    \item the results are persisted bound to the dataset.
+\end{enumerate}
+
+The collector calls the \textit{match-v5} endpoint family via the \textit{europe.api.riotgames.com} regional route.
+
+\section{Collector State Machine and Premade-Probe}
+
+\textit{backend/match\_collector.py} is a parameterisable state machine: its configuration holds the dataset identifier, paths, collection mode, queue type, match count limit, iteration limit, and premade threshold.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{collector-state-machine.pdf}
+\caption{Flow diagram of the collector's parameterisable state machine}
+\end{figure}
+
+\section{Collection Focus and Queue Selection}
+
+The project uses two research datasets: \textit{flexset} consists of Ranked Flex Queue matches, and \textit{soloq} consists of Ranked Solo/Duo Queue matches. The queue type choice is not arbitrary. Ranked Flex allows premade teams to participate, so recurring ally relationships can appear naturally. Ranked Solo/Duo intentionally excludes 5-player premades, making it a controlled comparison baseline.
+
+\section{Rate Limits and Reliability}
+
+The Riot API's constraints also shape the architecture. The collection layer gained explicit rate-limit handling, wait logic, and subtask splitting. The collector applies its own per-second wait, waits thirty seconds on HTTP 429 before retrying, and skips already-saved matches based on file existence.
+
+\begin{table}[H]
+\centering
+\caption{Main reliability mechanisms of the collector}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.4cm}|X|}
+\hline
+\textbf{Mechanism} & \textbf{Function} \\
+\hline
+Per-second delay & Controls short-term API load \\
+Two-minute counter & Aligns with Riot key usage limits \\
+429 retry & More robust operation on transient limit hits \\
+Existing match file skip & Avoids duplicate saves and re-downloads \\
+Event-based stdout log & Supports status tracking on both backend and frontend \\
+\hline
+\end{tabularx}
+\end{table}
+
+These mechanisms are not mere technical details: collecting the full \textit{flexset} ($\approx$4981 matches) with a development API key took days, with interruptions. Without file-based skipping and restartability, the corpus could not have been assembled without a continuously running server. The collector's design decisions are therefore a direct response to the API constraints: iterated, stateful batch runs rather than a single-pass download. After each overnight run, collection resumed exactly where it left off.
+
+\section{Comparison of flexset and soloq Collection Strategies}
+
+The \textit{flexset} dataset contains exclusively queue ID 440 (Ranked Flex) matches from EUNE Master$+$ ladder seed players. The collector's premade-probe mechanism filters out candidates that lack sufficient recurring teammate patterns.
+
+The \textit{soloq} dataset consists of queue ID 420 (Ranked Solo/Duo) matches from an EUNE Master$+$ Solo/Duo ladder seed population. The role of \textit{soloq} is to serve as a control baseline: a dataset in which recurring premade connections are systematically not favoured.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of the two dataset collection strategies}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.2cm}|X|X|}
+\hline
+\textbf{Dimension} & \textbf{flexset} & \textbf{soloq} \\
+\hline
+Queue ID & 440 (Flex) & 420 (Solo/Duo) \\
+Premade-probe & Yes, based on repetitions & No \\
+Seed expansion & Via teammates & Via list retrieval \\
+Collection goal & Social structure & Performance baseline \\
+Corpus size & 4980 matches & 2000 matches \\
+Role in project & Main research dataset & Control dataset \\
+\hline
+\end{tabularx}
+\end{table}
+
+When interpreting Riot API data it is important to keep in mind that the network is \emph{not a representation of the entire League of Legends universe}, but a bounded sub-world created by a specific collection strategy. Detailed data quality and bias analysis can be found in chapter 4 of the extended version \cite{premadegraph-full}.

@@ -1,0 +1,78 @@
+\chapter{Az adatgyűjtés és a Riot API}
+
+A rendszer elsődleges adatforrása a Riot Developer Portal és a kapcsolódó League of Legends API-készlet \cite{riotportal,riotapi}. Ezek lehetővé teszik játékosfiókok azonosítását, meccslisták lekérdezését, részletes meccs-JSON-ok letöltését, és résztvevői statisztikák feldolgozását.
+
+\section{A használt Riot API-végpontok logikája}
+
+A jelenlegi projekt a Riot API több rétegét használja, de a legfontosabb tervezési döntés az volt, hogy a rendszer központi azonosítójává a \textit{puuid} váljon. A pipeline logikailag az alábbi lépésekre bontható:
+
+\begin{enumerate}
+    \item egy kiinduló játékos vagy seed-lista alapján a rendszer fiókinformációt kér le;
+    \item a fiókból meccsazonosító-listát szerez;
+    \item a meccsazonosítókhoz letölti a részletes match JSON-okat;
+    \item a résztvevői sorokból \textit{puuid}-alapú játékosprofilt és kapcsolati adatot képez;
+    \item az eredményt datasethez kötve perzisztálja.
+\end{enumerate}
+
+A collector az \textit{europe.api.riotgames.com} regionális útvonalon hívja a \textit{match-v5} végpontcsaládot.
+
+\section{Collector állapotgép és premade-probe}
+
+A \textit{backend/match\_collector.py} paraméterezhető állapotgép: konfigurációja dataset-azonosítót, útvonalakat, gyűjtési módot, queue-típust, meccsszám-korlátot, iterációs limitet és premade-küszöböt tartalmaz.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{collector-state-machine.pdf}
+\caption{A collector paraméterezhető állapotgépének folyamatábrája}
+\end{figure}
+
+\section{Gyűjtési fókusz és queue-választás}
+
+A projekt két kutatási datasetet használ: a \textit{flexset} Ranked Flex Queue meccsekből áll, a \textit{soloq} Ranked Solo/Duo Queue meccsekből. A queue-típus megválasztása nem tetszőleges. A Ranked Flex megengedi a premade csapatok részvételét, ezért a visszatérő szövetségesi kapcsolatok természetes módon jelenhetnek meg. A Ranked Solo/Duo szándékosan kizárja az 5-fős premade-et, így kontrollált összehasonlítási alapként szolgál.
+
+\section{Sebességkorlátok és megbízhatóság}
+
+A Riot API korlátai az architektúrát is befolyásolják. A gyűjtőrétegben explicit sebességkorlát-kezelés, várakozási logika és részfeladatokra bontás jelent meg. A collector saját másodpercenkénti várakozást alkalmaz, HTTP 429 esetén harminc másodpercet vár, majd újrapróbálkozik, és a már elmentett meccseket fájllétezés alapján kihagyja.
+
+\begin{table}[H]
+\centering
+\caption{A collector fő megbízhatósági mechanizmusai}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.4cm}|X|}
+\hline
+\textbf{Mechanizmus} & \textbf{Funkció} \\
+\hline
+Másodpercenkénti késleltetés & A rövid távú API-terhelés kontrollja \\
+Kétperces számláló & Illeszkedés a Riot kulcshasználati limitjeihez \\
+429 újrapróbálás & Robusztusabb működés átmeneti limitütközéskor \\
+Létező meccsfájl kihagyása & Duplikált mentés és újra-letöltés elkerülése \\
+Eseményes stdout log & Backend- és frontend-oldali állapotkövetés támogatása \\
+\hline
+\end{tabularx}
+\end{table}
+
+A fenti mechanizmusok nem csak technikai részletek: a teljes \textit{flexset} (~4981 meccs) gyűjtése fejlesztési API-kulccsal napokig tartott, megszakításokkal. A fájlalapú kihagyás és az újraindíthatóság nélkül a korpusz nem lett volna összerakható folyamatosan futó szerver nélkül. A collector tervezési döntése tehát közvetlen válasz az API korlátaira: iterált, állapotőrző batch-futtatás, nem egymenetes letöltés. Egy-egy éjszakai futtatás után a kollekció pontosan ott folytatódott, ahol abbahagyta.
+
+\section{A flexset és a soloq gyűjtési stratégiájának összehasonlítása}
+
+A \textit{flexset} dataset kizárólag 440-es queue ID-jű (Ranked Flex) meccseket tartalmaz, EUNE Master$+$ ranglista-pozíciójú seed-játékosoktól. A collector premade-probe mechanizmusa kiszűri azokat a jelölteket, akiknek nincs elegendő visszatérő csapattársi mintázatuk.
+
+A \textit{soloq} dataset 420-as queue ID-jű (Ranked Solo/Duo) meccsekből áll, EUNE Master$+$ Solo/Duo ranglistás seed-populációval. A \textit{soloq} szerepe kontrollalap: olyan dataset, ahol a visszatérő premade-kapcsolatok szisztematikusan nem favorizáltak.
+
+\begin{table}[H]
+\centering
+\caption{A két dataset gyűjtési stratégiájának összehasonlítása}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.2cm}|X|X|}
+\hline
+\textbf{Dimenzió} & \textbf{flexset} & \textbf{soloq} \\
+\hline
+Queue ID & 440 (Flex) & 420 (Solo/Duo) \\
+Premade-probe & Igen, ismétlések alapján & Nem \\
+Seed-terjeszkedés & Csapattársak alapján & Listalekéréssel \\
+Gyűjtési cél & Szociális struktúra & Teljesítmény-alapvonal \\
+Corpus mérete & 4980 meccs & 2000 meccs \\
+Szerep a projektben & Fő kutatási adatkészlet & Kontroll-adatkészlet \\
+\hline
+\end{tabularx}
+\end{table}
+
+A Riot API adatainak értelmezésekor szem előtt kell tartani, hogy a hálózat \emph{nem a teljes League of Legends univerzum reprezentációja}, hanem egy adott gyűjtési stratégia által létrehozott, vizsgálható részvilág. A részletes adatminőségi és torzításelemzés a kibővített verzió 4. fejezetében található \cite{premadegraph-full}.

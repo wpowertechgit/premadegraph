@@ -70,11 +70,11 @@ grafuri de relații între jucători pe baza datelor reale din meciurile League 
 și le analizează prin metode de teoria grafurilor, statistice și de învățare automată.
 Principalele componente ale sistemului sunt: un strat de colectare a datelor bazat pe
 Riot API, un sistem de punctare a performanței sensibil la rolul în joc
-(\texttt{opscore}/\texttt{feedscore}), un mediu de execuție pentru construirea grafurilor
+(\textit{opscore}/\textit{feedscore}), un mediu de execuție pentru construirea grafurilor
 și analitica bazat pe Rust, precum și un frontend React/Vite cu mai multe pagini.
 
-Componenta de cercetare compară două seturi de date -- un corpus Flex Queue
-(\texttt{flexset}) și un corpus Solo Queue (\texttt{soloq}) -- din perspectiva
+Componenta de cercetare compară două seturi de date (un corpus Flex Queue,
+\textit{flexset}, și un corpus Solo Queue, \textit{soloq}), din perspectiva
 asortativității, centralității de intermediere și a structurii de tip miez-periferie
 asociativă. Implementarea include algoritmi de căutare a drumului optim (Dijkstra,
 căutare bidirecțională și A* exact), calculul paralel al centralității Brandes și
@@ -93,11 +93,11 @@ centralitate de intermediere, Rust, React, neuroevoluție.
 A dolgozat egy többkomponensű szoftverrendszert mutat be, amely valós League of Legends
 mérkőzésadatokból játékoskapcsolati gráfokat épít, és azokat gráfelméleti, statisztikai és
 gépi tanulási módszerekkel elemzi. A rendszer fő elemei: Riot API-alapú adatgyűjtő réteg,
-szerepkörérzékeny teljesítménypontozás (\texttt{opscore}/\texttt{feedscore}),
+szerepkörérzékeny teljesítménypontozás (\textit{opscore}/\textit{feedscore}),
 Rust-alapú gráfépítés és analitikai futtatókörnyezet, valamint többoldalas React/Vite frontend.
 
-A kutatási rész két adatkészletet -- egy Flex Queue (\texttt{flexset}) és egy SoloQ
-(\texttt{soloq}) korpuszt -- hasonlít össze asszortativitás, betweenness-centralitás és
+A kutatási rész két adatkészletet, egy Flex Queue (\textit{flexset}) és egy SoloQ
+(\textit{soloq}) korpuszt, hasonlít össze asszortativitás, betweenness-centralitás és
 asszociatív core-periphery szerkezet szempontjából. Az implementáció Dijkstra, kétirányú
 keresés és egzakt A* útvonalkereső algoritmusokat, párhuzamos Brandes-féle centralitásszámítást,
 valamint 3D gráfvizualizációt tartalmaz. A dolgozat záró egységeként a Tribal NeuroSim
@@ -114,11 +114,11 @@ Rust, React, neuroevolúció.
 This thesis presents a multi-component software system that constructs player-relationship
 graphs from real League of Legends match data and analyses them using graph-theoretic,
 statistical, and evolutionary methods. The system comprises a Riot API-based data-collection
-layer, a role-aware performance scoring pipeline (\texttt{opscore}/\texttt{feedscore}), a
+layer, a role-aware performance scoring pipeline (\textit{opscore}/\textit{feedscore}), a
 Rust-powered graph construction and analytics runtime, and a multi-page React/Vite frontend.
 
-The research component compares two datasets -- a Flex Queue corpus (\texttt{flexset}) and
-a Solo Queue corpus (\texttt{soloq}) -- with respect to assortativity, betweenness centrality,
+The research component compares two datasets (a Flex Queue corpus, \textit{flexset}, and
+a Solo Queue corpus, \textit{soloq}) with respect to assortativity, betweenness centrality,
 and associative core-periphery structure. The implementation includes Dijkstra, bidirectional,
 and exact A* pathfinding algorithms, parallelised Brandes betweenness centrality, and 3D
 graph visualisation. As a closing experiment, the Tribal NeuroSim evolutionary simulation

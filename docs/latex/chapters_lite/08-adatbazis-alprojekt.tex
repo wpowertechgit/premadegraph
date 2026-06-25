@@ -1,0 +1,42 @@
+\chapter{Az adatbázis-alprojekt: PostgreSQL-séma és C\# böngésző}
+
+\section{Az alprojekt háttere}
+
+A \textit{docs/databaseproject} könyvtárban egy formálisan megtervezett, PostgreSQL-re épülő relációs adatbázismodell és egy ASP.NET Core / C\# alapú adatbázis-böngésző alkalmazás él. Ez az alprojekt kettős értékkel bír: erősíti az adatbázis-tervezés akadémiai oldalát, és valódi, futtatható eszközt biztosít az elemzési eredmények böngészéséhez.
+
+\section{A formális relációs séma}
+
+A \textit{docs/databaseproject/schema.sql} egy teljes PostgreSQL sémát definiál. A séma tíz főtáblája:
+
+\begin{table}[H]
+\centering
+\caption{A databaseproject PostgreSQL sémájának táblái}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|X|}
+\hline
+\textbf{Tábla} & \textbf{Szerepkör a sémában} \\
+\hline
+\textit{players} & Játékosazonosság, összesített pontszámok, szerepkör \\
+\textit{matches} & Meccsszintű adatok, queue, patch, időtartam, győztes \\
+\textit{teams} & Egy meccs két csapata, oldal, objektíva adatok \\
+\textit{match\_participants} & Résztvevői adatok: champion, lane, kills, deaths, assists \\
+\textit{player\_relationships} & Játékos--játékos ally/enemy kapcsolat súllyal \\
+\textit{clusters} & Klaszter metaadatok, típus, algoritmus \\
+\textit{cluster\_members} & Tagsági rekordok, szerepkör-összegzés \\
+\textit{analysis\_runs} & Elemzési futások metaadatai \\
+\textit{performance\_snapshots} & Játékos-teljesítmény pillanatfelvételek futásonként \\
+\textit{path\_queries} & Útkeresési kérések és eredmények \\
+\hline
+\end{tabularx}
+\end{table}
+
+A nézeteket, tárolt eljárásokat és triggereket tartalmazó részek a kibővített verzió 12. fejezetében találhatók \cite{premadegraph-full}.
+
+\section{Az ASP.NET Core / C\# adatbázis-böngésző}
+
+A böngésző a Premade Graph SQLite adatbázisainak böngészésére készült. Indulásakor a \textit{ProjectImporter.Import()} folyamat importálja a fő rendszer adatbázisából a players, clusters, cluster\_members és replay táblákat. A böngésző a repository \textit{datasets.json} regiszterét olvassa be, és URL-paraméterként átadható a kívánt dataset azonosítója (\textit{?dataset=flexset}, \textit{?dataset=soloq}).
+
+A böngésző szerver-oldali HTML-generálással működik, nincs JavaScript frontend. A \textit{Microsoft.Data.Sqlite} NuGet csomag az adatbázis-elérés alapja. Az alkalmazás lefordul és futtatható a repository-ból.
+
+\section{Az alprojekt helye a rendszerben}
+
+A databaseproject nem puszta papír-terv: a \textit{schema.sql} futtatható, a C\# böngésző lefordul és futtatható. Az SQLite-alapú fő rendszer a gráfépítés, az analitika és a demo-pipeline kiszolgálásához optimalizált, a PostgreSQL-alapú modell pedig a relációs adatbázistervezés akadémiai igényeivel igazodik. A kettő különböző célt szolgál ugyanabban a domainben.

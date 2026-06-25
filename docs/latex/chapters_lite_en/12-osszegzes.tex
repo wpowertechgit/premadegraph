@@ -1,0 +1,61 @@
+\chapter{Conclusion}
+
+\section{What the Thesis Presents}
+
+The thesis presents a system that starts from real League of Legends match data and from it builds player profiles, relationships, graphs, clusters, analytic results, and finally a simulation experiment. Beyond kill and death counts, the system records which players a given player ends up in a game with, who they face as opponents, what recurring relationships form around them, and what larger network patterns emerge from those.
+
+If the essence of the project had to be reduced to a single point, it would be the existence of the full chain rather than any individual component. A Dijkstra implementation or a React page in isolation is a routine project. What makes the system interesting is the connectedness: from raw match data, through the graph, clusters, and Rust analytics, it reaches a reproducible simulation experiment, and every step is verifiable.
+
+\section{Main Results}
+
+The data-collection layer handles two different queue types in parallel. Keeping \textit{flexset} and \textit{soloq} separate is important because the two queues do not measure the same phenomenon: Flex Queue is better suited for examining recurring connection patterns; SoloQ serves as a control and an individual performance baseline.
+
+The \textit{opscore} and \textit{feedscore} metrics provide role-aware scores. They are not perfect truth measurements, but they allow performance indicators to be used as inputs to graph analytics.
+
+The \textit{flexset} graph has a core-periphery structure: there are denser, more strongly connected core regions and many looser, smaller peripheral groups. This follows from the queue mechanics.
+
+The assortativity analysis shows a positive association for \textit{opscore} in social-path mode (0.235): connected players carry more similar performance profiles than would be expected under random connections.
+
+The Rust-based algorithmic layer --- pathfinding, assortativity, betweenness centrality --- is deterministic and reproducible: the same input data always produces the same result.
+
+\section{The Role of Tribal NeuroSim}
+
+Tribal NeuroSim is a transfer experiment: it examines whether the performance profiles extracted from the graph and its clusters can be carried over into the initial parameters of an evolutionary, multi-agent simulation.
+
+Based on the four runs, profiles from the Flex Queue showed more consistent behaviour: a similar Warband/Combat winning archetype emerged under both tested seeds. The SoloQ runs were more variable --- different seeds produced different winning profiles. The flexset priors thus produced more consistent outcomes; the soloq priors produced more variable ones --- under an identical simulation rule set.
+
+\section{Retrospective: What Worked Well}
+
+In retrospect, the best decision was not forcing everything into a single technology. Python stayed for rapid data collection and experimentation; Rust took over where performance and determinism were needed; Node/Express and React made the whole thing presentable. Forcing all of this into a single language would have made at least one layer suffer.
+
+The project's strength is the coherent chain: from raw API data through normalised player profiles, graph construction, and clustering, all the way to analytic results --- every step is verifiable and re-runnable. Assortativity, betweenness centrality, and the core-periphery interpretation are not just visualisation; they ask real questions about the network.
+
+\section{Limitations and Open Questions}
+
+A few limitations are worth keeping in mind when interpreting the results.
+
+The dataset is not a random sample. The seed player selection, the premade-probe mechanism, and the queue type together determine which player population enters the graph. The resulting structure is a product of the given collection strategy, not a general description of all EUNE Master+ players.
+
+opscore and feedscore are useful and interpretable metrics, but not external ground-truth measures. The role expectations and curve parameters are part of the model --- different construction choices would yield different results.
+
+Even in the graph, an enemy connection is not equivalent to genuine conflict. Repeated opposition can arise from matchmaking MMR bands, shared time-of-day, or the fact that the active Master+ Flex Queue player pool is inherently small. This is why the signed graph remained an experimental option.
+
+Temporal consistency and community cohesion analyses fell out of the current scope. The excluded analyses are not uninteresting; the data and methodology did not, however, support defensible claims.
+
+\section{Closing Remarks}
+
+The end result of the project can be stated simply: it is possible to build a system from competitive game data that holds up from a software engineering perspective and can also pose research questions. PremadeGraph is a data-collection, data-modelling, graph-analytic, and simulation chain.
+
+The connectivity between steps was not planned in advance. Raw match data became normalised player profiles, profiles became a relationship graph, the graph became clusters and analytic metrics, and clusters became simulation priors --- each step taking the previous step's output as its input.
+
+As ABBA put it decades ago: \textit{the winner takes it all}.
+In Tribal NeuroSim, this is not a metaphor but a direct consequence of the mechanics.
+
+\section{Where This Applies Elsewhere}
+\label{sec:osszegzes-transfer}
+
+The methodology is not tied to League of Legends. The Riot API was a convenient choice because it is publicly available, rich, and structured. But the same pipeline would run equally well on GitHub collaboration data, NBA performance statistics, or PubMed co-authorship networks --- anywhere there is recurring interaction, measurable performance, and some form of group structure.
+
+Graph clustering, for example, describes a corporate organisational network just as naturally as a player population: in both cases the question is which actual working groups emerge behind the formal structure. Betweenness centrality measures the same thing in infrastructure planning or epidemiology --- which node's removal most disrupts the network.
+
+The five Tribal NeuroSim artifacts are not LoL-specific concepts either. Combat, resource, map\_objective, risk, team --- these translate to other domains, and the evolutionary simulation framework can start from any cluster profile where group-level performance indicators can be extracted. The video game here was a tool, not a constraint.

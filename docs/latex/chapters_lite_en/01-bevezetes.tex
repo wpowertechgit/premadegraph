@@ -1,0 +1,53 @@
+\chapter{Introduction}
+
+\section{Problem Statement}
+
+A recurring problem in competitive online games is that players form strong opinions about each other's performance based on partial, subjective, and short-term impressions. After a lost match, blame-shifting arrives quickly, but it is far rarer for players to actually examine the match data, understand what happened, how they themselves performed, and where that performance fits within a broader social network.
+
+\emph{League of Legends} is a particularly interesting setting for this, because it simultaneously offers extremely rich match data, recurring teammate and opponent relationships, and social patterns that can be represented and analysed as a graph. When a player repeatedly ends up in the same game as the same people --- as allies or as opponents --- the resulting relationship network goes beyond the momentary statistics of any single match.
+
+This observation is the starting point of the thesis. The goal: build a player network from real match history, analyse that network using a graph-theoretic perspective, and display the results on a visually interpretable frontend.
+
+\section{Motivation}
+
+The project has partly personal origins. After ranked matches, a recurring question was whether repeated negative encounters were coincidental or had some underlying structure --- perhaps the same people being placed together again and again, in a way the matchmaking interface does not surface. That alone is not a scientific question, but it was enough as a starting point. If the Riot API provides detailed match data and those matches contain recurring player relationships, then a graph can in principle be constructed from them, and where there is a graph, there is something to analyse.
+
+The project scope expanded gradually during development. What began as quick data visualisation grew into a dedicated data-collection layer, a normalised scoring pipeline, SQLite-based persistence, a Rust runtime, and a multi-page React frontend. The Python layer remained for data collection and compatibility. Every extension resolved a specific technical constraint rather than following a pre-planned roadmap.
+
+At one point the graph-analysis pipeline began producing cluster-profile exports, and the question arose whether those profiles could be used as inputs to an agent-based simulation. That is how Tribal NeuroSim emerged: the clusters from both datasets compete under identical simulation conditions.
+
+\section{Objectives}
+
+The thesis documents the design, implementation, and evaluation of a multi-component system built on real match data. The system constructs a player-relationship graph from League of Legends match history: repeated co-play and head-to-head appearances produce edges, to which role-aware performance metrics are attached. Graph analysis covers clustering, core-periphery structure, assortativity, and Brandes betweenness centrality, all in a Rust-based, deterministic, and reproducible implementation.
+
+The player network is examined from three perspectives. From a network perspective: the \textit{flexset} dataset exhibits a core-periphery structure. From a metric perspective: the role-aware \textit{opscore} and \textit{feedscore} measures are computed from real match data. From a systems perspective: each component in the Python, SQLite, Node/Express, Rust, and React stack serves a specific purpose that the other layers cannot fulfil.
+
+Every step in the pipeline is re-runnable with concrete inputs and outputs: from data collection through graph construction and clustering to simulation. The parallel analysis of the Flex Queue and SoloQ datasets makes this measurable --- the same pipeline on two different inputs produces different results, and the difference becomes interpretable through the queue mechanics.
+
+\section{Research Questions}
+
+This thesis addresses the following research questions:
+
+\begin{itemize}
+    \item How can a real League of Legends match history be used to build a player network that captures not only co-play but also opponent relationships?
+    \item How can player performance be scored in a way that accounts for the actual role played while remaining interpretable?
+    \item To what extent is it justified to split the system into Python, SQLite, Node.js, Rust, and React components?
+    \item Does the current graph show positive assortativity with respect to \textit{opscore} and \textit{feedscore}?
+    \item In what ways do the relationship structures of \textit{flexset} and \textit{soloq} differ, and to what extent can the \textit{flexset} graph be described as an associative core-periphery player graph?
+\end{itemize}
+
+\section{Scope and Limitations}
+
+The project is a relatively large system, and it would be easy to present every existing idea as a finished result. The thesis tries to avoid this. What actually runs and can be verified appears as complete. What development plans list as future goals does not appear as a finished feature.
+
+\section{Structure of the Thesis}
+
+The chapters proceed from data collection toward graph analytics and simulation experiments.
+
+The opening chapters establish the starting point: the problem statement, the literature background, and the Riot API-based data sources. This is followed by the system overview, then the \textit{opscore} performance metric, the graph construction and clustering mechanics, the Rust runtime and analytics modules. The comparison of the two datasets (\textit{flexset} and \textit{soloq}) is the most concrete research result of the system. The final chapters cover the database sub-project and the Tribal NeuroSim simulation. This document is the condensed, lite version; the extended version \cite{premadegraph-full} develops in separate chapters the topics only briefly touched on here.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{match-analysis-page.png}
+    \caption{One entry point of the current frontend: the match analysis and data collection interface}
+\end{figure}

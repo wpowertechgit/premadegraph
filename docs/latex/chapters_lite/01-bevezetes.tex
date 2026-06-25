@@ -6,21 +6,23 @@ A kompetitív online játékok egyik visszatérő problémája, hogy a résztvev
 
 A \emph{League of Legends} különösen érdekes terep ehhez, mert egyszerre tartalmaz rendkívül gazdag mérkőzésadatokat, ismétlődő csapattársi és ellenfél-kapcsolatokat, valamint olyan társas mintázatokat, amelyek gráfként ábrázolhatók és elemezhetők. Ha egy játékos hosszabb időn keresztül ugyanazokkal az emberekkel kerül egy meccsbe (akár szövetségesként, akár ellenfélként), akkor ebből egy olyan kapcsolati háló építhető fel, amely túlmutat az egyetlen mérkőzés pillanatnyi statisztikáin.
 
-Ebből a felismerésből indult a dolgozat: a cél nem egyszerűen egy újabb meccsnéző vagy statisztikai felület volt, hanem egy olyan rendszer, amely a valós mérkőzéstörténetből játékoshálót épít, ezt a hálót gráfelméleti és rendszerszintű szemlélettel elemzi, majd az eredményeket egy vizuálisan erős, ugyanakkor védhető frontend felületen mutatja meg.
+Ebből a felismerésből indult a dolgozat. Cél: valós mérkőzéstörténetből játékoshálót építeni, ezt a hálót gráfelméleti szemlélettel elemezni, majd az eredményeket vizuálisan értelmezhető frontend felületen megjeleníteni.
 
 \section{Motiváció}
 
 A projekt mögött részben személyes indíttatás húzódik. Rangsorolt meccsek után visszatérő kérdés volt, hogy a sorozatos negatív találkozások véletlenek-e, vagy van mögöttük valami szerkezet: esetleg ugyanazok az emberek kerülnek újra és újra egymás mellé, csak ezt a matchmaking felülete nem mutatja meg. Ez önmagában persze nem tudományos kérdés, de kiindulópontként elég volt. Ha a Riot API részletes meccsadatokat ad, és ezek ismétlődő játékoskapcsolatokat tartalmaznak, akkor ezekből elvileg gráf építhető, és ha gráf van, akkor már van mit elemezni.
 
-A rendszer végül jóval nagyobbra nőtt, mint amire számítottam. Ami kezdetben gyors adatvizualizációnak indult, az fokozatosan külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és legacy-kompatibilitási szerepben maradt meg. Ez nem tervezett döntés volt, hanem a fejlesztés természetes következménye.
+A projekt hatóköre a fejlesztés során fokozatosan bővült. Ami gyors adatvizualizációként indult, az külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és kompatibilitási szerepben maradt meg. Minden bővítés egy konkrét technikai korlátot oldott meg, nem előre megtervezett kiterjesztés volt.
 
-A növekedés egy ponton egy váratlan irányba is kinyílt. Amikor a gráfelemzési pipeline klaszterprofil-exportokat kezdett gyártani, felmerült, hogy ezek a profilok ágens-alapú szimulációban is felhasználhatók: ebből nőtt ki a Tribal NeuroSim kísérlet, amelyben a két adatkészlet klaszterei azonos szimulációs feltételek alatt versenyeznek egymással. Ez a kiterjesztés a dolgozat utolsó fejezeteiben kerül kifejtésre.
+Egy ponton a gráfelemzési pipeline klaszterprofil-exportokat kezdett gyártani, és felmerült, hogy ezek a profilok ágens-alapú szimulációban is felhasználhatók. Ebből nőtt ki a Tribal NeuroSim, amelyben a két adatkészlet klaszterei azonos szimulációs feltételek alatt versenyeznek egymással.
 
 \section{A dolgozat célja}
 
-A dolgozat egy valós mérkőzésadatokra épülő, több komponensű rendszer tervezésének, implementációjának és vizsgálatának dokumentációja. A rendszer League of Legends mérkőzéstörténetből játékoskapcsolati gráfot épít: az ismétlődő együtt- és egymás ellen játszásból él jön létre, amelyhez szerepkör-érzékeny teljesítménymutatók tartoznak. A gráf elemzése kiterjed klaszteresítésre, core-periphery szerkezet vizsgálatára, asszortativitásra és Brandes-féle centralitásra, mindezt Rust-alapú, determinisztikus és újrafuttatható implementációban.
+A dolgozat egy valós mérkőzésadatokra épülő, több komponensű rendszer megtervezésének, megvalósításának és vizsgálatának dokumentációja. A rendszer League of Legends mérkőzéstörténetből játékoskapcsolati gráfot épít: az ismétlődő együtt- és egymás ellen játszásból él jön létre, amelyhez szerepkör-érzékeny teljesítménymutatók tartoznak. A gráf elemzése kiterjed klaszteresítésre, core-periphery szerkezet vizsgálatára, asszortativitásra és Brandes-féle centralitásra, mindezt Rust-alapú, determinisztikus és újrafuttatható megvalósításban.
 
-Végig szempont volt, hogy az implementáció minden rétege megindokolható legyen: honnan jönnek az adatok, hogyan számolódnak a pontszámok, mit jelent pontosan egy él a gráfban, és mit nem. A két adatkészlet, a Flex Queue és a SoloQ, összehasonlítása ennek a szemléletnek a legkonkrétabb eredménye. A pipeline fejlődésének egy pontján a klaszterprofilok egy kísérleti kiterjesztés alapjává is váltak: a Tribal NeuroSim szimulációjában a gráfból levezetett profilok törzsi entitásokként jelennek meg.
+A játékosháló elemzése három nézőpontból történik. Hálózati szempontból: a \textit{flexset} adatkészleten mag-periféria szerkezet vizsgálható. Metrikai szempontból: a szerepkör-érzékeny \textit{opscore} és \textit{feedscore} mérőszámok valós meccsadatokból számolódnak. Rendszertechnikai szempontból: Python, SQLite, Node/Express, Rust és React együttesének minden komponense konkrét feladatot tölt be, amelyre a többi réteg nem alkalmas.
+
+A pipeline minden lépése konkrét bemenetekkel és kimenetekkel újrafuttatható: az adatgyűjtéstől a gráfépítésen át a klaszterezésig és a szimulációig. A Flex Queue és a SoloQ adatkészlet párhuzamos elemzése pontosan ezt teszi mérhetővé -- ugyanaz a pipeline két eltérő bemeneten eltérő eredményt ad, és az eltérés a queue-mechanikából értelmezhetővé válik.
 
 \section{Kutatási kérdések}
 
@@ -34,11 +36,15 @@ A jelen dolgozat a következő kutatási kérdésekre keres választ:
     \item Miben különbözik a \textit{flexset} és a \textit{soloq} kapcsolati szerkezete, és mennyiben írható le a \textit{flexset} asszociatív core-periphery játékosgráfként?
 \end{itemize}
 
-\section{A dolgozat hozzájárulása}
+\section{Hatókör és korlátok}
 
-A dolgozat elsősorban rendszerintegráló munkát dokumentál: a hozzájárulás nem egyetlen új algoritmusban rejlik, hanem abban, ahogy a rétegek egymáshoz illeszkednek és hogyan lesznek az eredmények empirikusan védhető állításokká. A Rust-alapú gráfanalitika (útvonalkeresés, asszortativitás, párhuzamos Brandes-centralitás), a regiszteralapú, több adatkészleten működő gyűjtési architektúra, és a szerepkörérzékeny \textit{opscore}/\textit{feedscore} normalizáció önálló tervezési döntések eredménye. A \textit{flexset} és \textit{soloq} empirikus összehasonlítása, az asszociatív core-periphery értelmezéssel együtt, a konkrét adatokból levezethető és reprodukálható megfigyelés.
+A projekt viszonylag nagy rendszer, és könnyen csúszhat abba a hibába, hogy minden meglévő ötlet kész eredményként szerepeljen. A dolgozat igyekszik ezt elkerülni. Ami ténylegesen fut és ellenőrizhető, az kész állapotként szerepel. Amit a fejlesztési tervek jövőbeli célként fogalmaznak meg, az nem szerepel kész feature-ként.
 
-Kísérleti jellegű, de a pipeline szerves folytatásaként értelmezendő hozzájárulás a Tribal NeuroSim kiterjesztés, amelyben a gráfból levezetett klaszterprofilok ágens-alapú szimulációban vizsgálhatók.
+\section{A dolgozat szerkezete}
+
+A fejezetek az adatgyűjtéstől indulnak, majd fokozatosan haladnak a gráfanalitika és a szimulációs kísérletek felé.
+
+Az első fejezetek a kiindulópontot rögzítik: a problémafelvetést, a szakirodalmi hátteret és a Riot API-ra épülő adatforrásokat. Ezt követi a rendszer bemutatása, majd az \textit{opscore} teljesítménymetrika, a gráfépítés és klaszterezés mechanizmusa, a Rust futtatókörnyezet és az analitikai modulok. A két adatkészlet (\textit{flexset} és \textit{soloq}) összehasonlítása a rendszer legkonkrétabb kutatási eredménye. A dolgozat utolsó egységei az adatbázis-alprojektet és a Tribal NeuroSim szimulációt tárgyalják. Ez a dokumentum az összefoglalt, lite változat; a részletes kifejtést tartalmazó bővített verzió \cite{premadegraph-full} az itt csak érintett témákat külön fejezetekben fejti ki.
 
 \begin{figure}[H]
     \centering

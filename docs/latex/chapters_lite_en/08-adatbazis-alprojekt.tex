@@ -1,0 +1,42 @@
+\chapter{The Database Sub-Project: PostgreSQL Schema and C\# Browser}
+
+\section{Background}
+
+The \textit{docs/databaseproject} directory contains a formally designed relational database model built on PostgreSQL and an ASP.NET Core / C\# database browser application. This sub-project has dual value: it strengthens the academic database-design dimension of the thesis and provides a real, runnable tool for browsing analytic results.
+
+\section{The Formal Relational Schema}
+
+\textit{docs/databaseproject/schema.sql} defines a complete PostgreSQL schema. The schema's ten main tables:
+
+\begin{table}[H]
+\centering
+\caption{Tables of the databaseproject PostgreSQL schema}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|X|}
+\hline
+\textbf{Table} & \textbf{Role in the schema} \\
+\hline
+\textit{players} & Player identity, aggregated scores, role \\
+\textit{matches} & Match-level data: queue, patch, duration, winner \\
+\textit{teams} & The two teams of a match: side and objective data \\
+\textit{match\_participants} & Participant data: champion, lane, kills, deaths, assists \\
+\textit{player\_relationships} & Player--player ally/enemy connection with weight \\
+\textit{clusters} & Cluster metadata: type, algorithm \\
+\textit{cluster\_members} & Membership records with role summaries \\
+\textit{analysis\_runs} & Metadata for analysis runs \\
+\textit{performance\_snapshots} & Player performance snapshots per run \\
+\textit{path\_queries} & Pathfinding requests and results \\
+\hline
+\end{tabularx}
+\end{table}
+
+The sections covering views, stored procedures, and triggers can be found in chapter 12 of the extended version \cite{premadegraph-full}.
+
+\section{The ASP.NET Core / C\# Database Browser}
+
+The browser was built to browse the Premade Graph SQLite databases. On startup, the \textit{ProjectImporter.Import()} process imports the players, clusters, cluster\_members, and replay tables from the main system database. The browser reads the repository's \textit{datasets.json} registry, and the desired dataset identifier can be passed as a URL parameter (\textit{?dataset=flexset}, \textit{?dataset=soloq}).
+
+The browser operates with server-side HTML generation and no JavaScript frontend. The \textit{Microsoft.Data.Sqlite} NuGet package provides database access. The application compiles and runs from the repository.
+
+\section{The Sub-Project's Place in the System}
+
+The databaseproject is not a paper exercise: \textit{schema.sql} is runnable, and the C\# browser compiles and runs. The SQLite-based main system is optimised for graph construction, analytics, and demo-pipeline serving; the PostgreSQL-based model aligns with the academic requirements of relational database design. The two serve different purposes within the same domain.

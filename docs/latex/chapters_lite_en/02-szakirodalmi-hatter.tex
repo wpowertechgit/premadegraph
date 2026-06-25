@@ -1,0 +1,37 @@
+\chapter{Literature Review}
+
+\section{Network Research and Community Structure}
+
+Graphs have long held a central role in modelling social relationships. For gaming communities in particular, a compelling question is to what extent the recurring interactions between players form recognisable structures, sub-communities, bridges, and local patterns. The classic work of Girvan and Newman demonstrated that network edges are not merely connective elements but relationships of varying importance that describe community structure \cite{girvannewman}. Fortunato's comprehensive survey summarises why community detection is a central problem in modern network analysis \cite{fortunato2010}.
+
+Community structure is not an end in itself in this project. It matters because player groups built on repeatedly recurring connections make large networks more interpretable, help separate genuine relationship cores from noise, and provide support for subsequent pathfinding and analytic computations.
+
+\section{Community Detection and Modularity}
+
+The early Python-side population clustering used the NetworkX \textit{greedy\_modularity\_communities} procedure, which is based on the Clauset--Newman--Moore greedy modularity maximisation approach \cite{clauset2004,networkx_greedy}. This was a deliberate trade-off: not the most impressive method, but one that is quickly explainable and reproducible. The current runtime graph state is built independently by the Rust engine from match JSON files and the SQLite database.
+
+The known limitations of modularity optimisation cannot be ignored either: the result of Fortunato and Barthelemy shows that because of the resolution limit, smaller but genuine structures may merge in the interest of the global optimum \cite{fortunato_barthelemy2007}. The \textit{python\_population} clusters should therefore not be treated as ontological ``true communities'' but rather as the best reproducible population partition given the chosen graph, weight model, and heuristic.
+
+\section{Assortativity}
+
+Newman's work describes assortative mixing as a network phenomenon in which connected nodes carry similar or dissimilar properties \cite{newman2003}. This project applies that concept to player performance metrics: the question is not whether high-degree nodes connect to each other, but whether players connected in the graph carry similar \textit{opscore} or \textit{feedscore} values.
+
+The thesis distinguishes two graph modes: \textit{social-path} builds only on positively supported ally connections, while \textit{battle-path} includes all recurring co-play and head-to-head appearances. Assortativity differs between the two modes, and that difference numerically measures the behavioural distinction between the two graph modes.
+
+\section{Player Performance and MOBA Analytics}
+
+The esports analytics of League of Legends and MOBA games more broadly has grown into its own research area. The comprehensive literature review by Mora-Cantallops and Sicilia shows that MOBA games offer a unique combination of competition, cooperation, player experience, and social interaction \cite{moracantallops2019}.
+
+Player performance modelling also appears in the work of Novak and colleagues: performance models developed for professional League of Legends matches indicate that domain-specific variables and structured data processing matter more than general statistical models \cite{novak2022}. This reinforces the rationale for the role-aware scoring approach in the current project.
+
+Sánchez-González and González-Bailón connect the network structure of professional LoL teams to team efficiency \cite{sanchezgonzalezBailon2023}.
+
+\section{Shortest Paths and Heuristic Search}
+
+The classical shortest-path problem was formalised by Dijkstra \cite{dijkstra1959}, while the formal basis of A* search was established by Hart, Nilsson, and Raphael \cite{hart1968}. The exact A* implementation in the Rust layer uses ALT-style lower bounds inspired by the Goldberg--Harrelson approach \cite{goldberg2005}. The goal is a correct and stable runtime suited to the scale of the player network --- not a new algorithm, but a reliable application of existing, tested methods.
+
+\section{Agent-Based Modelling}
+
+Agent-based modelling (ABM) is a simulation paradigm in which individual actors behave according to local rules and macro-level patterns emerge exclusively as the aggregate of those individual decisions. Bonabeau and colleagues applied this framework to both natural and artificial systems \cite{bonabeau2002}.
+
+The Tribal NeuroSim experiment forming the final part of the thesis fits into this paradigm. ABM literature emphasises that results obtained from a simulation should be interpreted as the behaviour of the model, not as a direct representation of reality.

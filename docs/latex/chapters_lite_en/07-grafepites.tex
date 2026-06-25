@@ -1,0 +1,257 @@
+\chapter{Player Network Construction, Search, and Measurements}
+
+\section{Graph Construction}
+
+The primary graph state is produced by the Rust layer. The Python side retains its role in data collection, rapid prototyping, and compatibility graph generation. The \textit{flexset}/\textit{soloq} comparison, assortativity analysis, and graph visualisation all rely on the Rust-based graph model.
+
+\subsection{Edge Aggregation}
+
+The Rust graph model stores ally-side and enemy-side evidence separately for each player pair:
+
+\begin{equation}
+w_{ally}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \in \{1,2\}: u \in T_{m,i} \land v \in T_{m,i}]
+\end{equation}
+\begin{equation}
+w_{enemy}(u,v)=\sum_{m \in M}\mathbf{1}[\exists i \neq j: u \in T_{m,i} \land v \in T_{m,j}]
+\end{equation}
+
+The dominant relation is \textit{ally} if \textit{allyWeight} $\geq$ \textit{enemyWeight}, otherwise \textit{enemy}. The graph results should be interpreted primarily as an associative player graph, not as a literal friendship or hostility network.
+
+\subsection{The Rust Graph State}
+
+The Rust layer builds the graph directly from match JSON files and the player database. \textit{GraphState} stores adjacency lists alongside the \textit{pair\_relations} structure, fast-access player profiles, cluster membership, landmark distances, minimum costs, and snapshot metadata for the active dataset.
+
+\subsection{Filtering and the Research Graph}
+
+The visibility threshold for the research graph is \textit{totalMatches} $\geq 2$: a single shared match is not sufficient for a connection to appear as a stable edge. The primary clustering direction uses the Rust-side deterministic \textit{bounded-ally-groups} logic. Visual cluster sizes are intentionally capped at roughly twenty players.
+
+\subsection{The Graph Artifact Layer}
+
+The Rust graph-export pipeline writes pre-computed, dataset-bound cache artifacts: \textit{manifest.json} records the dataset and the graph-builder version; binary files (\textit{node\_positions.f32}, \textit{edge\_pairs.u32}) are the input files for the Three.js/WebGL layer; \textit{cluster\_meta.json} contains cluster identifiers. This artifact layer is the authoritative source of truth for research visualisation.
+
+\section{Pathfinding and Visualisation}
+
+\subsection{Search Algorithms}
+
+The current Rust runtime supports four algorithms: BFS, Dijkstra, bidirectional search, and A*. The algorithms can run in two edge interpretations: \textit{social-path} traverses ally connections only, \textit{battle-path} traverses all recurring connections.
+
+Edge cost model: in unweighted mode every edge has a fixed cost of $1000$. In weighted mode:
+\begin{equation}
+c(u,v)=\left\lceil \frac{1000}{w(u,v)} \right\rceil
+\end{equation}
+where $w(u,v)$ is the connection strength corresponding to the active path mode.
+
+\begin{table}[H]
+\centering
+\caption{Algorithm comparison in the Pathfinder Lab}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{2.8cm}|X|}
+\hline
+\textbf{Algorithm} & \textbf{Natural fit} & \textbf{Notes in this project} \\
+\hline
+BFS & Unweighted shortest path & Good baseline, easily explained \\
+Dijkstra & Weighted paths & Reference algorithm for cost-based modes \\
+Bidirectional & Larger graph, less directed search & Practical speedup in some cases \\
+A* & Well-formed lower bound & Remains exact in this project, not just a visual heuristic \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{Exact A* and the ALT Heuristic}
+
+The ALT (A* + Landmarks + Triangle inequality) heuristic \cite{goldberg2005} is based on the principle that for any landmark $L$:
+\begin{equation}
+d(u, t) \geq |d(L, t) - d(L, u)|
+\end{equation}
+for every landmark $L$. Landmark distances are pre-computed during \textit{GraphState} construction for every \textit{ModeKey} combination and reused across all search requests. A* produces correct shortest paths; unit tests confirm that A* results match Dijkstra results in all relevant cases.
+
+\subsection{Pathfinder Lab}
+
+The Pathfinder Lab is an interactive testing environment for the four search algorithms: results can be replayed step by step, and the two path modes (social-path, battle-path) can be compared directly.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{pathfinder-replay-panel.png}
+\caption{The Pathfinder Lab replay panel: the path summary, step controls, and visited-node statistics}
+\end{figure}
+
+The following table shows the same player pair under two different search modes:
+
+\begin{table}[H]
+\centering
+\caption{BFS vs. weighted search: same player pair, different notions of proximity}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{2cm}|X|}
+\hline
+\textbf{Algorithm} & \textbf{Metric} & \textbf{Result} & \textbf{Interpretation} \\
+\hline
+BFS & Minimum hops & 3 & Shortest social chain \\
+Dijkstra & Min. weighted cost & 8 & Strongest ally path \\
+A* & Min. weighted cost & 8 & Matches Dijkstra \\
+Bidirectional & Minimum hops & 3 & Matches BFS \\
+\hline
+\end{tabularx}
+\end{table}
+
+The 3-hop path found by BFS structurally exists but passes through weak or single-match connections. Dijkstra in weighted mode avoids these and finds an 8-hop path on which every edge is a recurring ally relationship.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of the four algorithms along the key dimensions}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Algorithm} & \textbf{Optimal?} & \textbf{Memory} & \textbf{Key strength in this project} \\
+\hline
+BFS & Yes (unweighted) & $O(n)$ & Simple baseline, easily explainable replay \\
+Dijkstra & Yes (weighted) & $O(n + m)$ & Reference algorithm, lexicographic tie-breaking \\
+Bidirectional & Yes (unweighted) & $O(n)$ & Potential speedup on clustered graphs \\
+A* & Yes (admissible heuristic) & $O(n)$ & Goal-directed traversal, exact result \\
+\hline
+\end{tabularx}
+\end{table}
+
+\subsection{The 3D Global Visualisation}
+
+The \textit{bird's-eye sphere} provides a visual overview of the entire network. The Rust layer pre-exports all major artifacts, and the frontend only renders.
+
+\begin{table}[H]
+\centering
+\caption{Main artifacts in the bird's-eye export}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.2cm}|X|}
+\hline
+\textbf{File} & \textbf{Role} \\
+\hline
+\textit{manifest.json} & Metadata, counts, scaling and generation info \\
+\textit{node\_meta.json} & Node-level descriptive metadata, frontend mappings \\
+\textit{node\_positions.f32} & Float coordinate array for fast rendering \\
+\textit{node\_metrics.u32} & Compressed numeric node metrics \\
+\textit{edge\_pairs.u32} & Edge endpoint pair array \\
+\textit{edge\_props.u32} & Encoded per-edge properties \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,keepaspectratio]{graph artifact package dataflow.pdf}
+\caption{Data flow of the graph artifact package: the Rust exporter writes binary and JSON layers, Express serves them, and the frontend consumes them in a WebGL renderer}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{graph artifact components.pdf}
+\caption{Structure of the binary and JSON artifact files in the graph-export pipeline}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{birds-eye-current-state.png}
+\caption{3D bird's-eye view of the full network, built on pre-generated Rust artifacts}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{flexset_associative_graph_clusters.png}
+\caption{Denser cluster regions and spatial separation in the global view}
+\end{figure}
+
+\section{Assortativity}
+
+\subsection{Computational Definition}
+
+The implementation computes numeric assortativity as Pearson correlation:
+
+\begin{equation}
+r = \frac{\sum_i (x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum_i (x_i-\bar{x})^2}\sqrt{\sum_i (y_i-\bar{y})^2}}
+\end{equation}
+
+Undirected edges are included by the implementation in both endpoint orientations. Edge weighting by graph mode:
+\begin{equation}
+w(u,v) = \begin{cases}
+\textit{ally\_weight} & \text{if } \textit{social-path} \\
+\textit{total\_matches} & \text{if } \textit{battle-path}
+\end{cases}
+\end{equation}
+
+\subsection{Assortativity Results: flexset}
+
+\begin{table}[H]
+\centering
+\caption{Assortativity: \textit{flexset}}
+\begin{tabular}{|l|l|r|r|}
+\hline
+\textbf{Graph mode} & \textbf{Metric} & \textbf{Correlation} & \textbf{Sample size} \\
+\hline
+\textit{social-path} & \textit{opscore} & 0.2346 & 61\,938 \\
+\textit{social-path} & \textit{feedscore} & 0.1816 & 61\,938 \\
+\textit{battle-path} & \textit{opscore} & 0.1461 & 179\,492 \\
+\textit{battle-path} & \textit{feedscore} & $-0.0108$ & 179\,492 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{f-assortavity-social-path-opfeedscore.png}
+\caption{\textit{flexset} social-path assortativity by \textit{opscore} and \textit{feedscore}. 15\,421 eligible nodes and 61\,938 analysed edges; global coefficient 0.235 for \textit{opscore} and 0.182 for \textit{feedscore}.}
+\end{figure}
+
+\subsection{Assortativity Results: soloq}
+
+\begin{table}[H]
+\centering
+\caption{Assortativity: \textit{soloq}}
+\begin{tabular}{|l|l|r|r|}
+\hline
+\textbf{Graph mode} & \textbf{Metric} & \textbf{Correlation} & \textbf{Sample size} \\
+\hline
+\textit{social-path} & \textit{opscore} & 0.1750 & 37\,976 \\
+\textit{social-path} & \textit{feedscore} & 0.1012 & 37\,976 \\
+\textit{battle-path} & \textit{opscore} & 0.1625 & 84\,393 \\
+\textit{battle-path} & \textit{feedscore} & $-0.0366$ & 84\,393 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{sq-assortavity-social-path-opfeedscore.png}
+\caption{\textit{soloq} social-path assortativity by \textit{opscore} and \textit{feedscore}. 6\,768 eligible nodes and 37\,976 analysed edges; global coefficient 0.175 for \textit{opscore} and 0.101 for \textit{feedscore}.}
+\end{figure}
+
+\subsection{Interpretation}
+
+Positive assortativity along \textit{opscore} in \textit{social-path} mode appears in both datasets, indicating that in the graph built on ally connections, the performance profiles of connected players are not randomly mixed. The behaviour of \textit{feedscore} is much more sensitive to graph mode: a moderate positive signal appears on both datasets in social-path mode, but it falls close to zero in battle-path mode.
+
+\textit{opscore} remains positive across all tested modes while \textit{feedscore} does not; this is a strength of the composite metric over simpler death-centred formulas.
+
+\section{Betweenness Centrality}
+
+\subsection{The Brandes Algorithm}
+
+The Brandes algorithm \cite{brandes2001} reduces the traditional $O(n^3)$ betweenness computation to $O(nm)$. For each source node: run Dijkstra/BFS, then in the back-propagation step:
+
+\begin{equation}
+\delta[s][v] \mathrel{+}= \frac{\sigma[s][v]}{\sigma[s][w]} \cdot (1 + \delta[s][w])
+\end{equation}
+
+In weighted mode, edge cost is:
+\begin{equation}
+c(u,v) = \left\lceil \frac{10^6}{\max(1, w(u,v))} \right\rceil
+\end{equation}
+
+\subsection{Parallel Execution}
+
+The Rust \textit{rayon} library enables automatic work-stealing parallelism. The centrality module splits the source-node set into $k = \min(n, 4 \cdot \text{thread count})$ equal-sized chunks. Deterministic ordering of source nodes and fixed chunk boundaries guarantee that identical input always produces identical output.
+
+\subsection{Result}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.98\textwidth,height=0.68\textheight,keepaspectratio]{brandes-result.png}
+\caption{Brandes betweenness centrality result screen. 15\,421 runtime nodes; 1\,716 projected nodes and 2\,766 analysed edges. Parallel run: 6.38 ms; serial baseline: 60.85 ms; speedup: 9.54×; 16 Rayon threads; serial--parallel delta: 0.000000.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{graph-brandes-brokerinyellow.png}
+\caption{Broker players identified by betweenness centrality, highlighted in yellow in the graph.}
+\end{figure}
