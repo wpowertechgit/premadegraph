@@ -29,7 +29,7 @@ A \textbf{Rust futtatókörnyezet} az autoritás egyetlen forrása: a tick-ciklu
 
 Ez a felosztás a böngészőalapú v2 prototípus közvetlen tanulsága: ahol a szimulációs állapot az UI-réteghez volt csatolva, ghost war jelenség, memóriaszivárgás és nem-determinisztikus viselkedés keletkezett.
 
-A ghost war konkrétan azt jelentette, hogy két törzs egyidejűleg különböző háborús állapotot észlelt: az egyik már befejezettnek tekintette az összecsapást, a másik még folyamatban lévőként kezelte. Az ok az volt, hogy az UI tartotta a szimulációs állapotot, és HTTP-kérések között az állapot szétcsúszhatott. A jelenlegi architektúrában minden döntés a Rust binárisban születik; a MonoGame kliens csak a legutóbb kapott frame-et rendereli, így nincs szétcsúszás, és a szimuláció bármely pillanatban reprodukálható ugyanabból a kezdőállapotból.
+A ghost war konkrétan azt jelentette, hogy a befejezett és a halott törzsekhez tartozó háborúk soha nem kaptak lezárt státuszt: mivel nem létezett strukturált háborúlezárási esemény, a rendszer ezeket továbbra is aktívként tartotta nyilván, és a számuk a memóriában halmozódott -- a korai prototípus végállapotában egyetlen élő törzs állt szemben több mint száz aktív szellemháborúval. A jelenlegi architektúrában minden döntés a Rust binárisban születik, és a törzs felszámolása atomikusan zárja le az összes aktív háborút (\textit{WarCancelled}), így szellemháborúk nem keletkeznek; a MonoGame kliens csak a legutóbb kapott frame-et rendereli, és a szimuláció bármely pillanatban reprodukálható ugyanabból a kezdőállapotból.
 
 \section{FrameV1 bináris protokoll}
 

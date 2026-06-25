@@ -50,7 +50,7 @@ Eseményes stdout log & Backend- és frontend-oldali állapotkövetés támogat�
 \end{tabularx}
 \end{table}
 
-A fenti mechanizmusok nem csak technikai részletek: a teljes \textit{flexset} (~4981 meccs) gyűjtése fejlesztési API-kulccsal napokig tartott, megszakításokkal. A fájlalapú kihagyás és az újraindíthatóság nélkül a korpusz nem lett volna összerakható folyamatosan futó szerver nélkül. A collector tervezési döntése tehát közvetlen válasz az API korlátaira: iterált, állapotőrző batch-futtatás, nem egymenetes letöltés. Egy-egy éjszakai futtatás után a kollekció pontosan ott folytatódott, ahol abbahagyta.
+A fenti mechanizmusok nem csak technikai részletek: a teljes \textit{flexset} (közel 4980 meccs) gyűjtése fejlesztési API-kulccsal napokig tartott, megszakításokkal. A fájlalapú kihagyás és az újraindíthatóság nélkül a korpusz nem lett volna összerakható folyamatosan futó szerver nélkül. A collector tervezési döntése tehát közvetlen válasz az API korlátaira: iterált, állapotőrző batch-futtatás, nem egymenetes letöltés. Egy-egy éjszakai futtatás után a kollekció pontosan ott folytatódott, ahol abbahagyta.
 
 \section{A flexset és a soloq gyűjtési stratégiájának összehasonlítása}
 

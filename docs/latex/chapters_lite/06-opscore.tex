@@ -93,9 +93,15 @@ A_i = \min\!\left(4{,}5,\; A_i^{\text{alap}} + \alpha_i \cdot \gamma \cdot \max\
 \text{opscore} = \min\!\left(10,\; \sum_{i=1}^{5} A_i\right)
 \end{equation}
 
-\subsection{Szélső eset: a Yorick-carry}
+\subsection{Kivételes teljesítmények és szélső esetek}
 
-A modell legérdekesebb szélső esete az atipikus carry teljesítmény. Egy \textit{Yorick} főszerepű játékos, aki 15 ölést és 2 halált produkál egy 35 perces meccsen, a \textit{Combat Impact} és \textit{Risk Discipline} artifactokban messze kiemelkedő pontszámot kap -- a logaritmikus bővítő tag pontosan erre az esetre lett kalibrálva. Ugyanez a meccs egy normál ADC-től más képet mutatna: az ADC elvárásai magasabbak (több farm, több sebzés), ezért az $r$ arány alacsonyabb lenne. Az opscore nem abszolút értékeket mér, hanem szerepkörre vetített arányt. A részletes szélső esetek és mintanagysági korlátok a kibővített verzióban találhatók \cite{premadegraph-full}.
+A modell két jellegzetes szélső eseten keresztül szemléltethető.
+
+\paragraph{Elité carry meccs.}
+A fejlesztés során egy kiemelkedő TOP Quinn meccset vizsgáltak (kiugró ölésszám és magas assist), ahol a korábbi modell nyomás alá kerülhetett a kemény artifact-plafonok miatt. A jelenlegi modellben a \textit{Combat Impact} és a \textit{Map and Objective Control} artifactok logaritmikus bővítője lehetővé teszi, hogy ezek az értékek a nominális 2 pont fölé menjenek; az összesített \textit{opscore} a 10-es plafonig futott. A halálok ára nem tűnik el: a \textit{Risk Discipline} artifact mérsékelten bünteti őket, de az elité carry összteljesítménye elismert marad.
+
+\paragraph{Split-pusher és struktúracarry.}
+Egy \textit{Yorick} főszerepű játékos, aki szándékosan kerüli a csatatereket és struktúrákon keresztül nyer, tipikusan alacsony \textit{Team Enablement} értékkel és nem kiemelkedő KDA-val rendelkezik. A \textit{Map and Objective Control} artifact dinamikus dominancia-újrasúlyozása pontosan erre az esetre van kalibrálva: ha az Objective Conversion drámaian meghaladja a Vision Control értékét, az artifact súlyt vált az objektívumszerzés felé, és az alacsony csapaterősítő szám nem torzítja indokolatlanul a végeredményt, amennyiben a win condition-beváltás ténylegesen megvalósult. A részletes szélső esetek és mintanagysági korlátok a kibővített verzióban találhatók \cite{premadegraph-full}.
 
 \section{Az opscore szerepe a rendszerben}
 
