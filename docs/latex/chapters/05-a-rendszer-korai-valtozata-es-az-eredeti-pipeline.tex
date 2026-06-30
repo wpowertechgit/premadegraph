@@ -31,9 +31,21 @@ Az alábbi komponensdiagram a teljes rendszer magas szintű szerkezetét mutatja
 \endgroup
 \special{papersize=210mm,297mm}
 
-\section{Technológiai munkamegosztás}
+\section{Technológiai munkamegosztás és stack-indoklás}
 
 A Python kiváló az adatgyűjtéshez, a JSON-feldolgozáshoz és a hálózatépítés gyors iterációjához. A Rust sokkal alkalmasabb a nagyméretű, ismételten meghívott gráfalgoritmusokhoz, ahol fontos a determinisztikus viselkedés, a teljesítmény és a strukturált export. Az SQLite kis projektméret mellett is kényelmesen biztosítja a perzisztenciát, a React pedig jó eszköz a demo- és elemzőfelületek építéséhez. A Python és Rust közti munkamegosztás éles: Python megtartja a gyors adatmanipuláció előnyeit, Rust a stabil futásidejű gráfmagot kapta. A kettő közé a Node/Express réteg került, amely szerződéses API-határként működik.
+
+Az alábbiakban rétegenkénti bontásban szerepel, miért lett az adott technológia a végső választás, milyen alternatívák merültek fel, és mik a főbb hátrányok.
+
+\textbf{Python (adatgyűjtés, szkriptréteg).} Gazdag ökoszisztéma (Riot API kliens, NetworkX, pandas), rövid iterációs ciklus, könnyen módosítható gyűjtési logika. Alternatíva: Go vagy Ruby szkriptekkel gyorsabb indulás lett volna lehetséges, de a tudományos ökoszisztéma (NetworkX, scipy) Pythonhoz kötött. Hátránya: gyengébb teljesítmény nagy gráfműveleteknél -- ezt a Rust réteg váltja ki.
+
+\textbf{SQLite (perzisztencia).} Szervermentes, önálló fájl, könnyű verziókezelés, a Python és a Rust egyaránt natívan kezeli. Alternatíva: PostgreSQL erősebb párhuzamos írást és komplex lekérdezéseket adott volna -- de a projekt egyszerre egy felhasználós, lokálisan futtatható rendszer. A SQLite kompromisszuma ennél a hatókörnél kedvezőbb \cite{sqlite}. Hátránya: egyidejű írás nincs, és a séma módosítása migrációt igényel.
+
+\textbf{Node.js / Express (API-héj).} A frontend (React) és a backend ugyanazon ökoszisztémán belül él; az Express könnyen proxyzza a Rust-binárist és a Python-szkripteket. Alternatíva: FastAPI (Python) logikusabb lett volna a Python-réteg mellé, de Node jobb aszinkron I/O-t adott a Riot API relay-ekhez, és a React/Vite dev-flow integrációja egyszerűbb lett. Hátránya: CPU-intenzív számítások nem a Node-ban futnak.
+
+\textbf{Rust (gráfanalitika, útvonalkeresés).} Nulla futásidejű overhead, biztonságos memóriakezelés, Rayon párhuzamosítás, egzakt determinizmus \cite{jung2020,rustlang}. Alternatíva: C++ ugyanolyan teljesítményt adna, de a Rust borrow checker megelőzi az érvénytelen iterátor-hibákat, amelyek gráf-traversal kódban gyakoriak. Hátránya: meredekebb tanulási görbe, hosszabb fordítási idő.
+
+\textbf{React / Vite (frontend).} Komponensalapú UI, nagy ökoszisztéma (MUI, Three.js), gyors hot reload. Alternatíva: Vue vagy Svelte kisebb bundle-t adna, de a MUI és a Three.js React-integráció érettebb. Hátránya: overkill lenne egy egyoldalas demóhoz; a projekt több vizualizációs oldalt igényel, ami igazolja a frameworköt.
 
 \subsection{A C\# böngésző különállása}
 
@@ -41,9 +53,12 @@ A C\# / ASP.NET Core adatbázis-böngésző különálló eszközként él, nem 
 
 \subsection{Elvetett architekturális alternatívák}
 
+Az \ref{tab:ext-rejected-approaches}. táblázat a főbb elvetett architektúrális megközelítéseket és elutasításuk indoklását foglalja össze.
+
 \begin{table}[H]
 \centering
 \caption{Fontos architekturális alternatívák és elutasításuk oka}
+\label{tab:ext-rejected-approaches}
 \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{3.6cm} X}
 \toprule
 \textbf{Alternatíva} & \textbf{Rövid előny} & \textbf{Miért nem ez lett a végső irány?} \\
@@ -70,20 +85,20 @@ Az architektúra fejlődése három jól elkülöníthető fázisban írható le
     \item \textbf{Kutatási platform-fázis}: a Rust analitika, a multi-dataset modell és a külön research oldalak megjelenésével a projekt már nem csak vizualizációs eszköz, hanem kísérleti környezet lett.
 \end{enumerate}
 
-\section{Több-adatkészletes architektúra}
+\section{Több-datasetes architektúra}
 
-A korábbi, egyetlen adatbázisra és egyetlen meccsmappára épülő modell helyett a jelenlegi rendszer már több, egymástól független adatkészletet támogat. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON könyvtárral és cache könyvtárral.
+A korábbi, egyetlen adatbázisra és egyetlen meccsmappára épülő modell helyett a jelenlegi rendszer már több, egymástól független datasetet támogat. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON könyvtárral és cache könyvtárral.
 
 A regiszterben négy dataset szerepel. A \textit{default} az eredeti, vegyes queue-tartalmú alapkorpusz, amely a korai fejlesztési előtörténetet őrzi, kutatási célra nem alkalmas. A \textit{smoke-test-dataset} a pipeline gyors infrastruktúra-validálására szolgál, anélkül hogy a főadatokat érintené. A \textit{flexset} EUNE Master$+$ Flex Queue meccsekből áll, kifejezetten premade és ismétlődő csapattársi kapcsolatok tanulmányozására. A \textit{soloq} EUNE Master$+$ Solo/Duo Queue meccsekből áll kontroll- és teljesítmény-alapvonal céljából; az aktív dataset jelenleg a \textit{soloq}. A \textit{flexset} és a \textit{soloq} egymással párban értelmezhetők: az előbbi a premade és csoportos játékhoz kötődő társas jeleket erősíti, az utóbbi ugyanannak a szervernek egyénibb, kevésbé premade-fókuszú meccstörténetét képviseli.
 
 \begin{table}[H]
 \centering
-\caption{A több-adatkészletes architektúra logikai elemei}
+\caption{A több-datasetes architektúra logikai elemei}
 \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm}X}
 \toprule
 \textbf{Elem} & \textbf{Szerep} \\
 \midrule
-Dataset registry & Az elérhető adatkészletek metaadatait és az aktív dataset kijelölését tárolja \\
+Dataset registry & Az elérhető datasetek metaadatait és az aktív dataset kijelölését tárolja \\
 Raw database & A gyűjtéshez és kezdeti beolvasáshoz szükséges játékosadatok \\
 Refined database & A normalizált pontszámokat, klasztereket és származtatott mezőket tartalmazza \\
 Matches directory & A tényleges meccs-JSON állományok helye \\

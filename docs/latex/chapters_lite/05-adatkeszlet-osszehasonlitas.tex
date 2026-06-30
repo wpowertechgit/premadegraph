@@ -1,6 +1,6 @@
 \chapter{A két adatkészlet összehasonlítása: flexset és soloq}
 
-Az elemzés két eltérő queue-típusból gyűjtött adatkészletre épül: a Flex Queue és a Solo/Duo Queue eltérő matchmaking-mechanikája eleve különböző gráfstruktúrát eredményez. Ha ugyanazt a pipeline-t mindkét dataseten lefuttatjuk, a kapott eltérés közvetlenül a queue-mechanikából vezethető le -- nem modellparaméter-különbségből.
+Az elemzés két eltérő queue-típusból gyűjtött adatkészletre épül: a Flex Queue és a Solo/Duo Queue eltérő matchmaking-mechanikája eleve különböző gráfstruktúrát eredményez. Ha ugyanazt a pipeline-t mindkét dataseten lefuttatjuk, a különbség nem modellparaméter, hanem queue-mechanika.
 
 \section{A két dataset szerkezeti különbségei}
 
@@ -8,9 +8,12 @@ A Flex Queue (440-es queue ID) csapatszedést tesz lehetővé: játékosok 2--5 
 
 A Solo/Duo Queue (420-as queue ID) legfeljebb két fős premade-et engedélyez. Az ally/enemy arány (65.24\% ally a \textit{soloq}-on) alacsonyabb, ami összhangban van azzal, hogy a véletlenszerűbb meccsek kevesebb domináns szövetségesi kapcsolatot hoznak létre.
 
+Az \ref{tab:dataset-sizes}. táblázat a két dataset alapvető méretmutatóit tartalmazza.
+
 \begin{table}[H]
 \centering
 \caption{A két dataset alapvető méretei}
+\label{tab:dataset-sizes}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|r|r|}
 \hline
 \textbf{Mutató} & \textbf{flexset} & \textbf{soloq} \\
@@ -35,9 +38,12 @@ A \textit{flexset} átlagos klasztermérete (3,750) több mint kétszerese a \te
 
 \section{Összefoglalás}
 
+Az \ref{tab:dataset-summary}. táblázat a két dataset összehasonlítását foglalja össze a legfontosabb dimenziók mentén.
+
 \begin{table}[H]
 \centering
 \caption{A két dataset összehasonlításának összefoglalója}
+\label{tab:dataset-summary}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|X|X|}
 \hline
 \textbf{Dimenzió} & \textbf{flexset} & \textbf{soloq} \\

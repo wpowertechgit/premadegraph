@@ -199,9 +199,12 @@ ahol $w(u,v)$ az adott gráfmódnak megfelelő kapcsolaterősség (\textit{allyW
 
 A Rust \textit{rayon} könyvtára automatikus munkalopásos párhuzamosságot tesz lehetővé. A centralitás-modul a forráscsomópontok halmazát $k = \min(n, 4 \cdot \text{szálak száma})$ egyenlő méretű csomóponthalmazra osztja; minden halmazt egy párhuzamos rayon-feladatban dolgoz fel, ahol a lokális $\delta$ vektor független a többi résztől; az összegzés után a részeredmény-vektorok determinisztikusan összeadódnak. A forráscsomópontok rendezése és a chunk-határok rögzítése garantálja, hogy azonos input esetén mindig ugyanaz a kimenet; ezt a tesztcsomag explicit módon ellenőrzi.
 
+A \ref{fig:parallel-brandes-activity}. ábra a párhuzamos Brandes-futtatás teljes aktivitásdiagramját mutatja, beleértve a forráscsomópontok elosztását és a determinisztikus redukciókat.
+
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{parallel brandes activity diagram.pdf}
+\includegraphics[width=\textwidth,height=0.88\textheight,keepaspectratio]{parallel brandes activity diagram.pdf}
+\label{fig:parallel-brandes-activity}
 \caption{A párhuzamos Brandes-futtatás aktivitásdiagramja a \texttt{parallel-brandes.puml} forrás alapján. A folyamat a \texttt{GraphState} betöltésével és a forráscsomópontok determinisztikus rendezésével indul, majd párhuzamos módban fix chunkokra bontja a forrásokat. Minden Rayon worker saját lokális tömbökkel futtat súlyozott Brandes-bejárást, \texttt{1/strength} élköltséggel; a lokális centralitásvektorok chunk-sorrendben, determinisztikusan redukálódnak globális eredménnyé. Ha soros baseline is készül, a rendszer \texttt{max\_abs\_delta} értékkel ellenőrzi a párhuzamos és soros kimenet egyezését, majd normalizál, rangsorol és JSON választ ad vissza a Node.js hídnak.}
 \end{figure}
 
@@ -259,9 +262,12 @@ Az asszortativitási szignifikanciateszt (\textit{AssortativitySignificanceReque
 
 A dolgozat elkészítésekor a rendszer aktuális állapota közvetlen futtatás alapján is ellenőrzésre került: a Rust futtatókörnyezet sikeresen lefuttatta az \textit{assortativity} és \textit{betweenness-centrality} parancsokat, a dataset-regiszter olvasható volt, a frontend analitikai útvonalak fizikailag jelen voltak. A verifikáció nem teljes funkcionalitásteszt, hanem tézisszintű ellenőrzés: minden olyan rétegről legyen közvetlen bizonyíték, amelyre a dolgozat állításokat épít \cite{sandve2013}.
 
+A \ref{fig:validation-pipeline}. ábra a dolgozati bizonyítékok teljes validációs pipeline-ját mutatja be, a dataset-regisztertől a PDF-fordításig.
+
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{validation_pipeline.pdf}
+\includegraphics[width=\textwidth,height=0.88\textheight,keepaspectratio]{validation_pipeline.pdf}
+\label{fig:validation-pipeline}
 \caption{A dolgozati bizonyítékok validációs pipeline-ja a \texttt{thesis-validation-pipeline.puml} forrás alapján. A diagram először a validációs bemeneteket mutatja: dataset-regiszter, meccs-JSON állományok, \texttt{playersrefined.db} és Graph V2 artifactok. Ezután párhuzamos ellenőrzési parancsokra bontja a folyamatot: Rust \texttt{cargo check}/\texttt{cargo test}, asszortativitás, Brandes-betweenness, Graph V2 export, frontend build és dolgozati PDF-fordítás. A kimeneti csoportok külön ellenőrzik a dataset-készültséget, a gráfartifactok érvényességét, a Rust analitikák tartomány- és deltafeltételeit, a frontend útvonalak jelenlétét és a PDF build sikerét.}
 \end{figure}
 

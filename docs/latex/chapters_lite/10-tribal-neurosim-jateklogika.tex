@@ -2,13 +2,15 @@
 
 \section{Neurális döntéshozatal és klaszter-priorok}
 
-Minden szimulált törzs egy neurális hálózatot hordoz, amelynek felépítése a NEAT (\textit{NeuroEvolution of Augmenting Topologies}) paradigmáját követi \cite{stanleymiikkulainen2002}. A rendszer \textit{nem alkalmaz visszaterjesztést}: a törzs nem kap tanítójelet valós League of Legends meccsel kapcsolatban. Ehelyett a fitnesz a szimulációs folyamat kimenetéből következik -- túlélési időből, megszerzett területből, populációméretből és elért polity-szintből --, és minden ezer tickenként kerül kiértékelésre \cite{holland1992}.
+Minden szimulált törzs egy neurális hálózatot hordoz, amelynek felépítése a NEAT (\textit{NeuroEvolution of Augmenting Topologies}) paradigmáját követi \cite{stanleymiikkulainen2002}. A rendszer \textit{nem alkalmaz visszaterjesztést}: a törzs nem kap tanítójelet egy valódi League of Legends-meccsel kapcsolatban. Ehelyett a fitnesz a szimulációs folyamat kimenetéből következik (túlélési időből, megszerzett területből, populációméretből és elért polity-szintből), és minden ezer tickenként kerül kiértékelésre \cite{holland1992}.
 
 Minden törzs inicializálásakor valódi meccselőzményekből levezetett klaszterszintű teljesítménymutatókat kap iniciális genomszekvenciaként: \textbf{A\_combat}, \textbf{A\_resource}, \textbf{A\_map\_objective}, \textbf{A\_risk}, \textbf{A\_team}. Az inicializálás során minden törzshöz egy \textit{Genome::new(11,~7)} struktúra jön létre 11~bemeneti csomóponttal, 7~kimeneti csomóponttal és 84~kezdeti kapcsolattal.
 
 \section{A 11 bemeneti jel és a 7 kimeneti hajtóerő}
 
-A genomból minden tickben következtetés indul el: a neurális hálózat 11 bemeneti jelet olvas be, és 7 kimeneti hajtóerőt ad vissza. A bemenetek egy része a törzs pillanatnyi állapotát tükrözi (élelmiszer, populáció, veszély), másik része a klaszterből örökölt, generációs határpontokon lassan mutálódó teljesítményprofil. A kimenetek közvetlenül a törzs viselkedési döntéseit modulálják: háborúindítás, terjeszkedés, szövetségkötés vagy visszavonulás.
+A genomból minden tickben következtetés indul el: a neurális hálózat 11 bemeneti jelet olvas be, és 7 kimeneti hajtóerőt ad vissza. A bemenetek egy része a törzs pillanatnyi állapotát tükrözi (élelmiszer, populáció, veszély), a másik része pedig a klaszterből örökölt, generációs határpontokon lassan mutálódó teljesítményprofil. A kimenetek közvetlenül a törzs viselkedési döntéseit modulálják: háborúindítás, terjeszkedés, szövetségkötés vagy visszavonulás.
+
+Az \ref{tab:neurosim-inputs} táblázat a neurális hálózat 11 bemeneti jelét mutatja be, megkülönböztetve a dinamikus (tick-szintű) és az invariáns (generációs) jeleket.
 
 \begin{table}[h]
   \centering
@@ -35,6 +37,8 @@ A genomból minden tickben következtetés indul el: a neurális hálózat 11 be
     \small{* Csak generációs határpontokon (1000 tickenként) frissül, mutáció révén.}
   \end{flushleft}
 \end{table}
+
+Az \ref{tab:neurosim-outputs} táblázat a 7 kimeneti hajtóerőt és az aktiválási küszöbértékeket tartalmazza.
 
 \begin{table}[h]
   \centering
@@ -72,11 +76,13 @@ ahol $r_i \in [0,1]$ az $i$-edik törzs relatív fitnesz-rangszáma a populáci�
 
 Fuzionálás feltétele mindkét félnél: \textit{goal\_drive}~$> 0{,}55$, egyik sem tartózkodik \textit{AtWar} állapotban, és \textit{isolation}~$< 0{,}75$. A fuzionálásból keletkező örökös genomja fitnesz-súlyozott keverék: \textit{Genome::inherit\_from(parent\_a, parent\_b, fitness\_a, fitness\_b)}.
 
-Az F2 korai futtatás (599 törzs, Flexset, 1200 tick) kimeneti aktivitás- és fitnesz-differenciáció adatai, valamint a liveness-fix részletei a kibővített verzió 14. fejezetében találhatók \cite{premadegraph-full}.
+Az első kísérleti futtatás (599 törzs, Flexset, 1200 tick) kimeneti aktivitás- és fitnesz-differenciáció adatai, valamint a liveness-fix részletei a kibővített verzió 14. fejezetében találhatók \cite{premadegraph-full}.
+
+A \ref{fig:genome-graph} ábra a klaszter-szintű teljesítménymutatókból felépített kezdeti genomszekvenciát vizualizálja.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth,keepaspectratio]{assets/diagrams/genome_graph.png}
-\caption{A genomgráf: a PremadeGraph klaszter-szintű teljesítménymutatóiból felépített iniciális genomszekvencia vizualizációja. Az öt tengely (\textit{A\_combat}, \textit{A\_resource}, \textit{A\_map\_objective}, \textit{A\_risk}, \textit{A\_team}) a neurális hálózat invariáns bemeneti jeleit alkotja.}
+\includegraphics[width=\textwidth,keepaspectratio]{assets/diagrams/genome_graph.png}
+\caption{A genomgráf: a PremadeGraph klaszter-szintű teljesítménymutatóiból felépített kezdeti genomszekvencia vizualizációja. Az öt tengely (\textit{A\_combat}, \textit{A\_resource}, \textit{A\_map\_objective}, \textit{A\_risk}, \textit{A\_team}) a neurális hálózat invariáns bemeneti jeleit alkotja.}
 \label{fig:genome-graph}
 \end{figure}

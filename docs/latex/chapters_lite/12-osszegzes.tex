@@ -2,33 +2,33 @@
 
 \section{Mit mutat be a dolgozat?}
 
-A dolgozat egy olyan rendszert mutat be, amely valós League of Legends mérkőzésadatokból indul ki, majd ezekből játékosprofilokat, kapcsolatokat, gráfokat, klasztereket, elemzési eredményeket és végül egy szimulációs kísérletet épít. A rendszer ölés- és halálszámokon túl azt is rögzíti, hogy egy játékos kikkel kerül egy meccsbe, kikkel kerül szembe, milyen ismétlődő kapcsolatok rajzolódnak ki körülötte, és ezekből milyen nagyobb hálózati minták olvashatók ki.
+A dolgozat egy olyan rendszert mutat be, amely valós League of Legends-mérkőzésadatokból indul ki, majd ezekből játékosprofilokat, kapcsolatokat, gráfokat, klasztereket, elemzési eredményeket és végül egy szimulációs kísérletet épít. A rendszer a játékosok ölés- és halálszámain túl azt is rögzíti, hogy egy játékos kikkel kerül egy meccsbe, kikkel kerül szembe, milyen ismétlődő kapcsolatok rajzolódnak ki körülötte, és ezekből milyen nagyobb hálózati minták olvashatók ki.
 
-Ha valamit le kellene szűkíteni a projekt lényegéből, az inkább az egész lánc megléte, mint bármelyik egyedi komponens. Egy Dijkstra-implementáció vagy egy React-oldal önmagában szokásos projekt. A rendszer érdekessége az összekötöttség: nyers meccsadatoktól gráfon, klasztereken és Rust-analitikán át eljut egy reprodukálható szimulációs kísérletig, és minden lépés ellenőrizhető.
+Ha valamit le kellene szűkíteni a projekt lényegéből, az inkább az egész lánc megléte, mint bármely egyedi komponensé. Egy Dijkstra-implementáció vagy egy React-oldal önmagában egy szokásos projekt. A rendszer érdekessége az összekötöttség: a nyers meccsadatoktól a gráfon, klasztereken és Rust-analitikán át eljut egy reprodukálható szimulációs kísérletig, és minden lépés ellenőrizhető.
 
 \section{A fő eredmények}
 
-Az adatgyűjtési réteg két eltérő queue-típust kezel párhuzamosan. A \textit{flexset} és a \textit{soloq} külön kezelése azért fontos, mert a két queue nem ugyanazt a jelenséget méri: a Flex Queue alkalmasabb ismétlődő kapcsolati minták vizsgálatára, a SoloQ kontrollként és egyéni teljesítményprofilként értelmezhető.
+Az adatgyűjtési réteg két eltérő queue-típust kezel párhuzamosan. A \textit{flexset} és a \textit{soloq} külön kezelése azért fontos, mert a két queue nem ugyanazt a jelenséget méri: a Flex Queue alkalmasabb az ismétlődő kapcsolati minták vizsgálatára, a SoloQ pedig kontrollként és egyéni teljesítményprofilként értelmezhető.
 
-Az \textit{opscore} és \textit{feedscore} metrikák szerepkörérzékeny pontszámokat adnak. Nem tökéletes igazságmérők, de lehetővé teszik, hogy a teljesítménymutatók gráfanalitikai bemenetként is használhatók legyenek.
+Az \textit{opscore} és \textit{feedscore} metrikák szerepkör-érzékeny pontszámokat adnak. Nem tökéletes igazságmérők, de lehetővé teszik, hogy a teljesítménymutatók gráfanalitikai bemenetként is használhatók legyenek.
 
 A \textit{flexset} gráf szerkezete core-periphery jellegű: vannak sűrűbb, erősebben összekapcsolt magrészek és sok lazább, kisebb periférikus csoport. Ez a queue-mechanikából következik.
 
 Az asszortativitási elemzés az \textit{opscore} esetében pozitív kapcsolatot mutat (social-path: 0,235): az összekapcsolt játékosok hasonlóbb teljesítményprofilt hordoznak, mint amit véletlenszerű kapcsolatoknál várnánk.
 
-A Rust-alapú algoritmikus réteg -- útvonalkeresés, asszortativitás, betweenness-centralitás -- determinisztikus és újrafuttatható: ugyanabból a bemeneti adatból mindig ugyanaz az eredmény jön ki.
+A Rust-alapú algoritmikus réteg (útvonalkeresés, asszortativitás, betweenness centralitás) determinisztikus és újrafuttatható: ugyanabból a bemeneti adatból mindig ugyanaz az eredmény jön ki.
 
 \section{A Tribal NeuroSim szerepe}
 
 A Tribal NeuroSim átviteli kísérlet: azt vizsgálja, hogy a gráfból és a klaszterekből kinyert teljesítményprofilok átvihetők-e egy evolúciós, többügynökös szimuláció kezdeti paramétereibe.
 
-A négy futtatás alapján a Flex Queue-ból származó profilok egységesebb viselkedést mutattak: mindkét vizsgált seed mellett hasonló, Warband/Combat jellegű győztes archetípus jelent meg. A SoloQ futtatások változékonyabbak voltak -- eltérő seedek mellett eltérő győztes profilok alakultak ki. A flexset-priorok tehát egységesebb kimenetet adtak, a soloq-priorok változékonyabbat -- azonos szimulációs szabályrendszer mellett.
+A négy futtatás alapján a Flex Queue-ból származó profilok egységesebb viselkedést mutattak: mindkét vizsgált seed mellett hasonló, Warband/Combat jellegű győztes archetípus jelent meg. A SoloQ futtatások változékonyabbak voltak, eltérő seedek mellett eltérő győztes profilok alakultak ki. A flexset-priorok tehát egységesebb kimenetet adtak, a soloq-priorok változékonyabbat, azonos szimulációs szabályrendszer mellett.
 
 \section{Visszatekintés: ami jól működött}
 
-Visszatekintve a legjobb döntés az volt, hogy a rendszer nem erőltetett mindent egyetlen technológiába. A Python gyors adatgyűjtésre és kísérletezésre maradt, a Rust ott vette át a szerepet, ahol teljesítmény és determinizmus kellett, a Node/Express és a React pedig bemutathatóvá tette az egészet. Ha mindezt egyetlen nyelvre kellett volna szűkíteni, valamelyik réteg szenvedett volna miatta.
+Visszatekintve a legjobb döntés az volt, hogy a rendszer nem erőltette mindent egyetlen technológiába. A Python gyors adatgyűjtésre és kísérletezésre maradt, a Rust ott vette át a szerepet, ahol teljesítmény és determinizmus kellett, a Node/Express és a React pedig bemutathatóvá tette az egészet. Ha mindezt egyetlen nyelvre kellett volna szűkíteni, valamelyik réteg szenvedett volna miatta.
 
-A projekt erőssége az összefüggő lánc: a nyers API-adatoktól a normalizált játékosprofilokon, a gráfépítésen és a klaszterezésen át egészen az analitikai eredményekig minden lépés ellenőrizhető és újrafuttatható. Az asszortativitás, a betweenness centralitás és a core-periphery értelmezés nem csak vizualizáció -- valódi kérdéseket tesznek fel a hálózatról.
+A projekt erőssége az összefüggő lánc: a nyers API-adatoktól a normalizált játékosprofilokon, a gráfépítésen és a klaszterezésen át egészen az analitikai eredményekig minden lépés ellenőrizhető és újrafuttatható. Az asszortativitás, a betweenness centralitás és a core-periphery értelmezés nemcsak vizualizációt tesz lehetővé, hanem valódi kérdéseket is felvet a hálózatról.
 
 \section{Korlátok és nyitott kérdések}
 
@@ -36,17 +36,17 @@ Az eredmények értelmezésekor néhány korlátot érdemes szem előtt tartani.
 
 Az adatkészlet nem véletlenszerű mintavétel. A seed-játékosok kiválasztása, a premade-probe mechanizmus és a queue-típus együtt meghatározzák, milyen játékospopuláció kerül be a gráfba. A kapott szerkezet az adott gyűjtési stratégia terméke, nem általánosan érvényes EUNE Master+ leírás.
 
-Az opscore és feedscore hasznos és értelmezhető mutatók, de nem külső igazságmérők. A szerepkör-elvárások és a görbe paraméterei a modell részei -- más konstrukciós döntéssel más eredményt kapnánk.
+Az opscore és feedscore hasznos és értelmezhető mutatók, de nem külső igazságmérők. A szerepkör-elvárások és a görbe paraméterei a modell részei; más konstrukciós döntéssel más eredményt kapnánk.
 
-A gráfban az ellenség-kapcsolat sem egyenlő valódi konfliktussal. Az ismételt szembekerülés jöhet a matchmaking MMR-sávjából, azonos napszakból, vagy abból, hogy a Master+ Flex Queue aktív játékospoolja eleve szűk. Ezért maradt az előjeles gráf kísérleti opciónak.
+A gráfban az ellenség-kapcsolat sem egyenlő valódi konfliktussal. Az ismételt szembekerülés jöhet a matchmaking MMR-sávjából, az azonos napszakból vagy abból, hogy a Master+ Flex Queue aktív játékospoolja eleve szűk. Ezért maradt az előjeles gráf kísérleti opciónak.
 
 A temporal consistency és a community cohesion vizsgálatok kiestek a jelenlegi scope-ból. A kiesett vizsgálatok nem érdektelenek; az adatok és a módszer azonban nem tette lehetővé a védhető állításokat.
 
 \section{Zárszó}
 
-A projekt végeredménye egyszerűen megfogalmazható: kompetitív játékadatokból lehetséges olyan rendszert felépíteni, amely szoftvermérnöki szempontból is megállja a helyét és kutatói kérdéseket is tud feltenni. A PremadeGraph adatgyűjtési, adatmodellezési, gráfanalitikai és szimulációs lánc.
+A projekt végeredménye egyszerűen megfogalmazható: kompetitív játékadatokból lehetséges olyan rendszert felépíteni, amely szoftvermérnöki szempontból is megállja a helyét és kutatói kérdéseket is tud feltenni. A PremadeGraph adatgyűjtési, adatmodellezési, gráfanalitikai és szimulációs lánca ezt igazolja.
 
-A lépések közötti átjárhatóság nem volt előre tervezett. A nyers meccsadatokból normalizált játékosprofil lett, abból kapcsolati gráf, a gráfból klaszterek és analitikai mutatók, a klaszterekből szimulációs priorok -- minden egyes lépés az előző kimenetét vette bemenetnek.
+A lépések közötti átjárhatóság nem volt előre tervezett. A nyers meccsadatokból normalizált játékosprofil lett, abból kapcsolati gráf, a gráfból klaszterek és analitikai mutatók, a klaszterekből szimulációs priorok; minden egyes lépés az előző kimenetét vette bemenetnek.
 
 Ahogy az ABBA megfogalmazta évtizedekkel ezelőtt: \textit{the winner takes it all}.
 A Tribal NeuroSimben ez nem metafora, hanem a mechanika közvetlen következménye.
@@ -54,8 +54,8 @@ A Tribal NeuroSimben ez nem metafora, hanem a mechanika közvetlen következmén
 \section{Ahol ez máshol is jön számításba}
 \label{sec:osszegzes-transfer}
 
-A módszertan nem kötődik a League of Legends-hez. A Riot API azért volt kényelmes választás, mert nyilvánosan elérhető, gazdag és strukturált. De ugyanez a pipeline ugyanúgy lefutna GitHub kollaborációs adatokon, NBA teljesítmény-statisztikákon vagy PubMed szerzői hálózatokon -- mindenhol, ahol van ismétlődő interakció, mérhető teljesítmény, és valamilyen csoportszerkezet.
+A módszertan nem kötődik a League of Legends-hez. A Riot API azért volt kényelmes választás, mert nyilvánosan elérhető, gazdag és strukturált. De ugyanez a pipeline ugyanúgy lefutna GitHub-kollaborációs adatokon, NBA-teljesítménystatisztikákon vagy PubMed-szerzői hálózatokon, bárhol, ahol ismétlődő interakció, mérhető teljesítmény és valamilyen csoportszerkezet van.
 
-A gráfklaszterezés például ugyanolyan természetesen leír egy vállalati szervezeti hálózatot, mint egy játékospopulációt: a kérdés mindkét esetben az, hogy a formális struktúra mögött milyen tényleges munkacsoportok rajzolódnak ki. A betweenness centralitás az infrastruktúra-tervezésben vagy epidemiológiában is ugyanazt méri -- melyik csomópont kiesése szakítja szét leginkább a hálózatot.
+A gráfklaszterezés például ugyanolyan természetesen leír egy vállalati szervezeti hálózatot, mint egy játékospopulációt: a kérdés mindkét esetben az, hogy a formális struktúra mögött milyen tényleges munkacsoportok rajzolódnak ki. A betweenness centralitás az infrastruktúra-tervezésben vagy az epidemiológiában is ugyanazt méri: melyik csomópont kiesése szakítja szét leginkább a hálózatot.
 
-A Tribal NeuroSim öt artifaktja sem LoL-specifikus fogalom. Combat, resource, map\_objective, risk, team -- ezek más doménekben is lefordíthatók, és az evolúciós szimuláció keretrendszere bármilyen klaszter-profilból kiindulhat, ahol csoportszintű teljesítménymutatók kinyerhetők. A videojáték itt eszköz volt, nem korlát.
+A Tribal NeuroSim öt artifaktja sem LoL-specifikus fogalom. Combat, resource, map\_objective, risk, team: ezek más doménekben is lefordíthatók, és az evolúciós szimuláció keretrendszere bármilyen klaszterprofilból kiindulhat, ahol csoportszintű teljesítménymutatók kinyerhetők. A videojáték itt eszköz volt, nem korlát.

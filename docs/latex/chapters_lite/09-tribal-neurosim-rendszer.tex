@@ -2,38 +2,42 @@
 
 \section{Célkitűzés és kutatási kapcsolat}
 
-A Tribal NeuroSim a PremadeGraph gráfelemzési pipeline közvetlen folytatása. A PremadeGraph pipeline minden egyes játékosklasztert teljesítménymetrikák halmazával jellemez: harci hatékonyság, erőforrás-gazdálkodás, objektívkontroll, kockázattűrés és csapatkoordináció. Ezek az értékek aggregált klaszterszintű mérőszámokká állnak össze (\textit{A\_combat}, \textit{A\_resource}, \textit{A\_map\_objective}, \textit{A\_risk}, \textit{A\_team}), amelyek a Tribal NeuroSim törzseinek iniciális genomszekvenciáját alkotják.
+A Tribal NeuroSim a PremadeGraph gráfelemzési pipeline közvetlen folytatása. A PremadeGraph pipeline minden egyes játékosklasztert teljesítménymetrikák halmazával jellemez: harci hatékonyság, erőforrás-gazdálkodás, objektívkontroll, kockázattűrés és csapatkoordináció. Ezek az értékek aggregált klaszterszintű mérőszámokká állnak össze (\textit{A\_combat}, \textit{A\_resource}, \textit{A\_map\_objective}, \textit{A\_risk}, \textit{A\_team}), amelyek a Tribal NeuroSim törzseinek kezdeti genomszekvenciáját alkotják.
 
 A szimulációban egyidejűleg mindkét adatkészlet klaszterei megjelennek. A kutatási kérdés: ha Flex Queue-ból és SoloQ-ból derivált klaszterprofilok azonos szimulációs szabályrendszer alatt versenyeznek, vajon a mögöttes gráfstruktúra mérhető különbséget idéz-e elő az emergáló túlélési stratégiákban?
 
-A kísérlet kerete exploratív transzfer-vizsgálat \cite{bonabeau2002}. Nem kísérel meg közvetlen előrejelzést valódi meccskimenetelekre, és nem állít fel pszichológiai vagy szociológiai kauzalitást.
+A kísérlet kerete exploratív transzfervizsgálat \cite{bonabeau2002}. Nem kísérel meg közvetlen előrejelzést a valódi meccskimenetelekre, és nem állít fel pszichológiai vagy szociológiai kauzalitást.
 
 \section{Ágensorientált és többügynök-modell}
 
 A Tribal NeuroSim ágensorientált modell (ABM): minden törzs önálló döntéshozó egység, amely kizárólag saját lokális állapota és közvetlen térbeli környezete alapján cselekszik. A makroszintű minták (terjeszkedés, háborúk, birodalomkialakulás, kihalás) kizárólag az egyéni döntések összegzéseként jelennek meg \cite{bonabeau2002}.
 
-A rendszer többügynök-rendszerként (MAS) is értelmezhető \cite{wooldridgejennings1995}: minden törzs önálló ágensként működik saját belső állapottal, saját lokális percepcióval és saját döntési logikával (neurális hálózat). Az ágensek között nincs közvetlen kommunikáció: interakció kizárólag a közös térbeli szubsztráton keresztül zajlik.
+A rendszer többügynök-rendszerként (MAS) is értelmezhető \cite{wooldridgejennings1995}: minden törzs önálló ágensként működik saját belső állapottal, saját lokális percepcióval és saját döntési logikával (neurális hálózat). Az ágensek között nincs közvetlen kommunikáció: az interakció kizárólag a közös térbeli szubsztráton keresztül zajlik.
 
 A szimuláció lefolyása azonos szerkezetű fázisokat mutat: korai terjeszkedés (tick~0-300), konszolidáció (tick~300-1000), majd birodalmi háborúk (tick~1000+).
 
 \section{A rendszer felépítése}
 
+A \ref{fig:neurosim-architecture-graphviz} ábra a Tribal NeuroSim három rétegének hatáskör-megosztását mutatja be: Rust motor (autoritatív állapot), Node (közvetítő), MonoGame (megjelenítő).
+
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.92\textwidth]{assets/diagrams/thesis_neurosim_architecture_graphviz.png}
+\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{assets/diagrams/thesis_neurosim_architecture_graphviz.png}
 \caption{A Tribal NeuroSim hatáskör-megosztása: a Rust motor az autoritatív szimulációs állapot forrása, míg a Node és MonoGame rétegek közvetítő és megjelenítő szerepet kapnak.}
 \label{fig:neurosim-architecture-graphviz}
 \end{figure}
 
-A \textbf{Rust futtatókörnyezet} az autoritás egyetlen forrása: a tick-ciklust, a világállapotot, a törzsek neurális döntéshozatalát, a háború- és szövetségfeloldást, a fuzionálási logikát, a tombstone-bejegyzéseket és az eseménynaplózást mind a Rust bináris kezeli \cite{jung2020}. A \textbf{C\# MonoGame kliens} kizárólag vizualizáció és operátori felület. A \textbf{Node réteg} vékony közvetítő: összekötőhíd a MonoGame és a Rust szerver között.
+A \textbf{Rust futtatókörnyezet} az autoritás egyetlen forrása: a tick-ciklust, a világállapotot, a törzsek neurális döntéshozatalát, a háború- és szövetségfeloldást, a fuzionálási logikát, a tombstone-bejegyzéseket és az eseménynaplózást mind a Rust bináris kezeli \cite{jung2020}. A \textbf{C\# MonoGame kliens} kizárólag vizualizációt és operátori felületet biztosít. A \textbf{Node réteg} vékony közvetítő: összekötőhíd a MonoGame és a Rust szerver között.
 
-Ez a felosztás a böngészőalapú v2 prototípus közvetlen tanulsága: ahol a szimulációs állapot az UI-réteghez volt csatolva, ghost war jelenség, memóriaszivárgás és nem-determinisztikus viselkedés keletkezett.
+Ez a felosztás a böngészőalapú v2 prototípus közvetlen tanulsága: ahol a szimulációs állapot az UI-réteghez volt csatolva, ghost war jelenség, memóriaszivárgás és nem determinisztikus viselkedés keletkezett.
 
-A ghost war konkrétan azt jelentette, hogy a befejezett és a halott törzsekhez tartozó háborúk soha nem kaptak lezárt státuszt: mivel nem létezett strukturált háborúlezárási esemény, a rendszer ezeket továbbra is aktívként tartotta nyilván, és a számuk a memóriában halmozódott -- a korai prototípus végállapotában egyetlen élő törzs állt szemben több mint száz aktív szellemháborúval. A jelenlegi architektúrában minden döntés a Rust binárisban születik, és a törzs felszámolása atomikusan zárja le az összes aktív háborút (\textit{WarCancelled}), így szellemháborúk nem keletkeznek; a MonoGame kliens csak a legutóbb kapott frame-et rendereli, és a szimuláció bármely pillanatban reprodukálható ugyanabból a kezdőállapotból.
+A ghost war konkrétan azt jelentette, hogy a befejezett és a halott törzsekhez tartozó háborúk soha nem kaptak lezárt státuszt: mivel nem létezett strukturált háborúlezárási esemény, a rendszer ezeket továbbra is aktívként tartotta nyilván, és a számuk a memóriában halmozódott: a korai prototípus végállapotában egyetlen élő törzs állt szemben több mint száz aktív szellemháborúval. A jelenlegi architektúrában minden döntés a Rust binárisban születik, és a törzs felszámolása atomikusan zárja le az összes aktív háborút (\textit{WarCancelled}), így szellemháborúk nem keletkeznek; a MonoGame kliens csak a legutóbb kapott frame-et rendereli, és a szimuláció bármely pillanatban reprodukálható ugyanabból a kezdőállapotból.
 
 \section{FrameV1 bináris protokoll}
 
-A Rust szerver és a MonoGame kliens bináris WebSocket kereteken kommunikál. Minden keret egy 40 bájtos \textit{TNS3} envelope-pal kezdődik (little-endian):
+A Rust szerver és a MonoGame kliens bináris WebSocket-kereteken kommunikálnak. Minden keret egy 40 bájtos \textit{TNS3} envelope-pal kezdődik (little-endian):
+
+Az \ref{tab:framev1-envelope} táblázat a FrameV1 bináris WebSocket-keret 40 bájtos fejlécének mezőit mutatja be.
 
 \begin{table}[H]
 \centering
@@ -57,6 +61,6 @@ A Rust szerver és a MonoGame kliens bináris WebSocket kereteken kommunikál. M
 \end{tabular}
 \end{table}
 
-A bináris formátum döntése teljesítményi: a Rust szerver 40~ms alatt lekezel 599 törzs állapotát, miközben a MonoGame kliens aszinkron dekódol és renderel. A JSON sorosítás elkerülése egy 599-törzsös világ esetén tick-enként ~150--200~kB felesleges szöveges overhead-et spórol meg.
+A bináris formátum döntése teljesítményi: a Rust szerver 40~ms alatt lekezel 599 törzs állapotát, miközben a MonoGame kliens aszinkron dekódol és renderel. A JSON-sorosítás elkerülése egy 599-törzsös világ esetén tickenként ~150–200~kB felesleges szöveges overheadt spórol meg.
 
 Az eseményvezérelt megfigyelhetőség részletei és a determinizmus-hiba javítása (\textit{clusters.sort\_by(|a, b| a.id.cmp(\&b.id))}) a kibővített verzió 13. fejezetében találhatók \cite{premadegraph-full}.

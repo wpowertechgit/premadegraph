@@ -144,7 +144,7 @@ A Rust analitikai parancsfolyam parancsvezérelt háttérfolyamat. A frontend HT
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.98\textwidth,height=0.78\textheight,keepaspectratio]{rust-analytics-cli-pipeline.png}
+\includegraphics[width=\textwidth,height=0.90\textheight,keepaspectratio]{rust-analytics-cli-pipeline.png}
 \caption{A Node.js backend és a Rust CLI közötti parancsvezérelt kommunikáció sémája}
 \label{fig:rust-analytics-command-flow}
 \end{figure}
@@ -182,13 +182,13 @@ A nagy tömegű numerikus adat bináris marad (\textit{.u32} formátum), ami gyo
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth,keepaspectratio]{graph artifact package dataflow.pdf}
+\includegraphics[width=\textwidth,height=0.88\textheight,keepaspectratio]{graph artifact package dataflow.pdf}
 \caption{A Graph V2 artifaktumcsomag adatfolyama: a Rust-exportőr bináris és JSON-rétegeket ír, az Express API kiszolgálja, a frontend WebGL-renderelőbe és elemzési kontextusba fogyasztja}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{graph artifact components.pdf}
+\includegraphics[width=\textwidth,height=0.86\textheight,keepaspectratio]{graph artifact components.pdf}
 \caption{A Graph V2 pipeline bináris és JSON artifact-fájljainak szerkezete. A diagram a \texttt{graph-v2-artifact-structure.puml} forrás alapján különíti el a JSON leírókat (\texttt{manifest.json}, \texttt{node\_meta.json}, \texttt{cluster\_meta.json}) és a little-endian \texttt{.u32} bináris payloadokat (\texttt{edge\_pairs.u32}, \texttt{edge\_props.u32}, \texttt{node\_metrics.u32}). A \texttt{manifest.json} tartalmazza a csúcs-, él- és klaszterszámokat, míg a párhuzamos indexelés biztosítja, hogy az azonos sorszámú metadata- és metric-sor ugyanarra a csúcsra, illetve az azonos sorszámú edge-pair és edge-prop rekord ugyanarra az élre vonatkozzon.}
 \end{figure}
 

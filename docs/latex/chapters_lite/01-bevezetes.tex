@@ -2,39 +2,39 @@
 
 \section{Problémafelvetés}
 
-A kompetitív online játékok egyik visszatérő problémája, hogy a résztvevők nagyon erős véleményeket fogalmaznak meg egymás teljesítményéről, miközben ehhez rendszerint csak részleges, szubjektív és rövid távú benyomások állnak rendelkezésre. Egy elveszített mérkőzés után gyorsan megjelenik a bűnbakkeresés, de sokkal ritkábban történik meg az, hogy a játékosok valóban adatalapon próbálják megérteni, mi történt a meccsben, hogyan teljesítettek ők maguk, és hogyan helyezhető el ez a teljesítmény egy tágabb közösségi hálózatban.
+A kompetitív online játékok egyik visszatérő problémája, hogy a résztvevők nagyon erős véleményeket fogalmaznak meg egymás teljesítményéről, miközben ehhez rendszerint csak részleges, szubjektív és rövid távú benyomások állnak rendelkezésre. Egy elveszített mérkőzés után gyorsan megjelenik a bűnbakkeresés, de sokkal ritkábban történik meg az, hogy a játékosok valóban adatok alapján próbálják megérteni, mi történt a meccsben, hogyan teljesítettek ők maguk, és hogyan helyezhető el ez a teljesítmény egy tágabb közösségi hálózatban.
 
-A \emph{League of Legends} különösen érdekes terep ehhez, mert egyszerre tartalmaz rendkívül gazdag mérkőzésadatokat, ismétlődő csapattársi és ellenfél-kapcsolatokat, valamint olyan társas mintázatokat, amelyek gráfként ábrázolhatók és elemezhetők. Ha egy játékos hosszabb időn keresztül ugyanazokkal az emberekkel kerül egy meccsbe (akár szövetségesként, akár ellenfélként), akkor ebből egy olyan kapcsolati háló építhető fel, amely túlmutat az egyetlen mérkőzés pillanatnyi statisztikáin.
+A \emph{League of Legends} különösen érdekes terep ehhez, mert egyszerre tartalmaz rendkívül gazdag mérkőzésadatokat, ismétlődő csapattársi és ellenfélkapcsolatokat, valamint olyan társas mintázatokat, amelyek gráfként ábrázolhatók és elemezhetők. Ha egy játékos hosszabb időn keresztül ugyanazokkal az emberekkel kerül egy meccsbe (akár szövetségesként, akár ellenfélként), akkor ebből egy olyan kapcsolati háló építhető fel, amely túlmutat az egyetlen mérkőzés pillanatnyi statisztikáin.
 
-Ebből a felismerésből indult a dolgozat. Cél: valós mérkőzéstörténetből játékoshálót építeni, ezt a hálót gráfelméleti szemlélettel elemezni, majd az eredményeket vizuálisan értelmezhető frontend felületen megjeleníteni.
+Ebből a felismerésből indult a dolgozat. Cél: valós mérkőzéstörténetből játékoshálót építeni, ezt a hálót gráfelméleti szemlélettel elemezni, majd az eredményeket vizuálisan értelmezhető frontend-felületen megjeleníteni.
 
 \section{Motiváció}
 
-A projekt mögött részben személyes indíttatás húzódik. Rangsorolt meccsek után visszatérő kérdés volt, hogy a sorozatos negatív találkozások véletlenek-e, vagy van mögöttük valami szerkezet: esetleg ugyanazok az emberek kerülnek újra és újra egymás mellé, csak ezt a matchmaking felülete nem mutatja meg. Ez önmagában persze nem tudományos kérdés, de kiindulópontként elég volt. Ha a Riot API részletes meccsadatokat ad, és ezek ismétlődő játékoskapcsolatokat tartalmaznak, akkor ezekből elvileg gráf építhető, és ha gráf van, akkor már van mit elemezni.
+A projekt mögött részben személyes indíttatás húzódik. Rangsorolt meccsek után visszatérő kérdés volt, hogy a sorozatos negatív találkozások véletlenek-e vagy van mögöttük valami szerkezet: esetleg ugyanazok az emberek kerülnek újra és újra egymás mellé, csak ezt a matchmaking-felület nem mutatja meg. Ez önmagában persze nem tudományos kérdés, de kiindulópontként elég volt. Ha a Riot API részletes meccsadatokat ad, és ezek ismétlődő játékoskapcsolatokat tartalmaznak, akkor elvileg gráf építhető belőlük, és ha gráf van, már van mit elemezni.
 
-A projekt hatóköre a fejlesztés során fokozatosan bővült. Ami gyors adatvizualizációként indult, az külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és kompatibilitási szerepben maradt meg. Minden bővítés egy konkrét technikai korlátot oldott meg, nem előre megtervezett kiterjesztés volt.
+A projekt hatóköre a fejlesztés során fokozatosan bővült. Ami gyors adatvizualizációként indult, az külön adatgyűjtő réteggé, normalizált pontszámítási pipeline-ná, SQLite-alapú perzisztenciává, Rust futtatókörnyezetté és többoldalas React frontenddé alakult. A Python réteg adatgyűjtési és kompatibilitási szerepben maradt. Minden bővítés egy konkrét technikai korlátot oldott meg, és nem előre megtervezett kiterjesztés volt.
 
-Egy ponton a gráfelemzési pipeline klaszterprofil-exportokat kezdett gyártani, és felmerült, hogy ezek a profilok ágens-alapú szimulációban is felhasználhatók. Ebből nőtt ki a Tribal NeuroSim, amelyben a két adatkészlet klaszterei azonos szimulációs feltételek alatt versenyeznek egymással.
+Egy ponton a gráfelemzési pipeline klaszterprofil-exportokat kezdett gyártani, és felmerült, hogy ezek a profilok ágens-alapú szimulációban is felhasználhatók. Ebből nőtt ki a Tribal NeuroSim, amelyben a két adatkészlet klaszterei azonos szimulációs feltételek mellett versenyeznek egymással.
 
 \section{A dolgozat célja}
 
-A dolgozat egy valós mérkőzésadatokra épülő, több komponensű rendszer megtervezésének, megvalósításának és vizsgálatának dokumentációja. A rendszer League of Legends mérkőzéstörténetből játékoskapcsolati gráfot épít: az ismétlődő együtt- és egymás ellen játszásból él jön létre, amelyhez szerepkör-érzékeny teljesítménymutatók tartoznak. A gráf elemzése kiterjed klaszteresítésre, core-periphery szerkezet vizsgálatára, asszortativitásra és Brandes-féle centralitásra, mindezt Rust-alapú, determinisztikus és újrafuttatható megvalósításban.
+A dolgozat egy valós mérkőzésadatokra épülő, több komponensű rendszer megtervezésének, megvalósításának és vizsgálatának dokumentációja. A rendszer League of Legends-mérkőzéstörténetből játékoskapcsolati gráfot épít: az ismétlődő együtt- és egymás ellen játszásból jön létre, amelyhez szerepkör-érzékeny teljesítménymutatók tartoznak. A gráf elemzése kiterjed klaszteresítésre, core-periphery szerkezet vizsgálatára, asszortativitásra és Brandes-féle centralitásra, mindezt Rust-alapú, determinisztikus és újrafuttatható megvalósításban.
 
-A játékosháló elemzése három nézőpontból történik. Hálózati szempontból: a \textit{flexset} adatkészleten mag-periféria szerkezet vizsgálható. Metrikai szempontból: a szerepkör-érzékeny \textit{opscore} és \textit{feedscore} mérőszámok valós meccsadatokból számolódnak. Rendszertechnikai szempontból: Python, SQLite, Node/Express, Rust és React együttesének minden komponense konkrét feladatot tölt be, amelyre a többi réteg nem alkalmas.
+A játékosháló elemzése három nézőpontból történik. Hálózati szempontból: a \textit{flexset} adatkészleten a mag–periféria szerkezet vizsgálható. Metrikai szempontból: a szerepkör-érzékeny \textit{opscore} és \textit{feedscore} mérőszámok valós meccsadatokból számolódnak. Rendszertechnikai szempontból: Python, SQLite, Node/Express, Rust és React együttesének minden komponense konkrét feladatot tölt be, amelyre a többi réteg nem alkalmas.
 
-A pipeline minden lépése konkrét bemenetekkel és kimenetekkel újrafuttatható: az adatgyűjtéstől a gráfépítésen át a klaszterezésig és a szimulációig. A Flex Queue és a SoloQ adatkészlet párhuzamos elemzése pontosan ezt teszi mérhetővé -- ugyanaz a pipeline két eltérő bemeneten eltérő eredményt ad, és az eltérés a queue-mechanikából értelmezhetővé válik.
+A pipeline minden lépése konkrét bemenetekkel és kimenetekkel újrafuttatható: az adatgyűjtéstől a gráfépítésen át a klaszterezésig és a szimulációig. A Flex Queue és a SoloQ adatkészlet párhuzamos elemzése pontosan ezt teszi mérhetővé: ugyanaz a pipeline két eltérő bemeneten eltérő eredményt ad, és az eltérés a queue-mechanikából értelmezhetővé válik.
 
 \section{Kutatási kérdések}
 
-A jelen dolgozat a következő kutatási kérdésekre keres választ:
+Négy konkrét kérdés vezeti a vizsgálatot:
 
-\begin{itemize}
-    \item Hogyan építhető fel valós League of Legends mérkőzéstörténetből egy olyan játékosháló, amely nem pusztán az együtt játszást, hanem az ellenfél-kapcsolatokat is megőrzi?
-    \item Milyen módon lehet a játékosok teljesítményét úgy pontozni, hogy az figyelembe vegye a tényleges szerepkört, de közben megmaradjon értelmezhetőnek?
+\begin{enumerate}[label=\textbf{K\arabic*.}]
+    \item Hogyan építhető fel valós League of Legends mérkőzéstörténetből egy olyan játékosháló, amely nem pusztán az együttjátszást, hanem az ellenfélkapcsolatokat is megőrzi?
+    \item Milyen módon lehet a játékosok teljesítményét úgy pontozni, hogy a pontozás figyelembe vegye a tényleges szerepkört, de közben megmaradjon értelmezhetőnek?
     \item Mennyiben indokolt a rendszer különböző rétegeit Python, SQLite, Node.js, Rust és React komponensekre bontani?
     \item Mutat-e a jelenlegi gráf pozitív asszortativitást az \textit{opscore} és \textit{feedscore} tekintetében?
     \item Miben különbözik a \textit{flexset} és a \textit{soloq} kapcsolati szerkezete, és mennyiben írható le a \textit{flexset} asszociatív core-periphery játékosgráfként?
-\end{itemize}
+\end{enumerate}
 
 \section{Hatókör és korlátok}
 
@@ -42,12 +42,15 @@ A projekt viszonylag nagy rendszer, és könnyen csúszhat abba a hibába, hogy 
 
 \section{A dolgozat szerkezete}
 
-A fejezetek az adatgyűjtéstől indulnak, majd fokozatosan haladnak a gráfanalitika és a szimulációs kísérletek felé.
+A fejezetek az adatgyűjtéstől a gráfanalitikán át a szimulációs kísérletig haladnak.
 
-Az első fejezetek a kiindulópontot rögzítik: a problémafelvetést, a szakirodalmi hátteret és a Riot API-ra épülő adatforrásokat. Ezt követi a rendszer bemutatása, majd az \textit{opscore} teljesítménymetrika, a gráfépítés és klaszterezés mechanizmusa, a Rust futtatókörnyezet és az analitikai modulok. A két adatkészlet (\textit{flexset} és \textit{soloq}) összehasonlítása a rendszer legkonkrétabb kutatási eredménye. A dolgozat utolsó egységei az adatbázis-alprojektet és a Tribal NeuroSim szimulációt tárgyalják. Ez a dokumentum az összefoglalt, lite változat; a részletes kifejtést tartalmazó bővített verzió \cite{premadegraph-full} az itt csak érintett témákat külön fejezetekben fejti ki.
+Az első fejezetek a kiindulópontot rögzítik: a problémafelvetést, a szakirodalmi hátteret és a Riot API-re épülő adatforrásokat. Ezt követi a rendszer bemutatása, majd az \textit{opscore} teljesítménymetrika, a gráfépítés és klaszterezés mechanizmusa, a Rust futtatókörnyezet, valamint az analitikai modulok. A két adatkészlet (\textit{flexset} és \textit{soloq}) összehasonlítása a rendszer legkonkrétabb kutatási eredménye. A dolgozat utolsó egységei az adatbázis-alprojektet és a Tribal NeuroSim szimulációt tárgyalják. Ez a dokumentum az összefoglalt, lite változat; a részletes kifejtést tartalmazó bővített verzió \cite{premadegraph-full} az itt csak érintett témákat külön fejezetekben fejti ki.
+
+A \ref{fig:match-analysis-page} ábra a jelenlegi frontend egyik belépési pontját mutatja: a meccselemzési és adatgyűjtési felületet.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.92\textwidth]{match-analysis-page.png}
     \caption{A jelenlegi frontend egyik belépési pontja: meccselemzési és adatgyűjtési felület}
+    \label{fig:match-analysis-page}
 \end{figure}

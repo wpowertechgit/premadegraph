@@ -2,17 +2,34 @@
 
 \section{A korai változat}
 
-Az eredeti rendszer jóval közelebb állt egy adatvezérelt játékosnézőhöz, mint a jelenlegi kutatási platformhoz. A korai pontozási logika (\textit{add\_new\_players.js}) egyszerű képletekkel dolgozott. A korai \textit{build\_graph.py} Python-központú volt: meccsekből kapcsolati gráfot épített, HTML és PyVis exportokat készített. Ezen az úton váltak a klaszterprofilok végül a Tribal NeuroSim szimulációs bemenetének alapjává.
+Az eredeti rendszer jóval közelebb állt egy adatvezérelt játékosnézőhöz, mint a jelenlegi kutatási platform. A korai pontozási logika (\textit{add\_new\_players.js}) egyszerű képletekkel dolgozott. A korai \textit{build\_graph.py} Python-központú volt: meccsekből épített kapcsolati gráfot, és HTML- és PyVis-exportokat készített. Ezen az úton váltak végül a klaszterprofilok a Tribal NeuroSim szimulációs bemenetének alapjává.
 
 \section{A jelenlegi rendszer}
 
-A rendszer több, egymástól jól elkülönített rétegre épül. Komponensei: Python (adatgyűjtés, gráfépítés, legacy-exportok), SQLite (központi perzisztencia), Node.js/Express (API-héj és orchesztráció), Rust (útvonalkeresés, gráfanalitika, globális artifact-export), React/Vite (frontend és vizualizáció), C\# ASP.NET Core (különálló adatbázis-böngésző) és a Tribal NeuroSim szimulációs motor.
+A rendszer több egymástól jól elkülönített rétegre épül. Komponensei: Python (adatgyűjtés, gráfépítés, legacy-exportok), SQLite (központi perzisztencia), Node.js/Express (API-héj és orchesztráció), Rust (útvonalkeresés, gráfanalitika, globális artifact-export), React/Vite (frontend és vizualizáció), C\# ASP.NET Core (különálló adatbázis-böngésző) és a Tribal NeuroSim szimulációs motor.
 
 A komponensdiagram a kibővített verzió 5. fejezetében található \cite{premadegraph-full}; a lite verzióban az általános leírást a szöveg tartalmazza.
+
+\section{A technológiai stack indoklása}
+
+Minden technológiai döntéshez volt alternatíva; az alábbiakban az egyes rétegek kiválasztásának főbb szempontjai, valamint a mérlegelt versenytársak szerepelnek.
+
+\textbf{Python (adatgyűjtés, szkriptréteg).} Gazdag ökoszisztéma (Riot API-kliens, NetworkX, pandas), rövid iterációs ciklus, könnyen módosítható gyűjtési logika. Alternatíva: Go vagy Ruby szkriptekkel gyorsabb indulás lett volna lehetséges, de a tudományos ökoszisztéma (NetworkX, scipy) Pythonhoz kötött. Hátránya: gyengébb teljesítmény nagy gráfműveleteknél, ezt a Rust-réteg helyettesíti.
+
+\textbf{SQLite (perzisztencia).} Szervermentes, önálló fájl, könnyű verziókezelés: a Python és a Rust egyaránt natívan támogatja. Alternatíva: PostgreSQL erősebb párhuzamos írást és komplex lekérdezéseket adott volna, de a projekt egyszerre egy felhasználós, lokálisan futtatható, bemutatható rendszer. A SQLite kompromisszuma ennél a hatókörnél kedvezőbb \cite{sqlite}. Hátránya: egyidejű írás nincs, és a séma módosítása migrációt igényel.
+
+\textbf{Node.js / Express (API-héj).} A frontend (React) és a backend ugyanazon ökoszisztémán belül élnek; az Express könnyen proxyzza a Rust-binárist és a Python-szkripteket. Alternatíva: FastAPI (Python) logikusabb lett volna a Python-réteg mellé, de Node jobb aszinkron I/O-t adott a Riot API relay-ekhez, és a React/Vite dev-flow integrációja egyszerűbb lett. Hátránya: CPU-intenzív számítások nem a Node-ban futnak.
+
+\textbf{Rust (gráfanalitika, útvonalkeresés).} Nulla futásidejű overhead, biztonságos memóriakezelés, Rayon párhuzamosítás, egzakt determinizmus \cite{jung2020,rustlang}. Alternatíva: C++ ugyanolyan teljesítményt adna, de a Rust borrow checker megelőzi az érvénytelen iterátor-hibákat, amelyek gráf-traversal kódban gyakoriak. Go könnyebb concurrency-modellt adna, de gyengébb cache-teljesítménnyel. Hátránya: meredekebb tanulási görbe, hosszabb fordítási idő.
+
+\textbf{React / Vite (frontend).} Komponensalapú UI, nagy ökoszisztéma (MUI, Three.js), gyors hot reload. Alternatíva: Vue vagy Svelte kisebb bundle-t adna, de a MUI és a Three.js React-integrációja érettebb. Hátránya: overkill lenne egy egyoldalas demóhoz; a projekt több vizualizációs oldalt igényel, ami igazolja a frameworköt.
+
+Az \ref{tab:rejected-approaches} táblázat az elvetett architektúrális megközelítéseket és elutasításuk indoklását foglalja össze.
 
 \begin{table}[H]
 \centering
 \caption{Elvetett megközelítések és indoklásuk}
+\label{tab:rejected-approaches}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.5cm}|>{\raggedright\arraybackslash}p{3.6cm}|X|}
 \hline
 \textbf{Alternatíva} & \textbf{Rövid előny} & \textbf{Miért nem ez lett a végső irány?} \\
@@ -25,25 +42,31 @@ Szerveres SQL-adatbázis & Erősebb többfelhasználós modell & A projekt loká
 \end{tabularx}
 \end{table}
 
-\section{Több adatkészlet kezelése}
+\section{Több dataset kezelése}
 
-Az implementáció több, egymástól független adatkészletet kezel. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON könyvtárral és cache könyvtárral.
+Az implementáció több, egymástól független datasetet kezel. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON-könyvtárral és cache-könyvtárral.
 
 A dataset-választás nem áll meg a Node-szinten. A backend a kiválasztott datasetből környezeti változókat képez a Rust futtatókörnyezet felé (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}).
+
+A \ref{fig:dataset-lifecycle} ábra egy dataset teljes életciklusát mutatja be a Riot API-adatforrásoktól az analitikai kimenetekig.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{dataset lifecycle riotapi to analytical output.pdf}
 \caption{Egy dataset teljes életciklusának diagramja a Riot API-tól az analitikai kimenetig}
+\label{fig:dataset-lifecycle}
 \end{figure}
 
 \section{A jelenlegi adatállapot}
 
-Az aktív adatállapot 2026. április 28-án közvetlenül a repository aktuális állapotából lett ellenőrizve.
+Az adatállapotot 2026. április 28-án a repository közvetlen olvasásával rögzítettük.
+
+A \ref{tab:data-state} táblázat az aktív adatállapotot rögzíti 2026. április 28-i állapot szerint.
 
 \begin{table}[H]
 \centering
-\caption{A két adatkészlet aktuális adatállapota (2026. április 28.)}
+\caption{A két dataset aktuális adatállapota (2026. április 28.)}
+\label{tab:data-state}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|r|r|}
 \hline
 \textbf{Mérőszám} & \textbf{flexset} & \textbf{soloq} \\
@@ -56,22 +79,28 @@ Klasztertagok & 5\,741 & 1\,538 \\
 \end{tabularx}
 \end{table}
 
-A soloq dataset klaszterei jellemzően \emph{duo párokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül.
+A soloq dataset klaszterei jellemzően \emph{duopárokat} jelölnek: mivel a Solo/Duo Queue maximálisan kétfős premade csapatokat enged, az ismétlődő kapcsolatokból kiemelkedő klaszterek döntő többsége két-három játékosra szűkül.
 
 \section{Perzisztencia és relációs modell}
 
 A klaszterek egy korábbi fázisban csak JSON-exportban léteztek; az adatbázis-integráció eredményeként első osztályú adatbázis-objektumokká váltak. A séma három központi táblára épül \cite{sqlite}: \textit{players}, \textit{clusters} és \textit{cluster\_members}.
 
+A \ref{fig:sqlite-er} ábra a fő SQLite adatbázis egyedkapcsolati diagramját mutatja, beleértve a \textit{players}, \textit{clusters} és \textit{cluster\_members} táblákat.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{sqlite-project-er-diagram.png}
 \caption{A fő SQLite adatbázis egyedkapcsolati diagramja}
+\label{fig:sqlite-er}
 \end{figure}
+
+A \ref{fig:relational-model} ábra a relációs modellt mutatja be, kiemelve a három tábla közötti kapcsolatokat.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{relational model diagram.pdf}
 \caption{Relációs modell a klaszter- és játékosperzisztenciához (\textit{players}, \textit{clusters}, \textit{cluster\_members})}
+\label{fig:relational-model}
 \end{figure}
 
-A rendszerben két klasztercsalád él párhuzamosan. A \textit{python\_population} típusú klaszterek a Python gráfépítési pipeline kimenetei: NetworkX-alapú modularitás-maximalizálás, közösségdetektálási perspektívával. A \textit{rust\_pathfinding} típusú klaszterek a Rust motor futásidejű klaszterezéséből jönnek: ally-kapcsolatokon alapuló erős-összefüggési szegmensek, maximum 20 tagos korláttal. A klaszterprofilok aggregált teljesítménymutatói egyben a Tribal NeuroSim szimulációjának genomszekvencia-bemenetét is alkotják.
+A rendszerben két klasztercsalád működik párhuzamosan. A \textit{python\_population} típusú klaszterek a Python-gráfépítési pipeline kimenetei: NetworkX-alapú modularitásmaximalizálás, közösségdetektálási perspektívával. A \textit{rust\_pathfinding} típusú klaszterek a Rust motor futásidejű klaszterezéséből jönnek: ally-kapcsolatokon alapuló, erős összefüggési szegmensek, maximum 20 taggal. A klaszterprofilok aggregált teljesítménymutatói egyben a Tribal NeuroSim szimulációjának genomszekvencia-bemenetét is képezik.

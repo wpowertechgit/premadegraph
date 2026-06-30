@@ -77,11 +77,14 @@ Az implementáció a \textit{backend/scoring\_config.js}, a \textit{backend/lib/
 
 \section{Az öt artifact és alkategóriáik}
 
-\begin{figure}[H]
+A \ref{fig:opscore-artifacts-ext}. ábra az öt artifact és tíz alkategória teljes szerkezetét mutatja be, feltüntetve a szerepkörérzékeny súlyozást és az artifact-specifikus bővítési paramétereket.
+
+\begin{sidewaysfigure}[p]
 \centering
-\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{opscore-artifacts.pdf}
+\includegraphics[width=0.95\textheight,height=0.90\textwidth,keepaspectratio]{opscore-artifacts.pdf}
 \caption{Az opscore artifact-szerkezete: öt fő dimenzió, tíz alkategória, szerepkörérzékeny súlyok}
-\end{figure}
+\label{fig:opscore-artifacts-ext}
+\end{sidewaysfigure}
 
 A modell öt artifactból épül fel. Minden artifact két alkategóriából áll, amelyek szerepkörönként eltérő súllyal járulnak hozzá az artifact értékéhez.
 
