@@ -3,11 +3,11 @@
 wbsDiagram {
   node {
     FontName "DejaVu Sans"
-    FontSize 10
-    Padding 6
-    Margin 4
+    FontSize 14
+    Padding 8
+    Margin 5
     RoundCorner 8
-    MaximumWidth 230
+    MaximumWidth 310
   }
   arrow {
     LineThickness 1.5
@@ -16,7 +16,7 @@ wbsDiagram {
   .root {
     BackgroundColor #DDEEFF
     FontColor #0D47A1
-    FontSize 11
+    FontSize 15
     FontStyle bold
     BorderColor #0D47A1
     BorderThickness 2
@@ -55,31 +55,31 @@ wbsDiagram {
     BackgroundColor #FFF8F0
     FontColor #5D4037
     BorderColor #FFB74D
-    FontSize 9
+    FontSize 12
   }
   .sub_risk {
     BackgroundColor #FFF0F5
     FontColor #5D1040
     BorderColor #F48FB1
-    FontSize 9
+    FontSize 12
   }
   .sub_resource {
     BackgroundColor #F1FFF3
     FontColor #1B4020
     BorderColor #81C784
-    FontSize 9
+    FontSize 12
   }
   .sub_map {
     BackgroundColor #F0F9FF
     FontColor #014060
     BorderColor #4FC3F7
-    FontSize 9
+    FontSize 12
   }
   .sub_team {
     BackgroundColor #FAF0FF
     FontColor #3A0060
     BorderColor #CE93D8
-    FontSize 9
+    FontSize 12
   }
 }
 </style>
