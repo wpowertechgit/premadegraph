@@ -4,7 +4,7 @@ Az adatgyűjtés alapja a Riot Developer Portal és a match-v5 API-készlet \cit
 
 \section{A használt Riot API-végpontok logikája}
 
-A jelenlegi projekt a Riot API több rétegét használja, de a legfontosabb tervezési döntés az volt, hogy a rendszer központi azonosítójává a \textit{puuid} váljon. A pipeline logikailag az alábbi lépésekre bontható:
+A jelenlegi projekt a Riot API több rétegét használja, de a legfontosabb tervezési döntés az volt, hogy a rendszer központi azonosítójává a \textit{puuid} (egyedi account azonosító) váljon. A pipeline logikailag az alábbi lépésekre bontható:
 
 \begin{enumerate}
     \item egy kiinduló játékos vagy seed-lista alapján a rendszer fiókinformációt kér le;
@@ -14,7 +14,7 @@ A jelenlegi projekt a Riot API több rétegét használja, de a legfontosabb ter
     \item az eredményt a datasethez kötve perzisztálja.
 \end{enumerate}
 
-A collector az \textit{europe.api.riotgames.com} regionális útvonalon hívja a \textit{match-v5} végpontcsaládot.
+A collector az \textit{europe.api.riotgames.com} regionális útvonalon hívja a \textit{match-v5} végpontcsaládot, amely biztosítja a meccsadatokhoz való hozzáférést.
 
 \section{Collector állapotgép és premade-probe}
 

@@ -2,7 +2,14 @@
 
 \noindent A gráfanalitikai elemzés alapanyagát egy értelmes, szerepkörérzékeny teljesítménypontszám adja. A League of Legends meccsek nyers adatai (ölések, halálok, arany, sebzés) önmagukban nem hordoznak elegendő szemantikát: egy support 2. halála nem ugyanolyan értelmű, mint egy ADC 2. halála. Az adatgyűjtési és PUUID-normalizálási mechanizmusok a kibővített verzió 4. fejezetében kerülnek részletezésre; itt az opscore metrika belső modelljét és formuláit tárgyaljuk.
 
-\section{A korábbi modell korlátai}
+\section{A metrika kialakítása}
+
+\subsection{A saját teljesítménymetrika szerepe}
+
+Az OP.GG-hez hasonló külső szolgáltatások évek óta fejlesztett játékosanalitikai funkciókat és könnyen értelmezhető teljesítményértékeléseket kínálnak. Ebben a projektben azonban a játékosok értékelése közvetlenül a Riot API-ból gyűjtött meccsadatokból, saját \textit{opscore} metrikával történik. A metrika kialakításához az OP.GG módszertana jelentős inspirációt adott \cite{opgg-features}.
+
+A projekt szempontjából a külső teljesítményértékelések blackboxként működtek volna, mivel azok pontos számítási módja, súlyozása és normalizálása nem hozzáférhető. Emiatt az OP.GG által közölt pontszámok a Riot API-ból gyűjtött nyers meccsadatokból nem reprodukálhatók. A saját metrika ezzel szemben lehetővé teszi a teljesítménypontszámok reprodukálását, a szerepkörérzékeny súlyozás és normalizálás ellenőrzését, valamint a játékosértékek közvetlen visszavezetését a felhasznált meccsadatokra.
+\subsection{A korábbi modell korlátai}
 
 A modell fejlesztése fokozatos módszertani finomítások eredménye volt. A kiindulópontot egy nyolc-artifactos rendszer adta, amely szerepkör-szorzókat alkalmazott, majd a kapott nyers összegeket az adatbázis percentilis-eloszlásához viszonyítva normalizálta a $[0,10]$ intervallumra.
 
@@ -103,10 +110,10 @@ Az \ref{tab:overflow_params} táblázat az öt artifact bővítési paraméterei
 A modell két jellegzetes szélső eseten keresztül szemléltethető.
 
 \paragraph{Elité carry meccs.}
-A fejlesztés során egy kiemelkedő TOP Quinn meccset vizsgáltak (kiugró ölésszám és magas assist), ahol a korábbi modell nyomás alá kerülhetett a kemény artifact-plafonok miatt. A jelenlegi modellben a \textit{Combat Impact} és a \textit{Map and Objective Control} artifactok logaritmikus bővítője lehetővé teszi, hogy ezek az értékek a nominális 2 pont fölé emelkedjenek; az összesített \textit{opscore} a 10-es plafonig futott. A halálok ára nem tűnik el: a \textit{Risk Discipline} artifact mérsékelten bünteti őket, de az elité carry összteljesítménye elismert marad.
+A fejlesztés során egy kiemelkedő Quinn Top meccset vizsgáltak (kiugró ölésszám és magas assist), ahol a korábbi modell nyomás alá kerülhetett a kemény artifact plafonok és korlátok miatt, ezáltal egy átlagos semmivel se kiemelkedőbb pontszám besorolást kapott. A jelenlegi modellben a \textit{Combat Impact} és a \textit{Map and Objective Control} artifactok logaritmikus bővítője lehetővé teszi, hogy ezek az értékek a nominális 2 pont fölé emelkedjenek; az összesített \textit{opscore} a 10-es plafonig futott. A halálok ára nem tűnik el: a \textit{Risk Discipline} artifact mérsékelten bünteti őket, de az elité carry összteljesítménye elismert marad.
 
 \paragraph{Split-pusher és struktúracarry.}
-Egy \textit{Yorick} főszerepű játékos, aki szándékosan kerüli a csatatereket és struktúrákon keresztül nyer, tipikusan alacsony \textit{Team Enablement} értékkel és nem kiemelkedő KDA-val rendelkezik. A \textit{Map and Objective Control} artifact dinamikus dominancia-újrasúlyozása pontosan erre az esetre van kalibrálva: ha az Objective Conversion drámaian meghaladja a Vision Control értékét, az artifact súlyt vált az objektívumszerzés felé, és az alacsony csapaterősítő szám nem torzítja indokolatlanul a végeredményt, amennyiben a win condition-beváltás ténylegesen megvalósult. A részletes szélső esetek és mintanagysági korlátok a kibővített verzióban találhatók \cite{premadegraph-full}.
+Egy \textit{Yorick} hőssel játszó játékos, aki szándékosan kerüli a csatatereket és tornyok rombolásával nyer, tipikusan alacsony \textit{Team Enablement} értékkel és nem kiemelkedő KDA-val rendelkezik, mivel a stratégiája a splitpusholáson alapul. A \textit{Map and Objective Control} artifact dinamikus dominancia-újrasúlyozása pontosan erre az esetre van kalibrálva: ha az Objective Conversion drámaian meghaladja a Team Enablement értékét, az artifact súlyt vált az objektívumszerzés felé, és az alacsony csapaterősítő szám nem torzítja indokolatlanul a végeredményt, amennyiben a win condition-beváltás ténylegesen megvalósult. A részletes szélső esetek és mintanagysági korlátok a kibővített verzióban találhatók \cite{premadegraph-full}.
 
 \section{Az opscore szerepe a rendszerben}
 

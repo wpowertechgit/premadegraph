@@ -2,7 +2,7 @@
 
 \section{Célkitűzés és kutatási kapcsolat}
 
-A Tribal NeuroSim a PremadeGraph gráfelemzési pipeline közvetlen folytatása. A PremadeGraph pipeline minden egyes játékosklasztert teljesítménymetrikák halmazával jellemez: harci hatékonyság, erőforrás-gazdálkodás, objektívkontroll, kockázattűrés és csapatkoordináció. Ezek az értékek aggregált klaszterszintű mérőszámokká állnak össze (\textit{A\_combat}, \textit{A\_resource}, \textit{A\_map\_objective}, \textit{A\_risk}, \textit{A\_team}), amelyek a Tribal NeuroSim törzseinek kezdeti genomszekvenciáját alkotják.
+A Tribal NeuroSim a PremadeGraph gráfelemzési pipeline közvetlen folytatása. A PremadeGraph pipeline minden egyes játékosklasztert teljesítménymetrikák halmazával jellemez: harci hatékonyság, erőforrás-gazdálkodás, objektívkontroll, kockázattűrés és csapatkoordináció. Ezek az értékek aggregált klaszterszintű mérőszámokká állnak össze (\textit{A\_combat}, \textit{A\_resource}, \\ \textit{A\_map\_objective}, \textit{A\_risk}, \textit{A\_team}), amelyek a Tribal NeuroSim törzseinek kezdeti genomszekvenciáját alkotják.
 
 A szimulációban egyidejűleg mindkét adatkészlet klaszterei megjelennek. A kutatási kérdés: ha Flex Queue-ból és SoloQ-ból derivált klaszterprofilok azonos szimulációs szabályrendszer alatt versenyeznek, vajon a mögöttes gráfstruktúra mérhető különbséget idéz-e elő az emergáló túlélési stratégiákban?
 
@@ -63,4 +63,4 @@ Az \ref{tab:framev1-envelope} táblázat a FrameV1 bináris WebSocket-keret 40 b
 
 A bináris formátum döntése teljesítményi: a Rust szerver 40~ms alatt lekezel 599 törzs állapotát, miközben a MonoGame kliens aszinkron dekódol és renderel. A JSON-sorosítás elkerülése egy 599-törzsös világ esetén tickenként ~150–200~kB felesleges szöveges overheadt spórol meg.
 
-Az eseményvezérelt megfigyelhetőség részletei és a determinizmus-hiba javítása (\textit{clusters.sort\_by(|a, b| a.id.cmp(\&b.id))}) a kibővített verzió 13. fejezetében találhatók \cite{premadegraph-full}.
+Az eseményvezérelt megfigyelhetőség részletei és a determinizmus-hiba javítása \\ (\textit{clusters.sort\_by(|a, b| a.id.cmp(\&b.id))}) a kibővített verzió 13. fejezetében találhatók \cite{premadegraph-full}.

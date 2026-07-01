@@ -6,7 +6,7 @@ Az eredeti rendszer jóval közelebb állt egy adatvezérelt játékosnézőhöz
 
 \section{A jelenlegi rendszer}
 
-A rendszer több egymástól jól elkülönített rétegre épül. Komponensei: Python (adatgyűjtés, gráfépítés, legacy-exportok), SQLite (központi perzisztencia), Node.js/Express (API-héj és orchesztráció), Rust (útvonalkeresés, gráfanalitika, globális artifact-export), React/Vite (frontend és vizualizáció), C\# ASP.NET Core (különálló adatbázis-böngésző) és a Tribal NeuroSim szimulációs motor.
+A rendszer több egymástól jól elkülönített rétegre épül. Komponensei: Python (adatgyűjtés, gráfépítés, legacy-exportok), SQLite (központi perzisztencia), Node.js/Express (API-héj és orchesztráció), Rust (útvonalkeresés, gráfanalitika, globális artifact-export, szimuláció logika), React/Vite (frontend és vizualizáció), C\# ASP.NET Core (különálló adatbázis-böngésző) és a C\# MonoGame (Tribal NeuroSim vizualizációs rétege, megjeleníti a Rust payloadokat).
 
 A komponensdiagram a kibővített verzió 5. fejezetében található \cite{premadegraph-full}; a lite verzióban az általános leírást a szöveg tartalmazza.
 
@@ -18,9 +18,9 @@ Minden technológiai döntéshez volt alternatíva; az alábbiakban az egyes ré
 
 \textbf{SQLite (perzisztencia).} Szervermentes, önálló fájl, könnyű verziókezelés: a Python és a Rust egyaránt natívan támogatja. Alternatíva: PostgreSQL erősebb párhuzamos írást és komplex lekérdezéseket adott volna, de a projekt egyszerre egy felhasználós, lokálisan futtatható, bemutatható rendszer. A SQLite kompromisszuma ennél a hatókörnél kedvezőbb \cite{sqlite}. Hátránya: egyidejű írás nincs, és a séma módosítása migrációt igényel.
 
-\textbf{Node.js / Express (API-héj).} A frontend (React) és a backend ugyanazon ökoszisztémán belül élnek; az Express könnyen proxyzza a Rust-binárist és a Python-szkripteket. Alternatíva: FastAPI (Python) logikusabb lett volna a Python-réteg mellé, de Node jobb aszinkron I/O-t adott a Riot API relay-ekhez, és a React/Vite dev-flow integrációja egyszerűbb lett. Hátránya: CPU-intenzív számítások nem a Node-ban futnak.
+\textbf{Node.js / Express (API-héj).} A frontend (React) és a backend ugyanazon ökoszisztémán belül élnek; az Express könnyen proxyzza a Rust-binárist és a Python-szkripteket. Alternatíva: FastAPI (Python) logikusabb lett volna a Python-réteg mellé, de mivel a Python-réteg le lett fokozva kizárolag adatgyűjtésre és egyszerűbb összesitésekre , ezért a Node jobb aszinkron I/O-t adott a Riot API relay-ekhez, és a Vite integrációja egyszerűbb lett. Hátránya: CPU-intenzív számítások nem a Node-ban futnak.
 
-\textbf{Rust (gráfanalitika, útvonalkeresés).} Nulla futásidejű overhead, biztonságos memóriakezelés, Rayon párhuzamosítás, egzakt determinizmus \cite{jung2020,rustlang}. Alternatíva: C++ ugyanolyan teljesítményt adna, de a Rust borrow checker megelőzi az érvénytelen iterátor-hibákat, amelyek gráf-traversal kódban gyakoriak. Go könnyebb concurrency-modellt adna, de gyengébb cache-teljesítménnyel. Hátránya: meredekebb tanulási görbe, hosszabb fordítási idő.
+\textbf{Rust (gráfanalitika, útvonalkeresés).} Nulla futásidejű overhead, biztonságos memóriakezelés, Rayon párhuzamosítás, egzakt determinizmus \cite{jung2020,rustlang}. Alternatíva: C++ ugyanolyan teljesítményt adna, de a Rust borrow checker megelőzi az érvénytelen iterátor-hibákat, amelyek gráf-traversal kódban gyakoriak. Go könnyebb concurrency-modellt adna, de gyengébb cache-teljesítménnyel. Hátránya: meredekebb tanulási görbe, kínzó fordítás élmény, hosszabb fordítási idő.
 
 \textbf{React / Vite (frontend).} Komponensalapú UI, nagy ökoszisztéma (MUI, Three.js), gyors hot reload. Alternatíva: Vue vagy Svelte kisebb bundle-t adna, de a MUI és a Three.js React-integrációja érettebb. Hátránya: overkill lenne egy egyoldalas demóhoz; a projekt több vizualizációs oldalt igényel, ami igazolja a frameworköt.
 
@@ -44,11 +44,11 @@ Szerveres SQL-adatbázis & Erősebb többfelhasználós modell & A projekt loká
 
 \section{Több dataset kezelése}
 
-Az implementáció több, egymástól független datasetet kezel. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON-könyvtárral és cache-könyvtárral.
+Az implementáció több, egymástól független adatkészletet kezel. A \textit{backend/data/datasets.json} regiszter alapján minden dataset külön rendelkezik nyers adatbázissal, finomított adatbázissal, meccs-JSON-könyvtárral és cache-könyvtárral.
 
-A dataset-választás nem áll meg a Node-szinten. A backend a kiválasztott datasetből környezeti változókat képez a Rust futtatókörnyezet felé (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}).
+Az adatkészlet-választás nem áll meg a Node-szinten. A backend a kiválasztott datasetből környezeti változókat képez a Rust futtatókörnyezet felé (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}).
 
-A \ref{fig:dataset-lifecycle} ábra egy dataset teljes életciklusát mutatja be a Riot API-adatforrásoktól az analitikai kimenetekig.
+A \ref{fig:dataset-lifecycle} ábra egy adatkészlet teljes életciklusát mutatja be a Riot API-adatforrásoktól az analitikai kimenetekig.
 
 \begin{figure}[H]
 \centering
@@ -61,13 +61,13 @@ A \ref{fig:dataset-lifecycle} ábra egy dataset teljes életciklusát mutatja be
 
 Az adatállapotot 2026. április 28-án a repository közvetlen olvasásával rögzítettük.
 
-A \ref{tab:data-state} táblázat az aktív adatállapotot rögzíti 2026. április 28-i állapot szerint.
+A \ref{tab:data-state} táblázat az aktív adatállapotot rögzíti 2026. április 28-i állapot szerint, utánna nem történt adatkészlet bővítés.
 
 \begin{table}[H]
 \centering
-\caption{A két dataset aktuális adatállapota (2026. április 28.)}
+\caption{A két dataset aktuális adatállapota}
 \label{tab:data-state}
-\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|r|r|}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}X|r|r|}
 \hline
 \textbf{Mérőszám} & \textbf{flexset} & \textbf{soloq} \\
 \hline

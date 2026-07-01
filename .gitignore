@@ -49,3 +49,6 @@ backend/genetic-neurosim/client-monogame/Content/
 .playwright-cli
 
 Ghid_lucr_licenta_Info LM.pdf
+*.aux
+*.out
+*.toc

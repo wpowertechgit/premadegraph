@@ -4,17 +4,16 @@ Az elemzés két eltérő queue-típusból gyűjtött adatkészletre épül: a F
 
 \section{A két dataset szerkezeti különbségei}
 
-A Flex Queue (440-es queue ID) csapatszedést tesz lehetővé: játékosok 2--5 főig premade csapatot alkothatnak. Ez azt jelenti, hogy a szövetségesi pozícióban ismételten megjelenő játékospárok egy része \emph{szándékolt ismétlődés}. Az ally/enemy arány (73.17\% ally a \textit{flexset}-en) részben ennek a mechanizmusnak a következménye.
+A Flex Queue (440-es queue ID) csapatszedést tesz lehetővé: játékosok 2--5 főig premade csapatot alkothatnak. Ez azt jelenti, hogy a szövetségesi pozícióban ismételten megjelenő játékospárok egy része \emph{szándékolt ismétlődés}. Az ally/enemy arány (73.17\% ally a \textit{flexset}-en) részben ennek a természetes mechanizmusnak a következménye, hiszen mindkét esetben a premade kapcsolatok begyűjtése volt a cél.
 
-A Solo/Duo Queue (420-as queue ID) legfeljebb két fős premade-et engedélyez. Az ally/enemy arány (65.24\% ally a \textit{soloq}-on) alacsonyabb, ami összhangban van azzal, hogy a véletlenszerűbb meccsek kevesebb domináns szövetségesi kapcsolatot hoznak létre.
+A Solo/Duo Queue (420-as queue ID) legfeljebb két fős premade-et engedélyez. Az ally/enemy arány (65.24\% ally a \textit{soloq}-on) alacsonyabb, ami összhangban van azzal, hogy a véletlenszerűbb meccsek kevesebb domináns szövetségesi kapcsolatot hoznak létre. Jelen lehet egyes klaszterekben akár egy harmadik vagy egy negyedik játékos is, mivel a seedelt játékos nem feltétlenül egy játékossal játszik, egy climb során.
 
 Az \ref{tab:dataset-sizes}. táblázat a két dataset alapvető méretmutatóit tartalmazza.
-
 \begin{table}[H]
 \centering
 \caption{A két dataset alapvető méretei}
 \label{tab:dataset-sizes}
-\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|r|r|}
+\begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}X|r|r|}
 \hline
 \textbf{Mutató} & \textbf{flexset} & \textbf{soloq} \\
 \hline
@@ -34,7 +33,7 @@ Legnagyobb klaszterméret & 20 & 20 \\
 \end{tabularx}
 \end{table}
 
-A \textit{flexset} átlagos klasztermérete (3,750) több mint kétszerese a \textit{soloq}-énak (1,768): előbbiben jellemzően 3--4 fős csoportok, utóbbiban 1--2 fős duók dominálnak. A queue-mechanika közvetlenül magyarázza ezt: a Flex Queue-ban legfeljebb 5 fős premade csapatok mehetnek együtt, míg a Solo/Duo Queue-ban maximum kettő.
+A \textit{flexset} átlagos klasztermérete (3,750) több mint kétszerese a \textit{soloq}-énak (1,768): előbbiben jellemzően 3--4 fős csoportok, utóbbiban 1--2 fős duók dominálnak. A queue-mechanika közvetlenül magyarázza ezt: a Flex Queue-ban legfeljebb 5 fős premade csapatok mehetnek együtt, míg a Solo/Duo Queue-ban főleg kettő.
 
 \section{Összefoglalás}
 
@@ -62,7 +61,7 @@ Kutatási szerep & Asszociatív gráf és teljesítménykapcsolat & Teljesítmé
 \end{tabularx}
 \end{table}
 
-\noindent\small{†~\textit{Háromszög-struktúrák} (triádok): ha az A játékos ismeri B-t és C-t, és B is ismeri C-t, ez egy zárt háromszög a hálózatban. Több ilyen zárt háromszög erősebb csoportkohézióra utal. \quad ‡~\textit{Mag-periféria} (core-periphery): a gráf belső magja sűrűn összekötött, a perifériás csúcsok csak néhány kapcsolattal rendelkeznek.}\normalsize
+\noindent\small{\textit{Háromszög-struktúrák} (triádok): ha az A játékos ismeri B-t és C-t, és B is ismeri C-t, ez egy zárt háromszög a hálózatban. Több ilyen zárt háromszög erősebb csoportkohézióra utal. \textit{Mag-periféria} (core-periphery): a gráf belső magja sűrűn összekötött, a perifériás csúcsok csak néhány kapcsolattal rendelkeznek.}\normalsize
 
 \medskip
-A \textit{flexset} az asszociatív játékosgráf és a visszatérő szövetségesi kapcsolatok természetesebb terepe, a \textit{soloq} pedig a teljesítmény-alapvonal és a kontroll-dataset szerepét tölti be. A \textit{battle-path opscore} értéke a \textit{soloq}-on magasabb (0.1625), mint a \textit{flexset}-en (0.1461). A \textit{social-path} módban a \textit{flexset} erősebb (0.2346 vs. 0.1750), ami a premade-szövetségesi mechanizmust tükrözi.
+A \textit{flexset} az asszociatív játékosgráf és a visszatérő szövetségesi kapcsolatok természetesebb terepe, a \textit{soloq} pedig a teljesítmény-alapvonal és a kontroll-dataset szerepét tölti be. A \textit{battle-path opscore} értéke a \textit{soloq}-on magasabb (0.1625), mint a \textit{flexset}-en (0.1461). A \textit{social-path} módban a \textit{flexset} erősebb (0.2346 vs. 0.1750), ami a premade-szövetségesi mechanizmust tükrözi. Bővebben a kibővített dolgozat 6. fejezetében lehet olvasni \cite{premadegraph-full}.
