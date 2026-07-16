@@ -280,8 +280,8 @@ export default function LandingPage({ onOpenSidebar }: LandingPageProps) {
             <div className="landing__section-label">Current thesis scope</div>
             <h2>Focused, measurable research questions</h2>
             <p>
-              The project maintains a clear research direction. Active work is separated
-              from future-facing exploration.
+              The project maintains a clear research direction across active graph analytics
+              and a live, graph-informed simulation system.
             </p>
             <div className="landing__scope-grid">
               <div className="landing__scope-item">
@@ -326,12 +326,12 @@ export default function LandingPage({ onOpenSidebar }: LandingPageProps) {
                   <span>Parallel Rust implementation with cost rule 1/strength and per-player output.</span>
                 </div>
               </div>
-              <div className="landing__scope-item landing__scope-item--future">
+              <div className="landing__scope-item">
                 <div className="landing__scope-dot" />
                 <div className="landing__scope-copy">
-                  <strong>Genetic NeuroSim v2</strong>
-                  <span>Future-facing agent simulation seeded from validated graph profiles.</span>
-                  <span className="landing__scope-tag">Future</span>
+                  <strong>Tribal NeuroSim</strong>
+                  <span>Live evolutionary agent simulation informed by graph-derived player profiles.</span>
+                  <span className="landing__scope-tag landing__scope-tag--live">Live</span>
                 </div>
               </div>
             </div>

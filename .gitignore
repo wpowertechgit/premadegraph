@@ -52,3 +52,6 @@ Ghid_lucr_licenta_Info LM.pdf
 *.aux
 *.out
 *.toc
+source code/
+docs/presentation
+.claude

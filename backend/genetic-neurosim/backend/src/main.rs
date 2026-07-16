@@ -778,6 +778,7 @@ async fn main() {
         .route("/api/status", get(get_status))
         .route("/api/desktop/v1/status", get(get_status))
         .route("/api/config", get(get_config).post(update_config))
+        .route("/api/desktop/v1/config", get(get_config).post(update_config))
         .route("/api/config/refresh", post(refresh_from_db))
         .route("/api/god-mode", post(god_mode))
         .route("/api/recordings", get(list_recordings))

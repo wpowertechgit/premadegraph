@@ -1647,17 +1647,16 @@ async function loadDatasetColumnStats() {
   const loadPromise = (async () => {
     const t0 = Date.now();
     try {
+      const colInfoRows = await refinedDbAll("PRAGMA table_info(players)");
+      const colSet = new Set(colInfoRows.map((c) => c.name));
+      const hasArtifactsV2 = colSet.has("artifact_combat_impact");
+
+      const artifactSelect = hasArtifactsV2
+        ? `, artifact_combat_impact, artifact_risk_discipline, artifact_resource_tempo, artifact_map_objective_control, artifact_team_enablement`
+        : ``;
+
       const rows = await refinedDbAll(
-         `SELECT
-            opscore,
-            feedscore,
-            artifact_combat_impact,
-            artifact_risk_discipline,
-            artifact_resource_tempo,
-            artifact_map_objective_control,
-            artifact_team_enablement
-          FROM players
-          WHERE matches_processed > 0`,
+         `SELECT opscore, feedscore${artifactSelect} FROM players WHERE matches_processed > 0`,
       );
       const elapsed = Date.now() - t0;
 
@@ -2448,15 +2447,18 @@ app.get("/api/players/:puuid/scores", async (req, res) => {
 
     // Single-row player fetch + dataset KDA lookup (file scan is dataset-level cached).
     const t2 = Date.now();
+    const _playerColInfo = await refinedDbAll("PRAGMA table_info(players)");
+    const _playerColSet = new Set(_playerColInfo.map((c) => c.name));
+    const _hasArtV2 = _playerColSet.has("artifact_combat_impact");
+    const _artifactCols = _hasArtV2
+      ? `, artifact_combat_impact, artifact_risk_discipline, artifact_resource_tempo, artifact_map_objective_control, artifact_team_enablement`
+      : ``;
     const [row, kdaRaw] = await Promise.all([
       refinedDbGet(
-         `SELECT
-            puuid, names, opscore, feedscore,
+        `SELECT puuid, names, opscore, feedscore,
             detected_role, role_confidence, matches_processed, score_computed_at, country,
-            artifact_combat_impact, artifact_risk_discipline, artifact_resource_tempo,
-            artifact_map_objective_control, artifact_team_enablement, score_detail_json
-          FROM players
-          WHERE puuid = ?`,
+            score_detail_json${_artifactCols}
+          FROM players WHERE puuid = ?`,
         [puuid],
       ),
       buildPlayerKdaBenchmark(puuid),
@@ -3397,6 +3399,10 @@ app.post("/api/neurosim/desktop/v1/control/:command", (req, res) => {
   }
 
   neurosimBridge.proxyHttpToPath(req, res, upstreamPath);
+});
+
+app.post("/api/neurosim/desktop/v1/config", (req, res) => {
+  neurosimBridge.proxyHttpToPath(req, res, "/api/config");
 });
 
 app.post("/api/neurosim/launch-client", (req, res) => {

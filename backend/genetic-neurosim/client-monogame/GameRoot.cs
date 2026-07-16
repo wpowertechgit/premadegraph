@@ -57,6 +57,7 @@ public sealed class GameRoot : Game
     private double _simulationAccumulator;
     private double _titleAccumulator;
     private int _ticksPerSecond = 12;
+    private int _networkTickRate = 20;
 
     // M6: Network mode
     private volatile bool _isNetworkMode;
@@ -1029,11 +1030,25 @@ public sealed class GameRoot : Game
         if (commands.SpeedUp)
         {
             _ticksPerSecond = Math.Min(60, _ticksPerSecond + 2);
+            if (_isNetworkMode && _controlClient is not null)
+            {
+                _networkTickRate = Math.Min(500, _networkTickRate + 20);
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                _ = _controlClient.SetTickRateAsync(_networkTickRate, cts.Token)
+                    .ContinueWith(_ => cts.Dispose(), TaskScheduler.Default);
+            }
         }
 
         if (commands.SlowDown)
         {
             _ticksPerSecond = Math.Max(1, _ticksPerSecond - 2);
+            if (_isNetworkMode && _controlClient is not null)
+            {
+                _networkTickRate = Math.Max(1, _networkTickRate - 20);
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                _ = _controlClient.SetTickRateAsync(_networkTickRate, cts.Token)
+                    .ContinueWith(_ => cts.Dispose(), TaskScheduler.Default);
+            }
         }
 
         if (commands.SelectAtScreenPosition && commands.SelectionScreenPosition is { } screenPosition)
@@ -1318,7 +1333,9 @@ public sealed class GameRoot : Game
         var selectedSummary = selected is null
             ? "none"
             : $"{selected.Name} pop {selected.Population} food {selected.FoodStores:0}";
-        var mode = _playableSimulation.IsPaused ? "paused" : $"{_ticksPerSecond} tps";
+        var mode = _playableSimulation.IsPaused ? "paused"
+            : _isNetworkMode ? $"{_networkTickRate} tps (net)"
+            : $"{_ticksPerSecond} tps";
         var localEndpoint = _diagnostics.IsConnected ? "node connected" : "local demo";
 
         Window.Title = $"Tribal NeuroSim | {mode} | tick {_playableSimulation.Tick} | tribes {localLivingTribes} | disputes {localDisputedTiles} | selected {selectedSummary} | {localEndpoint}";

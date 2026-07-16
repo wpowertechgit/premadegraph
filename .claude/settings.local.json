@@ -56,7 +56,14 @@
       "Bash(./target/release/neurosim-backend.exe --cli-run --ticks 2000 --seed 7777 --clusters 599 --checkpoint-interval 250)",
       "Bash(pkill -f \"neurosim-backend\")",
       "PowerShell(Stop-Process *)",
-      "Bash(grep -n \"^\\\\\\\\\\\\\\\\chapter{\" c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/docs/latex/mainraw-monolith-snapshot.tex)"
+      "Bash(grep -n \"^\\\\\\\\\\\\\\\\chapter{\" c:/Users/karol/OneDrive/Dokumentumok/Dolgozat/premadegraph/docs/latex/mainraw-monolith-snapshot.tex)",
+      "Bash(node --require ./node_modules/better-sqlite3/build/Release/better_sqlite3.node -e \"x\")",
+      "Bash(python3 -c ' *)",
+      "Bash(dir /b backend\\\\data\\\\matches\\\\flexset)",
+      "Bash(node \"C:/Users/karol/AppData/Local/Temp/claude/c--Users-karol-OneDrive-Dokumentumok-Dolgozat-premadegraph/ad34045a-f386-46d6-b549-3e1e7d5e6f5f/scratchpad/rescore-all.js\")",
+      "Bash(node rescore-all.js)",
+      "PowerShell(dotnet build backend/genetic-neurosim/client-monogame/TribalNeuroSim.Client.csproj 2>&1)",
+      "PowerShell(dotnet build \"backend\\\\genetic-neurosim\\\\client-monogame\\\\TribalNeuroSim.Client.csproj\" 2>&1)"
     ]
   }
 }

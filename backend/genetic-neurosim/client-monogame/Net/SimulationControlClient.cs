@@ -79,6 +79,11 @@ public sealed class SimulationControlClient
         return SendControlAsync("reset", cancellationToken);
     }
 
+    public Task SetTickRateAsync(int tickRate, CancellationToken cancellationToken)
+    {
+        return _httpClient.PostAsJsonAsync(Resolve("config"), new { tick_rate = tickRate }, cancellationToken);
+    }
+
     private async Task SendControlAsync(string command, CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsync(

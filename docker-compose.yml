@@ -22,7 +22,7 @@ services:
     environment:
       - NODE_ENV=development
       - GRAPH_DB_PATH=/app/data/databases/default/playersrefined.db
-      - PATHFINDER_RUST_BIN=/app/pathfinder-rust/target/debug/pathfinder_rust
+      - PATHFINDER_RUST_BIN=/app/pathfinder-rust/target/release/pathfinder_rust
       - DB_EXPLORER_ORIGIN=http://db-explorer:5088
       - NEUROSIM_HOST=neurosim
     depends_on:

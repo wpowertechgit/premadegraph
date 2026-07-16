@@ -376,20 +376,12 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.landing__scope-item--future {
-  opacity: 0.45;
-}
-
 .landing__scope-dot {
   width: 6px;
   height: 6px;
   margin-top: 0.5rem;
   flex-shrink: 0;
   background: var(--accent);
-}
-
-.landing__scope-item--future .landing__scope-dot {
-  background: var(--text-muted);
 }
 
 .landing__scope-copy strong {
@@ -415,6 +407,11 @@
   font-weight: 510;
   color: var(--text-muted);
   letter-spacing: 0.04em;
+}
+
+.landing__scope-tag--live {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
 }
 
 /* ─── Pipeline ────────────────────────────────────────────────────────────── */
