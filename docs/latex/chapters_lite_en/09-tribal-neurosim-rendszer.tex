@@ -20,7 +20,7 @@ The simulation consistently follows the same structural phases: early expansion 
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.92\textwidth]{assets/diagrams/thesis_neurosim_architecture_graphviz.png}
+\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{assets/diagrams/thesis_neurosim_architecture_graphviz.png}
 \caption{Tribal NeuroSim responsibility split: the Rust engine is the authoritative source of simulation state, while the Node and MonoGame layers act as intermediary and display.}
 \label{fig:neurosim-architecture-graphviz}
 \end{figure}
@@ -29,7 +29,7 @@ The \textbf{Rust runtime} is the single source of authority: the tick cycle, wor
 
 This division is the direct lesson of the browser-based v2 prototype: when simulation state was coupled to the UI layer, ghost wars, memory leaks, and non-deterministic behaviour emerged.
 
-The ghost war specifically meant that two tribes simultaneously observed different war states: one considered the clash finished while the other still treated it as ongoing. The cause was that the UI held the simulation state, and state could drift between HTTP requests. In the current architecture every decision is made in the Rust binary; the MonoGame client only renders the most recently received frame, eliminating drift and making the simulation reproducible from the same initial state at any point.
+The ghost war specifically meant that wars belonging to finished and dead tribes never received a closed status: because no structured war-closing event existed, the system continued to track them as active, and their count accumulated in memory --- in the final state of the early prototype, a single living tribe faced more than a hundred active ghost wars. In the current architecture every decision is made in the Rust binary, and a tribe's elimination atomically closes all its active wars (\textit{WarCancelled}), so ghost wars cannot arise; the MonoGame client only renders the most recently received frame, and the simulation is reproducible from the same initial state at any point.
 
 \section{FrameV1 Binary Protocol}
 

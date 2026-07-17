@@ -120,6 +120,7 @@ pub struct ControlConfig {
 }
 
 impl Default for ControlConfig {
+    // Alapértelmezett konfigurációs értékek beállítása (seed=42, 100 egyed, 0.05 mutáció)
     fn default() -> Self {
         Self {
             clusters: Vec::new(),
@@ -444,6 +445,7 @@ struct Vec2 {
 
 #[allow(dead_code)]
 impl Vec2 {
+    // 2D koordináta létrehozása x és y értékekből
     fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
@@ -451,6 +453,7 @@ impl Vec2 {
 
 impl std::ops::Add for Vec2 {
     type Output = Vec2;
+    // Két Vec2 összeadása koordinátánként
     fn add(self, rhs: Self) -> Self::Output {
         Vec2::new(self.x + rhs.x, self.y + rhs.y)
     }
@@ -458,6 +461,7 @@ impl std::ops::Add for Vec2 {
 
 impl std::ops::Mul<f32> for Vec2 {
     type Output = Vec2;
+    // Vec2 szkalárral való szorzása (méretezés)
     fn mul(self, rhs: f32) -> Self::Output {
         Vec2::new(self.x * rhs, self.y * rhs)
     }
@@ -479,6 +483,7 @@ const _WORLD_HEIGHT: f32 = 800.0;
 
 #[allow(dead_code)]
 impl SpatialHash {
+    // Térbeli hasítótábla létrehozása adott cellamérettel
     fn new(cell_size: f32) -> Self {
         let cols = (_WORLD_WIDTH / cell_size).ceil() as usize;
         let rows = (_WORLD_HEIGHT / cell_size).ceil() as usize;
@@ -490,6 +495,7 @@ impl SpatialHash {
         }
     }
 
+    // Grid újraépítése az összes elem újrabesorolásával
     fn _rebuild(&mut self, items: &[Vec2]) {
         for bucket in &mut self.buckets {
             bucket.clear();
@@ -500,6 +506,7 @@ impl SpatialHash {
         }
     }
 
+    // Pont gridcellájának meghatározása 2D koordinátából lineáris indexbe
     fn _cell(&self, point: &Vec2) -> usize {
         let x = ((point.x / self.cell_size).floor() as isize).rem_euclid(self.cols as isize) as usize;
         let y = ((point.y / self.cell_size).floor() as isize).rem_euclid(self.rows as isize) as usize;
@@ -553,6 +560,7 @@ pub struct CompiledGenome {
 impl CompiledGenome {
     /// Forward-pass activation. Returns one f32 per output node.
     /// Input nodes are loaded from `inputs`; bias node is clamped to 1.0.
+    // NEAT neurális háló előre-futtatása: topológiai sorrendben tanh aktiváció, visszaadja a kimeneti értékeket
     fn activate(&self, inputs: &[f32]) -> Vec<f32> {
         let n = self.ordered_indices.len();
         let mut activations = vec![0.0f32; n];
@@ -589,6 +597,7 @@ pub struct Genome {
 
 impl Genome {
     #[allow(dead_code)]
+    // Minimális teljesen összefüggő genome létrehozása megosztott InnovationTracker-rel
     fn minimal(tracker: &mut InnovationTracker, rng: &mut SmallRng) -> Self {
         let mut nodes = Vec::with_capacity(INPUT_COUNT + OUTPUT_COUNT + 1);
         for input in 0..INPUT_COUNT {
@@ -638,15 +647,12 @@ impl Genome {
         genome
     }
 
-    /// Create a minimal genome for an arbitrary (input_count, output_count) topology.
-    ///
-    /// Uses a fresh local `InnovationTracker` and a deterministic RNG seed so
-    /// that tribe brains are reproducible without exposing the simulation's
-    /// shared tracker.
+    // Genome létrehozása alapértelmezett seed=42-vel (determinisztikus, újra seed-elhető)
     pub fn new(input_count: usize, output_count: usize) -> Self {
         Self::new_seeded(input_count, output_count, 42)
     }
 
+    // Genome létrehozása adott seed-del: determinisztikus súlykiosztás + InnovationTracker
     pub fn new_seeded(input_count: usize, output_count: usize, seed: u64) -> Self {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mut tracker = InnovationTracker::new_with_counts(input_count, output_count);
@@ -700,6 +706,7 @@ impl Genome {
         genome
     }
 
+    // Csomópont-mutáció: egy aktív kapcsolatot kettévesz, közé új rejtett csomópontot szúr
     pub fn add_node_mutation(&mut self, tracker: &mut InnovationTracker, rng: &mut SmallRng) {
         let enabled_indices: Vec<usize> = self
             .connections
@@ -752,6 +759,7 @@ impl Genome {
         });
     }
 
+    // Kapcsolat-mutáció: véletlenszerű új élsúlyt ad két még nem kapcsolt csomópont közt
     pub fn add_connection_mutation(&mut self, tracker: &mut InnovationTracker, rng: &mut SmallRng) {
         let mut candidates = Vec::new();
         for from in &self.nodes {
@@ -783,13 +791,12 @@ impl Genome {
         }
     }
 
-    /// Return a reference to the compiled genome (used by the neural activation path).
+    // Lefordított (futásra kész) genome referenciájának visszaadása aktiváláshoz
     pub fn compile(&self) -> &CompiledGenome {
         &self.compiled
     }
 
-    /// Mutate genome weights/topology. Always ends with `rebuild_compiled` so the
-    /// cached activation plan stays valid regardless of what this method does.
+    // Súlyok és topológia mutálása: 80% súlyzaj, 5% kapcsolás-toggle, majd cache újraépítés
     pub fn mutate(&mut self, rng: &mut rand::rngs::SmallRng, rate: f32) {
         // Perturb enabled connection weights
         for gene in &mut self.connections {
@@ -808,9 +815,7 @@ impl Genome {
         self.rebuild_compiled();
     }
 
-    /// Fitness-weighted crossover: for each shared connection gene, adopt the
-    /// other genome's weight with probability proportional to its relative fitness.
-    /// Rebuilds the compiled plan after blending.
+    // Fitness-arányos keresztezés: megosztott kapcsolatokat a szülők fitnesz-aránya szerint vesz át
     pub fn inherit_from(
         &mut self,
         other: &Genome,
@@ -835,6 +840,7 @@ impl Genome {
         self.rebuild_compiled();
     }
 
+    // Lefordított aktiválási cache újraépítése (topológiai sorrend + él-szomszédsági lista)
     pub fn rebuild_compiled(&mut self) {
         self.nodes.sort_by(|a, b| {
             a.order
@@ -894,6 +900,7 @@ pub struct InnovationTracker {
 
 impl InnovationTracker {
     #[allow(dead_code)]
+    // InnovationTracker inicializálása alapértelmezett input/output darabszámokkal
     fn new() -> Self {
         Self {
             next_node_id: (INPUT_COUNT + 1 + OUTPUT_COUNT) as u32,
@@ -903,7 +910,7 @@ impl InnovationTracker {
         }
     }
 
-    /// Create a tracker for an arbitrary topology (used by `Genome::new`).
+    // Tetszőleges topológiájú tracker létrehozása egyedi input/output darabszámokkal
     fn new_with_counts(input_count: usize, output_count: usize) -> Self {
         Self {
             next_node_id: (input_count + 1 + output_count) as u32,
@@ -914,15 +921,17 @@ impl InnovationTracker {
     }
 
     #[allow(dead_code)]
+    // Output csomópont globális azonosítójának kiszámítása slot indexből
     fn base_output_id(&self, output_slot: usize) -> u32 {
         (INPUT_COUNT + 1 + output_slot) as u32
     }
 
-    /// Variant of `base_output_id` for arbitrary input/output counts.
+    // Output ID tetszőleges input darabszám esetén (általánosított base_output_id)
     fn base_output_id_n(&self, input_count: usize, output_slot: usize) -> u32 {
         (input_count + 1 + output_slot) as u32
     }
 
+    // Kapcsolat innovációs számának kiosztása vagy visszaadása (egyedi él-azonosító)
     fn connection_innovation(&mut self, from: u32, to: u32) -> u64 {
         if let Some(existing) = self.connection_map.get(&(from, to)) {
             *existing
@@ -934,6 +943,7 @@ impl InnovationTracker {
         }
     }
 
+    // Kapcsolat felosztása: új rejtett csomópontot és két új él-innovációt hoz létre
     fn split_connection(&mut self, original_innovation: u64) -> (u32, u64, u64) {
         if let Some(existing) = self.split_map.get(&original_innovation) {
             *existing
@@ -953,8 +963,7 @@ impl InnovationTracker {
 
 // ─── O2: Scenario cluster factory ────────────────────────────────────────────
 
-/// Test helper — accepts raw 0–10 scale values (like old DB scores) and normalizes by /10
-/// to match what server.js produces before handing off to TribeStats::from_profile.
+// Tesztklaszter-profil gyártója: nyers 0-10 értékeket normalizál és ClusterProfile-lá alakít
 fn scenario_cluster(id: &str, a_combat: f32, a_resource: f32) -> ClusterProfile {
     let n = |v: f32| (v / 10.0f32).clamp(0.0, 1.0);
     ClusterProfile {
@@ -1042,6 +1051,7 @@ pub struct TribeSimulation {
 }
 
 impl TribeSimulation {
+    // Szimulációt Arc<Mutex<>> burkolatba csomagolja, világot és törzseket inicializálja
     pub fn shared(config: ControlConfig) -> SharedSimulation {
         use rand::SeedableRng;
         let mut wgen = crate::world::WorldGenerationConfig::from_clusters(config.world_seed, &config.clusters);
@@ -1082,6 +1092,7 @@ impl TribeSimulation {
         Arc::new(RwLock::new(sim))
     }
 
+    // Törzsek létrehozása klaszterprofilokból: genome seed, artifact diverzitás, kezdőpozíció
     fn initialize_tribes(&mut self) {
         let spawn_tiles = self.world.find_spawn_tiles(self.config.clusters.len(), &mut self.rng);
         self.tribes = self.config.clusters.iter().enumerate().map(|(i, profile)| {
@@ -1154,22 +1165,27 @@ impl TribeSimulation {
         }
     }
 
+    // Szimuláció megállított állapotának lekérdezése
     pub fn is_halted(&self) -> bool {
         self.halted
     }
 
+    // Szimuláció szüneteltetett állapotának lekérdezése
     pub fn is_paused(&self) -> bool {
         self.paused
     }
 
+    // Szimuláció szüneteltetése (paused=true)
     pub fn pause(&mut self) {
         self.paused = true;
     }
 
+    // Szüneteltetett szimuláció folytatása
     pub fn resume(&mut self) {
         self.paused = false;
     }
 
+    // Egyetlen tick lefuttatása szünetelt módban (debug léptetés)
     pub fn step_once_when_paused(&mut self) -> Option<Vec<u8>> {
         if !self.paused || self.halted {
             return None;
@@ -1177,21 +1193,25 @@ impl TribeSimulation {
         Some(self.step())
     }
 
+    // Szimuláció újraindítása ugyanazzal a seed-del (reprodukálható futás)
     pub fn reset_same_seed(&mut self) {
         self.paused = false;
         self.reinitialize();
     }
 
+    // Szimuláció újraindítása új seed-del
     pub fn restart_with_seed(&mut self, seed: u64) {
         self.config.world_seed = seed;
         self.paused = false;
         self.reinitialize();
     }
 
+    // Aktuális vezérlőkonfiguráció referenciájának visszaadása
     pub fn config(&self) -> &ControlConfig {
         &self.config
     }
 
+    // Részleges konfigurációs frissítés alkalmazása (csak a megadott mezők változnak)
     pub fn apply_config_patch(&mut self, patch: ConfigPatch) {
         if let Some(v) = patch.mutation_rate { self.config.mutation_rate = v; }
         if let Some(v) = patch.population_size { self.config.population_size = v; }
@@ -1206,12 +1226,14 @@ impl TribeSimulation {
         }
     }
 
+    // Klaszterprofilok cseréje és szimuláció újrainicializálása
     pub fn set_clusters(&mut self, mut clusters: Vec<ClusterProfile>) {
         // Sort by id for deterministic tribe placement regardless of fetch order.
         clusters.sort_by(|a, b| a.id.cmp(&b.id));
         self.config.clusters = clusters;
     }
 
+    // Teljes szimuláció újrainicializálása: világ újragenerálása, törzsek törlése és újralétrehozása
     pub fn reinitialize(&mut self) {
         use rand::SeedableRng;
         self.tick = 0;
@@ -1251,6 +1273,7 @@ impl TribeSimulation {
 
     // ─── O2: Two Tribes One Border Scenario ──────────────────────────────────
 
+    // Kéttörzses tesztforgatókönyv: egy harcias és egy erőforrás-gyűjtő törzs szembenállása
     fn initialize_two_tribes_scenario(&mut self) {
         use rand::SeedableRng;
         const SCENARIO_SEED: u64 = 42_002;
@@ -1321,6 +1344,7 @@ impl TribeSimulation {
         }
     }
 
+    // Szimulációs állapot összefoglalója API-válasz formátumban (tick, törzs-szám, stb.)
     pub fn status(&self) -> StatusResponse {
         StatusResponse {
             tick: self.tick,
@@ -1339,6 +1363,7 @@ impl TribeSimulation {
 
     /// Push an event into the global ring buffer and both tribe journals
     /// (tribe_id and other_tribe_id if set).
+    // Esemény hozzáadása a naplóhoz tick-bélyeggel és érintett törzshez kötve
     pub fn push_event(&mut self, mut event: crate::events::SimulationEvent) {
         event.event_id = self.next_event_id;
         self.next_event_id += 1;
@@ -1369,10 +1394,12 @@ impl TribeSimulation {
     }
 
     /// Return the most recent global events (up to `limit`).
+    // Legutóbbi N esemény visszaadása fordított időrendben
     pub fn recent_events(&self, limit: usize) -> Vec<&crate::events::SimulationEvent> {
         self.global_events.iter().rev().take(limit).collect()
     }
 
+    // Adott tick után keletkezett összes esemény visszaadása
     pub fn events_after(
         &self,
         last_seen_event_id: Option<u64>,
@@ -1386,6 +1413,7 @@ impl TribeSimulation {
 
     /// Return events for a specific tribe (most recent first).
     #[allow(dead_code)]
+    // Adott törzs összes eseményének visszaadása id alapján szűrve
     pub fn tribe_event_log(&self, tribe_id: usize) -> Vec<&crate::events::SimulationEvent> {
         match self.tribe_events.get(&tribe_id) {
             Some(journal) => journal.iter().rev().collect(),
@@ -1393,6 +1421,7 @@ impl TribeSimulation {
         }
     }
 
+    // Teljes világállapot pillanatképe: csempék, élelmiszerszintek, törzs-metaadatok
     pub fn world_snapshot(&self) -> WorldSnapshotResponse {
         WorldSnapshotResponse {
             width: self.world.grid_w,
@@ -1411,6 +1440,7 @@ impl TribeSimulation {
 
     // ─── K3: Biome Composition ────────────────────────────────────────────────
 
+    // Törzs területén lévő biom-típusok darabszámának összeszámlálása
     fn biome_composition_for_tribe(&self, tribe_id: usize) -> std::collections::HashMap<String, usize> {
         let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         if let Some(tribe) = self.tribes.get(tribe_id) {
@@ -1433,6 +1463,7 @@ impl TribeSimulation {
         map
     }
 
+    // Egyetlen törzs részletes pillanatképe: pozíció, statisztikák, genome-info, biom-összetétel
     pub fn tribe_snapshot(&self, id: usize) -> Option<TribeSnapshotResponse> {
         let t = self.tribes.get(id)?;
         Some(TribeSnapshotResponse {
@@ -1465,6 +1496,7 @@ impl TribeSimulation {
         })
     }
 
+    // Csempe-tulajdonlás teljes térképének visszaadása (melyik törzs melyik csempét bírja)
     pub fn tile_ownership_snapshot(&self) -> TileOwnershipResponse {
         let total = self.world.total_tiles;
         let owners: Vec<TileOwnerRecord> = (0..total).map(|i| {
@@ -1493,6 +1525,7 @@ impl TribeSimulation {
 
     // ─── L2: Active Wars Snapshot ─────────────────────────────────────────────
 
+    // Aktív háborúk pillanatképe: résztvevők, tick-kezdet, intenzitás
     pub fn active_wars_snapshot(&self) -> crate::war::ActiveWarsResponse {
         let wars: Vec<crate::war::WarSummary> = self.active_wars.iter()
             .filter(|w| w.status == crate::war::WarStatus::Active)
@@ -1514,6 +1547,7 @@ impl TribeSimulation {
     }
 
     /// Rebuild per-tick O(1) lookup caches. Called at start of each step().
+    // Belső csempe→törzs gyorsítótár újraépítése minden tick elején (O(csempék) idő)
     fn rebuild_tile_cache(&mut self) {
         self.tribe_id_to_idx.clear();
         for (i, t) in self.tribes.iter().enumerate() {
@@ -1538,6 +1572,7 @@ impl TribeSimulation {
         }
     }
 
+    // Egyetlen szimulációs tick: neurális aktiválás, állapotgép, terjeszkedés, harc, generáció
     pub fn step(&mut self) -> Vec<u8> {
         self.tick += 1;
         // BP: Decay post-war exhaustion each tick so tribes can re-enter war after a cooldown.
@@ -1784,6 +1819,7 @@ impl TribeSimulation {
         }
     }
 
+    // Fitness értékek frissítése minden élő törzsnél (compute_fitness_of meghívása)
     fn refresh_fitness_scores(&mut self) {
         let scores: Vec<(usize, f32)> = (0..self.tribes.len())
             .filter(|&i| self.tribes[i].alive)
@@ -1794,6 +1830,7 @@ impl TribeSimulation {
         }
     }
 
+    // Szimulációs egészségmetrikák naplózása (élő törzsek, háborúk, generáció)
     fn log_sim_health(&self) {
         use crate::tribes::{BehaviorState, PolityTier};
         let alive: Vec<&crate::tribes::TribeState> =
@@ -1850,6 +1887,7 @@ impl TribeSimulation {
 
     // ─── Task 7: State Machine ────────────────────────────────────────────────
 
+    // Törzsek viselkedési állapotgép-átmeneteinek alkalmazása neurális kimenet alapján
     fn apply_state_machine(&mut self) {
         use crate::tribes::BehaviorState;
 
@@ -2133,6 +2171,7 @@ impl TribeSimulation {
 
     /// Score all tiles and return the best migration destination for a tribe.
     /// Prefers high-food neutral tiles within a reasonable distance.
+    // Migrációs célcsempe kiválasztása: élelemgazdag, szabad, lehetőleg távolabbi
     fn pick_migration_dest(&self, tribe_idx: usize) -> u16 {
         let t = &self.tribes[tribe_idx];
         let my_id = t.id as u32;
@@ -2176,6 +2215,7 @@ impl TribeSimulation {
     const OVEREXTENSION_CLAIM_PENALTY: f32 = 10.0;
 
     /// Compute food cost to claim a candidate tile for a tribe.
+    // Területigénylés energiaköltsége: alap + terjeszkedési büntetés + túlterjedési szorzó
     fn calculate_claim_cost(&self, tribe_idx: usize, tile_idx: usize, overextended: bool) -> f32 {
         let tribe = &self.tribes[tribe_idx];
         let territory_count = tribe.territory.len() as f32;
@@ -2204,6 +2244,7 @@ impl TribeSimulation {
     /// Current integration yield multiplier for a tile claimed by a tribe.
     /// Starts at 0.25, rises linearly to 1.0 over 75 ticks.
     /// Disputed or overextended tiles integrate at half speed.
+    // Beolvasztási szorzó: szomszédos saját csempék aránya alapján (magasabb = könnyebb terjeszkedés)
     fn integration_multiplier(&self, tribe_idx: usize, tile_idx: u16) -> f32 {
         let tribe = &self.tribes[tribe_idx];
         let claimed_tick = match tribe.tile_integration.get(&tile_idx) {
@@ -2223,6 +2264,7 @@ impl TribeSimulation {
         Self::INTEGRATION_START_YIELD + (Self::INTEGRATION_END_YIELD - Self::INTEGRATION_START_YIELD) * progress
     }
 
+    // Területterjeszkedés alkalmazása: szomszéd-csempék igénylése energiaköltséggel
     fn apply_territory_expansion(&mut self) {
         use crate::tribes::BehaviorState;
 
@@ -2365,6 +2407,7 @@ impl TribeSimulation {
         }
     }
 
+    // Ellenőrzi, van-e szomszédos törzs (határszomszédság alapján)
     fn has_neighbor(&self, tribe_idx: usize) -> bool {
         let my_tiles: std::collections::HashSet<u16> =
             self.tribes[tribe_idx].territory.iter().cloned().collect();
@@ -2381,6 +2424,7 @@ impl TribeSimulation {
     }
 
     /// True if any adjacent tribe has population < self.population * 0.6 (imperialistic target).
+    // Ellenőrzi, van-e gyengébb (alacsonyabb fitness) szomszédos törzs
     fn has_weaker_neighbor(&self, tribe_idx: usize) -> bool {
         let my_pop = self.tribes[tribe_idx].population;
         let threshold = my_pop as f32 * 0.6;
@@ -2401,6 +2445,7 @@ impl TribeSimulation {
 
     /// True if this tribe has at least one adjacent rival with border pressure ≥ PRESSURE_WAR_THRESHOLD.
     /// In endgame (≤ tribes.len()/6 alive) always returns true so stalemates can break.
+    // Ellenőrzi, van-e magas határnyomás alatt lévő szomszéd (védelmi kényszert jelöl)
     fn has_pressured_neighbor(&self, tribe_idx: usize) -> bool {
         let alive_count = self.tribes.iter().filter(|t| t.alive).count();
         let endgame_threshold = (self.tribes.len() / 6).max(4);
@@ -2425,6 +2470,7 @@ impl TribeSimulation {
 
     /// True if every tile adjacent to this tribe's territory is controlled by rival tribes —
     /// meaning no neutral expansion room remains.
+    // Körülvettség ellenőrzése: összes szomszéd ellenséges és nagyobb méretű
     fn is_surrounded(&self, tribe_idx: usize) -> bool {
         if !self.tribes[tribe_idx].alive { return false; }
         let tribe_id = self.tribes[tribe_idx].id as u32;
@@ -2449,6 +2495,7 @@ impl TribeSimulation {
     }
 
     /// Returns the index of the weakest (pop × a_combat) adjacent rival tribe, if any.
+    // Leggyengébb szomszédos törzs megkeresése támadási célpontnak
     fn find_weakest_adjacent_target(&self, tribe_idx: usize) -> Option<usize> {
         let my_ally = self.tribes[tribe_idx].ally_tribe;
         let mut best: Option<(usize, f32)> = None;
@@ -2472,6 +2519,7 @@ impl TribeSimulation {
 
     /// Returns the index of the least-aggressive adjacent unallied rival, if any.
     /// Used by surrounded tribes seeking a desperate alliance.
+    // Legkevésbé agresszív szomszéd megkeresése szövetség-kötési jelöltnek
     fn find_least_aggressive_adjacent(&self, tribe_idx: usize) -> Option<usize> {
         use crate::tribes::BehaviorState;
         let my_ally = self.tribes[tribe_idx].ally_tribe;
@@ -2503,6 +2551,7 @@ impl TribeSimulation {
     /// Total-war decree: when ≤ tribes.len()/6 survivors have not killed anyone for 600 ticks,
     /// force every alive tribe into AtWar against their nearest rival.
     /// Called every 10 ticks; fires only when stagnation conditions are met.
+    // Stagnálás-ellenőrzés: ha túl sok tick telt el törzs-halál nélkül, háborút indít
     fn apply_stagnation_war_sweep(&mut self) {
         use crate::tribes::BehaviorState;
 
@@ -2576,6 +2625,7 @@ impl TribeSimulation {
     /// Proactive conquest: tribes with high raid/aggression drives and a weaker adjacent rival
     /// declare war and immediately target that specific rival (not a random nearest).
     /// Called every 20 ticks.
+    // Opportunista háborúindítás: erős törzs megtámadja a leggyengébb szomszédját
     fn apply_opportunity_war(&mut self) {
         use crate::tribes::BehaviorState;
         let tick = self.tick;
@@ -2682,6 +2732,7 @@ impl TribeSimulation {
     /// - goal > 0.52 and isolation < 0.55 and unallied → desperate alliance with least-aggressive neighbor
     /// - otherwise → Desperate (final warning before Imploding)
     /// Called every 30 ticks.
+    // Bekerítési eszkaláció: körülvett törzs kétségbeesett hadat üzen a legerősebb szomszédnak
     fn apply_surrounded_escalation(&mut self) {
         use crate::tribes::BehaviorState;
         let tick = self.tick;
@@ -2809,6 +2860,7 @@ impl TribeSimulation {
 
     // ─── Task 8: Combat Resolution ────────────────────────────────────────────
 
+    // Harci felbontás: minden aktív háborúban veszteségeket oszt ki, győztest dönt, területet ad át
     fn apply_combat(&mut self) {
         use crate::tribes::BehaviorState;
 
@@ -3280,6 +3332,7 @@ impl TribeSimulation {
         }
     }
 
+    // Statisztikák természetes időbeli romlása (energia, populáció csökken tétlenség esetén)
     fn apply_stat_decay(&mut self) {
         for tribe in self.tribes.iter_mut().filter(|t| t.alive) {
             if tribe.population == 0 { continue; }
@@ -3296,6 +3349,7 @@ impl TribeSimulation {
         }
     }
 
+    // Knuth-algoritmussal Poisson-eloszlású egész szám generálása (esemény-darabszámhoz)
     fn knuth_poisson(&mut self, lambda: f32) -> u32 {
         if lambda >= 30.0 {
             // Normal approximation: N(lambda, sqrt(lambda)) — exact Knuth is O(lambda) and impractical
@@ -3318,6 +3372,7 @@ impl TribeSimulation {
 
     // ─── Task 9: Alliance System ──────────────────────────────────────────────
 
+    // Szövetségi rendszer frissítése: új szövetségek kötése, meglévők megszakítása
     fn apply_alliances(&mut self) {
         use crate::tribes::BehaviorState;
 
@@ -3397,6 +3452,7 @@ impl TribeSimulation {
     /// Uses tile_tribe_idx (rebuilt each tick) to find adjacent borders in O(total_tiles × 6).
     /// Adjacent pairs gain +1 pressure (capped at PRESSURE_CAP).
     /// Non-adjacent pairs decay by PRESSURE_DECAY_PER_TICK and are removed at 0.
+    // Határnyomás frissítése: szomszéd-erő és területi érintkezés alapján számolt feszültség
     fn update_border_pressure(&mut self) {
         let mut adjacent_pairs: std::collections::BTreeSet<(usize, usize)> =
             std::collections::BTreeSet::new();
@@ -3468,6 +3524,7 @@ impl TribeSimulation {
 
     /// Scan all disputed tiles and update the dispute registry with first-seen ticks.
     /// Evict pairs where no shared disputed tile remains (resolved by war/death/etc).
+    // Vitaregiszter frissítése: szomszédossági változások alapján viták nyitása/zárása
     fn update_dispute_registry(&mut self) {
         // Build current set of active disputing pairs from world tile data
         let mut active_pairs: std::collections::BTreeSet<(usize, usize)> = std::collections::BTreeSet::new();
@@ -3508,6 +3565,7 @@ impl TribeSimulation {
     ///   - Partial retreat: weaker side yields roughly half its disputed tiles, keeping the rest
     ///                      as a stable fractional border (v3 §4 60/40 mechanic)
     ///   - War           : the more aggressive tribe declares war on the other
+    // Viták feloldása: türelmi idő lejárta után háború, szövetség vagy stagnálás dönt
     fn apply_dispute_resolution(&mut self) {
         let tick = self.tick;
 
@@ -3718,6 +3776,7 @@ impl TribeSimulation {
 
     // ─── V3: Polity tier count map ───────────────────────────────────────────
 
+    // Élő törzsek politikai szintjeinek darabszám-összesítése (Tribe/City/Duchy/Kingdom/Empire)
     fn polity_tier_count_map(&self) -> std::collections::HashMap<String, usize> {
         let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for t in &self.tribes {
@@ -3731,6 +3790,7 @@ impl TribeSimulation {
 
     // ─── V3: Veterancy XP ────────────────────────────────────────────────────
 
+    // Veterán tapasztalati pontok adása harcoló törzsnek győzelem vagy sikeres védelem után
     fn apply_veterancy_xp(&mut self, tribe_idx: usize) {
         use crate::tribes::BehaviorState;
         let tribe = &self.tribes[tribe_idx];
@@ -3762,6 +3822,7 @@ impl TribeSimulation {
     }
 
     /// Assign specialization role based on dominant artifact.
+    // Specializációs szerep hozzárendelése a legmagasabb stat alapján (harcos/gyűjtő/diplomata)
     pub fn assign_specialization_role(stats: &crate::tribes::TribeStats) -> crate::tribes::SpecializationRole {
         use crate::tribes::SpecializationRole;
         let scores = [
@@ -3791,6 +3852,7 @@ impl TribeSimulation {
     pub const REBELLION_A_TEAM_THRESHOLD: f32 = 0.25;
 
     /// Map total unique constituent count to polity tier (merger/alliance path).
+    // Politikai szint meghatározása szövetségbe tartozó törzsek darabszáma alapján
     fn polity_tier_for_count(total: usize) -> crate::tribes::PolityTier {
         use crate::tribes::PolityTier;
         if total >= 100 { PolityTier::Empire }
@@ -3802,6 +3864,7 @@ impl TribeSimulation {
 
     /// Map population to the tier it organically warrants.
     /// Thresholds: 1000=City, 3000=Duchy, 7000=Kingdom, 15000=Empire.
+    // Politikai szint meghatározása populációméret alapján (alternatív küszöbök)
     fn polity_tier_for_population(pop: u32) -> crate::tribes::PolityTier {
         use crate::tribes::PolityTier;
         if pop >= 15_000 { PolityTier::Empire }
@@ -3812,6 +3875,7 @@ impl TribeSimulation {
     }
 
     /// Check allied pairs for merge eligibility. One pair per check interval.
+    // Szövetséges törzsek összeolvadásának kezelése: absorber bekebelezi az absorbed törzset
     fn apply_merger(&mut self) {
         use crate::tribes::BehaviorState;
         if self.tick % Self::MERGE_CHECK_INTERVAL != 0 { return; }
@@ -3840,6 +3904,7 @@ impl TribeSimulation {
 
     /// Fitness-weighted genome crossover: absorber inherits genes from absorbed
     /// with probability proportional to absorbed's relative fitness.
+    // Törzs fitness-értékének kiszámítása: terület + populáció + étel + győzelmek kombinálva
     fn compute_fitness_of(&self, tribe_idx: usize) -> f32 {
         let t = &self.tribes[tribe_idx];
         if !t.alive { return 0.0; }
@@ -3860,6 +3925,7 @@ impl TribeSimulation {
     }
 
     /// Merge two allied tribes. Absorber gains territory, population, constituents.
+    // Két szövetséges törzs összeolvasztása: terület, populáció, genome örökítése, sírkő
     fn try_merge_allies(&mut self, absorber: usize, absorbed: usize) -> bool {
         // Compute fitness and clone genome before any state mutations
         let absorber_fitness = self.compute_fitness_of(absorber);
@@ -3992,6 +4058,7 @@ impl TribeSimulation {
     }
 
     /// Assign specialization roles based on dominant artifact.
+    // Szerepek kiosztása politikai entitás tagjainak specializáció és méret alapján
     fn assign_roles(&mut self, polity_id: usize) {
         let role = Self::assign_specialization_role(&self.tribes[polity_id].stats);
         self.tribes[polity_id].specialization_role = role;
@@ -4018,6 +4085,7 @@ impl TribeSimulation {
     }
 
     /// Check if an Administering tribe rebels (low A_team).
+    // Lázadás esélyének ellenőrzése: alacsony energia + magas nyomás esetén törzs leválik
     fn check_rebellion(&mut self, tribe_idx: usize) -> bool {
         use crate::tribes::{BehaviorState, PolityTier, SpecializationRole};
 
@@ -4061,6 +4129,7 @@ impl TribeSimulation {
     }
 
     /// Scan all Administering tribes for low A_team rebellion.
+    // Lázadás-ellenőrzés futtatása minden törzsnél és lázadás-esemény kibocsátása
     fn apply_rebellion_check(&mut self) {
         let candidates: Vec<usize> = (0..self.tribes.len())
             .filter(|&i| {
@@ -4076,6 +4145,7 @@ impl TribeSimulation {
 
     // ─── Task 10: Generation Boundary ────────────────────────────────────────
 
+    // Generációs határvonal: fitness mérés, genome crossover, mutáció, generáció-számláló léptetés
     fn apply_generation_boundary(&mut self) {
         self.generation += 1;
         let mutation_rate = self.config.mutation_rate;
@@ -4163,6 +4233,7 @@ impl TribeSimulation {
 
     // ─── Task 11: River Crossing Evolution ───────────────────────────────────
 
+    // Folyóátkelés mechanika: folyóval szomszédos csempék terjeszkedési bónusza/büntetése
     fn apply_river_crossing(&mut self) {
         use crate::tribes::RiverCrossing;
 
@@ -4205,23 +4276,29 @@ impl TribeSimulation {
     }
 
     /// Return the last packed V0 frame. Can be called from a read-lock context.
+    // Jelenlegi gyorsítótárazott frame bináris csomagjának visszaadása (v0 protokoll)
     pub fn current_packet(&self) -> Vec<u8> {
         self.last_frame.clone()
     }
 
     /// Return the last packed V1 frame. Can be called from a read-lock context.
+    // Jelenlegi gyorsítótárazott frame bináris csomagjának visszaadása (v1 protokoll)
     pub fn current_packet_v1(&self) -> Vec<u8> {
         self.last_frame_v1.clone()
     }
 
     /// Accessors for FrameV1 wrapping (fields are crate-private).
+    // Aktuális tick számának lekérdezése
     pub fn simulation_tick(&self) -> u64 { self.tick }
+    // Aktuális generáció számának lekérdezése
     pub fn simulation_generation(&self) -> u32 { self.generation }
+    // Élő törzsek számának lekérdezése (nem halted)
     pub fn alive_tribe_count(&self) -> u32 {
         self.tribes.iter().filter(|t| t.alive).count() as u32
     }
 
     /// Build, cache, and return a binary WS frame for the current simulation state.
+    // Aktuális frame összeállítása és gyorsítótárazása küldés előtt
     pub fn pack_current_frame(&mut self) -> Vec<u8> {
         let changed_food = self.world.changed_food_tiles();
         let frame = self.build_frame(&changed_food);
@@ -4234,6 +4311,7 @@ impl TribeSimulation {
     }
 
     /// Pure frame-builder (does not mutate state).
+    // Bináris frame összeállítása v0 protokollban: törzs-adatok + megváltozott élelmiszer-csempék
     fn build_frame(&self, changed_food: &[(u16, f32)]) -> Vec<u8> {
         let alive_tribes: Vec<&crate::tribes::TribeState> =
             self.tribes.iter().filter(|t| t.alive).collect();
@@ -4274,6 +4352,7 @@ impl TribeSimulation {
     }
 
     /// FrameV1 payload: richer binary frame with all V3 fields.
+    // Bináris frame összeállítása v1 protokollban: séma-tag, háborúk, események, csempe-delta
     fn build_frame_v1(&self) -> Vec<u8> {
         use crate::frame_v1::*;
         use crate::tribes::TribeState;
@@ -4404,6 +4483,7 @@ impl TribeSimulation {
         buf
     }
 
+    // Isten-mód: összes törzs populációjának felét levágja (teszteléshez)
     pub fn kill_half_population(&mut self) -> GodModeResponse {
         let killed = self.tribes.len() / 2;
         for t in self.tribes.iter_mut().take(killed) {
@@ -4414,6 +4494,7 @@ impl TribeSimulation {
 
     // ─── J1/J2/J3: Typed intervention dispatch ────────────────────────────────
 
+    // Külső beavatkozás alkalmazása (populáció-csökkentés vagy élelmiszer-spawn) hatáskörrel
     pub fn apply_intervention(&mut self, req: InterventionRequest) -> Result<InterventionResponse, String> {
         match req {
             InterventionRequest::CullPopulation { scope, percent } => {
@@ -4433,6 +4514,7 @@ impl TribeSimulation {
 
     // ─── J2: Cull Population ─────────────────────────────────────────────────
 
+    // Populáció megadott százalékának törlése hatáskörrel (globális vagy törzs-specifikus)
     fn cull_population(&mut self, scope: InterventionScope, percent: f32) -> InterventionResponse {
         let percent = percent.clamp(0.0, 1.0);
         let mut casualties = 0u32;
@@ -4471,6 +4553,7 @@ impl TribeSimulation {
 
     // ─── J3: Spawn Food ───────────────────────────────────────────────────────
 
+    // Élelmiszer-spawn beavatkozás: csempékre élelmiszer-mennyiség hozzáadása hatáskörrel
     fn spawn_food(&mut self, scope: InterventionScope, amount: f32) -> InterventionResponse {
         let amount = amount.max(0.0);
         let changed = match &scope {
@@ -4512,6 +4595,7 @@ impl TribeSimulation {
 
     // ─── G4: Events REST query methods ─────────────────────────────────────────
 
+    // Legutóbbi események API-válasz formátumba csomagolva
     pub fn events_response(&self, limit: usize) -> RecentEventsResponse {
         let cap = limit.min(MAX_GLOBAL_EVENTS);
         RecentEventsResponse {
@@ -4520,6 +4604,7 @@ impl TribeSimulation {
         }
     }
 
+    // Adott törzs eseményei API-válasz formátumba csomagolva
     pub fn tribe_events_response(&self, tribe_id: usize, limit: usize) -> TribeEventsResponse {
         let cap = limit.min(MAX_TRIBE_EVENTS);
         match self.tribe_events.get(&tribe_id) {
@@ -4534,6 +4619,7 @@ impl TribeSimulation {
 
     // ─── Run summary ────────────────────────────────────────────────────────────
 
+    // Szimulációs futás összefoglalója: tick, generáció, törzs-statisztikák, győztes
     pub fn run_summary(&self) -> RunSummary {
         let mut records: Vec<TribeSummaryRecord> = self.tribes.iter().map(|t| {
             let tid = t.id as u32;
@@ -4611,6 +4697,7 @@ impl TribeSimulation {
         }
     }
 
+    // Mentett szimulációs felvételek listázása azonosítóval és metaadatokkal
     pub fn list_recordings(&self) -> Result<Vec<RecordingSummary>, String> {
         Ok(self.recordings.iter().map(|r| RecordingSummary {
             id: r.id.clone(),
@@ -4620,6 +4707,7 @@ impl TribeSimulation {
         }).collect())
     }
 
+    // Jelenlegi szimuláció állapotának mentése felvételként névvel vagy automatikus névvel
     pub fn save_recording(&mut self, name: Option<String>) -> Result<RecordingSummary, String> {
         let id = format!("rec-{}", self.tick);
         let name = name.unwrap_or_else(|| format!("Recording {}", self.tick));
@@ -4638,6 +4726,7 @@ impl TribeSimulation {
         Ok(summary)
     }
 
+    // Mentett felvétel betöltése és szimuláció visszaállítása a rögzített állapotba
     pub fn replay_recording(&mut self, recording_id: &str) -> Result<RecordingSummary, String> {
         let rec = self.recordings.iter().find(|r| r.id == recording_id)
             .ok_or_else(|| format!("Recording {} not found", recording_id))?;
@@ -4652,18 +4741,21 @@ impl TribeSimulation {
     // ─── R1: Lineage Registry Public Accessors ─────────────────────────────────
 
     /// Resolve entity lineage DAG back to seeds.
+    // Entitás leszármazási vonalának feloldása: őstörzstől a jelenlegi genomig
     pub fn resolve_lineage(&self, entity_id: u32) -> LineageResolveResponse {
         let chain = self.lineage_registry.resolve_lineage(entity_id);
         LineageResolveResponse { entity_id, chain }
     }
 
     /// Trace entity to its original seed cluster.
+    // Entitás genetikai seed-jének lekérdezése leszármazási nyomon követéshez
     pub fn lineage_seed(&self, entity_id: u32) -> LineageSeedResponse {
         let cluster_id = self.lineage_registry.seed_from_entity(entity_id);
         LineageSeedResponse { entity_id, cluster_id }
     }
 
     /// Get lineage registry stats.
+    // Leszármazási statisztikák összesítése: generációk, elágazások, extinkt vonalak száma
     pub fn lineage_stats(&self) -> LineageStatsResponse {
         let seed_clusters: Vec<SeedClusterEntry> = self.lineage_registry
             .seed_clusters()
@@ -4683,6 +4775,7 @@ impl TribeSimulation {
     // ─── R2: Tombstone Public Accessors ──────────────────────────────────────
 
     /// All tombstone records.
+    // Kipusztult törzsek sírkőrekordjainak visszaadása (neve, tick, ok, utolsó fitness)
     pub fn tombstones(&self) -> TombstonesResponse {
         TombstonesResponse {
             count: self.tombstone.count(),
@@ -4690,6 +4783,7 @@ impl TribeSimulation {
         }
     }
 
+    // Szimulációs validációs metrikák gyűjtése tesztelési célokra (fitness, diverzitás, stb.)
     pub fn validation_metrics(&self) -> ValidationMetrics {
         let mut behavior_counts = std::collections::BTreeMap::new();
         let mut dominant_output_counts = std::collections::BTreeMap::new();
@@ -4751,6 +4845,7 @@ impl TribeSimulation {
 
     /// Tombstone record for a specific tribe.
     #[allow(dead_code)]
+    // Adott törzs sírkőrekordjának lekérdezése id alapján (None ha még él)
     pub fn tombstone_record(&self, tribe_id: u32) -> Option<crate::tombstone::TombstoneRecord> {
         self.tombstone.all_records().iter().find(|r| r.tribe_id == tribe_id).cloned()
     }
@@ -4758,6 +4853,7 @@ impl TribeSimulation {
     // ─── R2: cleanup_tribe — Atomic extinction handler ────────────────────────
 
     /// Atomically record death, cancel wars, transfer territory to heir.
+    // Törzs eltávolítása: területek felszabadítása, sírkő mentése, szövetség megszűntetése
     fn cleanup_tribe(&mut self, tribe_idx: usize) {
         let tribe_id = self.tribes[tribe_idx].id as u32;
         if self.tombstone.is_dead(tribe_id) {
@@ -4855,6 +4951,7 @@ impl TribeSimulation {
     // ─── R6: Reproduction ────────────────────────────────────────────────────
 
     /// Blend two parent artifact sets with mutation.
+    // Két törzs artifact-értékeinek fitness-arányos keverése öröklésnél
     fn blend_artifacts(
         parent: &crate::tribes::TribeStats,
         mutation_rate: f32,
@@ -4874,6 +4971,7 @@ impl TribeSimulation {
     }
 
     /// Try reproduction for a tribe. Fires every 50 ticks.
+    // Törzs szaporodási kísérlete: szomszéddal crossover, utód-törzs létrehozása
     fn try_reproduction(&mut self, tribe_idx: usize) {
         if self.tick % 50 != 0 { return; }
         let (eligible, pop) = {
@@ -4932,6 +5030,7 @@ impl TribeSimulation {
     }
 }
 
+// Legmagasabb neurális kimenet nevének meghatározása (debug/log célokra)
 fn t_last_output_label(outputs: [f32; OUTPUT_COUNT]) -> &'static str {
     outputs
         .iter()
@@ -4943,14 +5042,17 @@ fn t_last_output_label(outputs: [f32; OUTPUT_COUNT]) -> &'static str {
 
 // ─── binary packing helpers ───────────────────────────────────────────────────
 
+// u16 little-endian bájtsorrend szerint bináris bufferbe írása
 fn push_u16(buffer: &mut Vec<u8>, value: u16) {
     buffer.extend_from_slice(&value.to_le_bytes());
 }
 
+// u32 little-endian bájtsorrend szerint bináris bufferbe írása
 fn push_u32(buffer: &mut Vec<u8>, value: u32) {
     buffer.extend_from_slice(&value.to_le_bytes());
 }
 
+// f32 IEEE 754 little-endian bájtsorrend szerint bináris bufferbe írása
 fn push_f32(buffer: &mut Vec<u8>, value: f32) {
     buffer.extend_from_slice(&value.to_le_bytes());
 }
@@ -4962,6 +5064,7 @@ mod harness_tests {
     use super::*;
     use crate::tribes::BehaviorState;
 
+    // N darab generikus törzzsel rendelkező tesztkonfiguráció összeállítása
     fn test_config(n: usize) -> ControlConfig {
         let clusters: Vec<ClusterProfile> = (0..n)
             .map(|i| scenario_cluster(&format!("t{i}"), 6.0, 5.0))
@@ -4969,7 +5072,7 @@ mod harness_tests {
         ControlConfig { clusters, world_seed: 1337, ..Default::default() }
     }
 
-    /// Clusters pre-normalized to 0–1, matching what server.js produces after /4.5 division.
+    // 0-1 normalizált klaszter-profil gyártása (server.js /4.5 normalizálásának megfelelő)
     fn normalized_cluster(id: &str, a_combat: f32, a_resource: f32, a_team: f32, cluster_size: u32) -> ClusterProfile {
         ClusterProfile {
             id: id.to_string(),
@@ -5003,6 +5106,7 @@ mod harness_tests {
     // ─── SIM-HEALTH-300: Run 300 ticks with realistic normalized clusters ──────
 
     #[test]
+    // 80 törzzsel 300 tick egészségellenőrzés: nem hal meg mind és nincs pánik
     fn sim_health_300_ticks() {
         // 80 tribes, stats in 0-1 range (server.js-normalized), varied profiles
         let clusters: Vec<ClusterProfile> = (0..80).map(|i| {
@@ -5063,6 +5167,7 @@ mod harness_tests {
     // ─── SIM-JSONL-1200: 1200-tick run, JSONL checkpoints every 50 ticks ─────
 
     #[test]
+    // 1200 tick futás JSONL ellenőrzőpontokkal 50 tickenként (integráció + polity-evolúció teszt)
     fn sim_jsonl_1200_ticks() {
         use crate::tribes::PolityTier;
 
@@ -5151,6 +5256,7 @@ mod harness_tests {
     // ─── F1-A: Migration physically advances the camp tile ───────────────────
 
     #[test]
+    // Migráció teszt: a főtábor csempe közelebb kerül a célhoz minden tickben
     fn migration_advances_main_camp_toward_destination() {
         let sim_arc = TribeSimulation::shared(test_config(2));
         let initial_camp = sim_arc.read().tribes[0].main_camp_tile;
@@ -5185,6 +5291,7 @@ mod harness_tests {
     // ─── F1-B: Dispute registry expires and forces resolution ────────────────
 
     #[test]
+    // Vita teszt: türelmi idő lejárta után a vita automatikusan feloldódik (háború/béke)
     fn dispute_resolves_after_grace_period_expires() {
         let sim_arc = TribeSimulation::shared(test_config(2));
 
@@ -5218,6 +5325,7 @@ mod harness_tests {
     // ─── F1-C: Opportunity war triggers against a weaker adjacent rival ───────
 
     #[test]
+    // Opportunista háború teszt: erős törzs hadat üzen a gyengébb szomszédjának
     fn opportunity_war_declared_against_weaker_adjacent_tribe() {
         let sim_arc = TribeSimulation::shared(test_config(2));
 
@@ -5257,6 +5365,7 @@ mod harness_tests {
     // ─── F1-D: Allied tribes merge after sufficient dwell ────────────────────
 
     #[test]
+    // Összeolvadás teszt: szövetséges törzsek elegendő együttlét után egybeolvadnak
     fn allied_tribes_merge_after_threshold_dwell() {
         let sim_arc = TribeSimulation::shared(test_config(2));
 
@@ -5295,6 +5404,7 @@ mod harness_tests {
     // ─── F1-E: Generation boundary records fitness and differentiates mutation ─
 
     #[test]
+    // Generációs határvonal teszt: fitness rögzítése és generáció-számláló léptetése
     fn generation_boundary_records_fitness_and_advances_generation() {
         let sim_arc = TribeSimulation::shared(test_config(4));
 
@@ -5336,6 +5446,7 @@ mod harness_tests {
     }
 
     #[test]
+    // Fitness frissesség teszt: generációs határvonal előtt a fitness értékek aktuálisak
     fn fitness_scores_are_current_before_generation_boundary() {
         let sim_arc = TribeSimulation::shared(test_config(3));
         {
@@ -5363,6 +5474,7 @@ mod harness_tests {
     }
 
     #[test]
+    // Diverzitás teszt: inicializált törzsek különböző neurális súlyokkal rendelkeznek
     fn initialized_tribes_start_with_diverse_neural_genomes() {
         let sim_arc = TribeSimulation::shared(test_config(4));
         let sim = sim_arc.read();
@@ -5396,6 +5508,7 @@ mod harness_tests {
 
     #[test]
     #[ignore]
+    // Flexset Empire integráció teszt: valódi klaszter-adatokkal futtat 3000+ ticket, Empire győzőt vár
     fn sim_flexset_empire() {
         use crate::tribes::PolityTier;
 
@@ -5523,6 +5636,7 @@ mod harness_tests {
     // The last survivor must be at least Kingdom tier.
 
     #[test]
+    // Determinizmus teszt: 8 agresszív törzzsel seed=7777, kétszer futtatva azonos ujjlenyomatot ad
     fn sim_last_empire_deterministic() {
         // High-aggression profiles — wars start fast, losers die decisively
         let clusters: Vec<ClusterProfile> = (0..8).map(|i| {

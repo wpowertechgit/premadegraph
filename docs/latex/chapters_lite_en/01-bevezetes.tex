@@ -26,15 +26,15 @@ Every step in the pipeline is re-runnable with concrete inputs and outputs: from
 
 \section{Research Questions}
 
-This thesis addresses the following research questions:
+Four concrete questions guide the investigation:
 
-\begin{itemize}
+\begin{enumerate}[label=\textbf{K\arabic*.}]
     \item How can a real League of Legends match history be used to build a player network that captures not only co-play but also opponent relationships?
     \item How can player performance be scored in a way that accounts for the actual role played while remaining interpretable?
     \item To what extent is it justified to split the system into Python, SQLite, Node.js, Rust, and React components?
     \item Does the current graph show positive assortativity with respect to \textit{opscore} and \textit{feedscore}?
     \item In what ways do the relationship structures of \textit{flexset} and \textit{soloq} differ, and to what extent can the \textit{flexset} graph be described as an associative core-periphery player graph?
-\end{itemize}
+\end{enumerate}
 
 \section{Scope and Limitations}
 
@@ -46,8 +46,11 @@ The chapters proceed from data collection toward graph analytics and simulation 
 
 The opening chapters establish the starting point: the problem statement, the literature background, and the Riot API-based data sources. This is followed by the system overview, then the \textit{opscore} performance metric, the graph construction and clustering mechanics, the Rust runtime and analytics modules. The comparison of the two datasets (\textit{flexset} and \textit{soloq}) is the most concrete research result of the system. The final chapters cover the database sub-project and the Tribal NeuroSim simulation. This document is the condensed, lite version; the extended version \cite{premadegraph-full} develops in separate chapters the topics only briefly touched on here.
 
+Figure~\ref{fig:match-analysis-page} shows one entry point of the current frontend: the match analysis and data collection interface.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.92\textwidth]{match-analysis-page.png}
     \caption{One entry point of the current frontend: the match analysis and data collection interface}
+    \label{fig:match-analysis-page}
 \end{figure}

@@ -63,7 +63,8 @@
       "Bash(node \"C:/Users/karol/AppData/Local/Temp/claude/c--Users-karol-OneDrive-Dokumentumok-Dolgozat-premadegraph/ad34045a-f386-46d6-b549-3e1e7d5e6f5f/scratchpad/rescore-all.js\")",
       "Bash(node rescore-all.js)",
       "PowerShell(dotnet build backend/genetic-neurosim/client-monogame/TribalNeuroSim.Client.csproj 2>&1)",
-      "PowerShell(dotnet build \"backend\\\\genetic-neurosim\\\\client-monogame\\\\TribalNeuroSim.Client.csproj\" 2>&1)"
+      "PowerShell(dotnet build \"backend\\\\genetic-neurosim\\\\client-monogame\\\\TribalNeuroSim.Client.csproj\" 2>&1)",
+      "Bash(pdflatex -interaction=nonstopmode main_lite_en.tex)"
     ]
   }
 }

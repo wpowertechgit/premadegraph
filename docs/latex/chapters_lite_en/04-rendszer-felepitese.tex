@@ -6,13 +6,28 @@ The original system was much closer to a data-driven player viewer than the curr
 
 \section{The Current System}
 
-The system is built on several well-separated layers. Its components are: Python (data collection, graph construction, legacy exports), SQLite (central persistence), Node.js/Express (API shell and orchestration), Rust (pathfinding, graph analytics, global artifact export), React/Vite (frontend and visualisation), C\# ASP.NET Core (standalone database browser), and the Tribal NeuroSim simulation engine.
+The system is built on several well-separated layers. Its components are: Python (data collection, graph construction, legacy exports), SQLite (central persistence), Node.js/Express (API shell and orchestration), Rust (pathfinding, graph analytics, global artifact export, simulation logic), React/Vite (frontend and visualisation), C\# ASP.NET Core (standalone database browser), and C\# MonoGame (the Tribal NeuroSim visualisation layer, which renders Rust payloads).
 
 The component diagram can be found in chapter 5 of the extended version \cite{premadegraph-full}; in the lite version the general description is provided in the text.
+
+\section{Technology Stack Rationale}
+
+Every technology choice had alternatives; the following lists the main selection criteria for each layer and the competitors considered.
+
+\textbf{Python (data collection, scripting layer).} Rich ecosystem (Riot API client, NetworkX, pandas), short iteration cycle, easily modifiable collection logic. Alternative: Go or Ruby scripts would have offered a faster start, but the scientific ecosystem (NetworkX, scipy) is tied to Python. Downside: weaker performance on large graph operations, which the Rust layer compensates for.
+
+\textbf{SQLite (persistence).} Serverless, self-contained file, easy version control: both Python and Rust support it natively. Alternative: PostgreSQL would have provided stronger concurrent writes and more complex queries, but the project is a single-user, locally runnable, demonstrable system. The SQLite trade-off is more favourable at this scope \cite{sqlite}. Downside: no concurrent writes, and schema changes require migration.
+
+\textbf{Node.js / Express (API shell).} The frontend (React) and the backend share the same ecosystem; Express easily proxies the Rust binary and Python scripts. Alternative: FastAPI (Python) would have been more natural alongside the Python layer, but since the Python layer was downgraded to data collection and simple aggregations only, Node provided better async I/O for Riot API relay calls and simpler Vite integration. Downside: CPU-intensive computations do not run in Node.
+
+\textbf{Rust (graph analytics, pathfinding).} Zero runtime overhead, safe memory management, Rayon parallelism, exact determinism \cite{jung2020,rustlang}. Alternative: C++ would yield equal performance, but the Rust borrow checker prevents invalid-iterator errors that are common in graph-traversal code. Go would offer an easier concurrency model but weaker cache performance. Downside: steeper learning curve, a demanding compilation experience, and longer build times.
+
+\textbf{React / Vite (frontend).} Component-based UI, large ecosystem (MUI, Three.js), fast hot reload. Alternative: Vue or Svelte would produce a smaller bundle, but the MUI and Three.js React integrations are more mature. Downside: overkill for a single-page demo; the project requires multiple visualisation pages, which justifies the framework.
 
 \begin{table}[H]
 \centering
 \caption{Rejected approaches and rationale}
+\label{tab:rejected-approaches}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3.5cm}|>{\raggedright\arraybackslash}p{3.6cm}|X|}
 \hline
 \textbf{Alternative} & \textbf{Brief advantage} & \textbf{Why it was not chosen} \\

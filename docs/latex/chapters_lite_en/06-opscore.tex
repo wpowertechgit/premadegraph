@@ -2,7 +2,15 @@
 
 \noindent The foundation of graph-analytic analysis is a meaningful, role-aware performance score. The raw data from League of Legends matches (kills, deaths, gold, damage) carries insufficient semantics on its own: two deaths on a support are not the same as two deaths on an ADC. The data collection and PUUID normalisation mechanisms are described in chapter 4 of the extended version; this chapter focuses on the internal model and formulas of the opscore metric.
 
-\section{Limitations of the Earlier Model}
+\section{Metric Design}
+
+\subsection{The Role of a Custom Performance Metric}
+
+External services such as OP.GG offer player analytics features and easily interpretable performance ratings developed over many years. In this project, however, player evaluation is performed directly from match data collected via the Riot API, using a custom \textit{opscore} metric. The OP.GG methodology provided significant inspiration for the design of this metric \cite{opgg-features}.
+
+From the project's perspective, external performance ratings would have operated as black boxes, since their exact computation, weighting, and normalisation are not publicly accessible. Consequently, scores published by OP.GG cannot be reproduced from the raw match data collected via the Riot API. The custom metric, by contrast, allows performance scores to be reproduced, the role-aware weighting and normalisation to be verified, and player values to be traced directly back to the match data used.
+
+\subsection{Limitations of the Earlier Model}
 
 The model was developed through gradual methodological refinement. The starting point was an eight-artifact system that applied role multipliers and then normalised the resulting raw sums to the $[0,10]$ range relative to the percentile distribution in the database.
 
@@ -14,11 +22,12 @@ The current \textit{opscore} model operates on the following design principles: 
 
 \section{The Five Artifacts and Their Subcategories}
 
-\begin{figure}[H]
+\begin{sidewaysfigure}[p]
 \centering
-\includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{opscore-artifacts.pdf}
+\includegraphics[width=0.95\textheight,height=0.90\textwidth,keepaspectratio]{opscore-artifacts.pdf}
 \caption{The opscore artifact structure: five main dimensions, ten subcategories, role-aware weights}
-\end{figure}
+\label{fig:opscore-artifacts}
+\end{sidewaysfigure}
 
 The model is built from five artifacts. \textbf{Combat Impact} measures kill conversion and damage pressure; \textbf{Risk Discipline} captures the cost of deaths and survival quality. \textbf{Resource Tempo} tracks economic efficiency and early-game rhythm. The remaining two dimensions cover team-level impact: \textbf{Map and Objective Control} for map and objective control, and \textbf{Team Enablement} for value created for teammates.
 
@@ -93,9 +102,15 @@ A_i = \min\!\left(4{,}5,\; A_i^{\text{base}} + \alpha_i \cdot \gamma \cdot \max\
 \text{opscore} = \min\!\left(10,\; \sum_{i=1}^{5} A_i\right)
 \end{equation}
 
-\subsection{Edge Case: the Yorick Carry}
+\subsection{Exceptional Performances and Edge Cases}
 
-The most interesting edge case in the model is atypical carry performance. A \textit{Yorick} main who produces 15 kills and 2 deaths in a 35-minute match receives an outstanding score in the \textit{Combat Impact} and \textit{Risk Discipline} artifacts --- the logarithmic boost was calibrated precisely for this case. The same match on a standard ADC would look different: ADC expectations are higher (more farm, more damage), so the $r$ ratio would be lower. The opscore does not measure absolute values; it measures the ratio relative to the role expectation. Detailed edge cases and sample-size limitations can be found in the extended version \cite{premadegraph-full}.
+The model is best illustrated through two characteristic edge cases.
+
+\paragraph{Elite carry match.}
+During development, a standout Quinn Top match was examined (exceptional kill count and high assists), where the earlier model had come under pressure from hard artifact ceilings and caps, resulting in an average, unremarkable score. In the current model, the logarithmic boost of the \textit{Combat Impact} and \textit{Map and Objective Control} artifacts allows these values to rise above the nominal 2-point ceiling; the aggregate \textit{opscore} runs up to the 10-point cap. The cost of deaths does not disappear: the \textit{Risk Discipline} artifact penalises them moderately, but the overall performance of an elite carry remains recognised.
+
+\paragraph{Split-pusher and structure carry.}
+A player on \textit{Yorick} who deliberately avoids teamfights and wins by destroying towers typically has a low \textit{Team Enablement} score and an unremarkable KDA, since the strategy is built around split-pushing. The dynamic dominance re-weighting of the \textit{Map and Objective Control} artifact is calibrated precisely for this case: when Objective Conversion dramatically exceeds the Team Enablement value, the artifact shifts weight toward objective acquisition, and the low team-enablement number does not unduly distort the final result when the win condition has genuinely been delivered. Detailed edge cases and sample-size limitations can be found in the extended version \cite{premadegraph-full}.
 
 \section{The Role of opscore in the System}
 
