@@ -12,6 +12,8 @@ Combat outcomes are based on a Poisson process: the expected casualties are dete
 
 Summary of the four full experimental runs:
 
+Table~\ref{tab:neurosim-run-comparison-final} summarises the main parameters and results of the four experimental runs.
+
 \begin{table}[h]
 \centering
 \small
@@ -31,6 +33,8 @@ run67sq7777 & SoloQ & 7777 & Tribe 70 & Supply/Resource & 0{,}68 & 0{,}87 & 2541
 }
 \end{table}
 
+Figure~\ref{fig:run-flexset-7777} shows the final state of the flexset run with seed=7777.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{assets/neurosim/run67fl7777-fl-s7777-tick2538-last.png}
@@ -38,12 +42,7 @@ run67sq7777 & SoloQ & 7777 & Tribe 70 & Supply/Resource & 0{,}68 & 0{,}87 & 2541
 \label{fig:run-flexset-7777}
 \end{figure}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{assets/neurosim/run67fl42-fl-s42-tick2487-last.png}
-\caption{Flexset, seed=42, tick=2487: Tribe 596 (Warband/Combat) victory.}
-\label{fig:run-flexset-42}
-\end{figure}
+Figure~\ref{fig:run-soloq-42} shows the final state of the soloq run with seed=42, won by a tribe with a Vanguard/Risk profile.
 
 \begin{figure}[H]
 \centering
@@ -51,6 +50,8 @@ run67sq7777 & SoloQ & 7777 & Tribe 70 & Supply/Resource & 0{,}68 & 0{,}87 & 2541
 \caption{SoloQ, seed=42, tick=2046: Tribe 89 (Vanguard/Risk) victory, final territory 6\,356 tiles.}
 \label{fig:run-soloq-42}
 \end{figure}
+
+Figure~\ref{fig:run-soloq-7777} shows the final state of the soloq run with seed=7777, won by a tribe with a Supply/Resource profile.
 
 \begin{figure}[H]
 \centering
@@ -62,6 +63,8 @@ run67sq7777 & SoloQ & 7777 & Tribe 70 & Supply/Resource & 0{,}68 & 0{,}87 & 2541
 \section{103-Seed Sweep and Winner Archetype Distribution}
 
 The four experimental runs are supplemented by a 103-seed soloq sweep. Every run in the sweep concluded with an Empire-level winner (103/103). Archetype distribution:
+
+Table~\ref{tab:soloq-sweep-archetypes} contains the winning archetype distribution across the 103-seed soloq sweep.
 
 \begin{table}[H]
 \centering

@@ -3,7 +3,8 @@
 \usepackage{fontspec}
 \usepackage{setspace}
 \usepackage{polyglossia}
-\setmainlanguage{hungarian}
+\providecommand{\thesismainlanguage}{hungarian}
+\expandafter\setmainlanguage\expandafter{\thesismainlanguage}
 \usepackage[a4paper,top=2cm,left=3cm,bottom=2cm,right=2cm]{geometry}
 \usepackage{graphicx}
 \usepackage{float}

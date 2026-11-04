@@ -1,10 +1,10 @@
 \chapter{Data Collection and the Riot API}
 
-The system's primary data source is the Riot Developer Portal and the associated League of Legends API suite \cite{riotportal,riotapi}. These enable identifying player accounts, querying match lists, downloading detailed match JSON files, and processing participant statistics.
+Data collection is based on the Riot Developer Portal and the match-v5 API suite \cite{riotportal,riotapi}. These enable identifying player accounts, querying match lists, downloading detailed match JSON files, and processing participant statistics.
 
 \section{Logic of the Riot API Endpoints Used}
 
-The current project uses several layers of the Riot API, but the most important design decision was making \textit{puuid} the central identifier of the system. The pipeline breaks down logically into the following steps:
+The current project uses several layers of the Riot API, but the most important design decision was making \textit{puuid} (a unique account identifier) the central identifier of the system. The pipeline breaks down logically into the following steps:
 
 \begin{enumerate}
     \item starting from an initial player or seed list, the system requests account information;
@@ -14,16 +14,19 @@ The current project uses several layers of the Riot API, but the most important 
     \item the results are persisted bound to the dataset.
 \end{enumerate}
 
-The collector calls the \textit{match-v5} endpoint family via the \textit{europe.api.riotgames.com} regional route.
+The collector calls the \textit{match-v5} endpoint family via the \textit{europe.api.riotgames.com} regional route, which provides access to match data.
 
 \section{Collector State Machine and Premade-Probe}
 
 \textit{backend/match\_collector.py} is a parameterisable state machine: its configuration holds the dataset identifier, paths, collection mode, queue type, match count limit, iteration limit, and premade threshold.
 
+Figure~\ref{fig:collector-state-machine} shows the full workflow of the collector's parameterisable state machine, from startup to persistence.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{collector-state-machine.pdf}
 \caption{Flow diagram of the collector's parameterisable state machine}
+\label{fig:collector-state-machine}
 \end{figure}
 
 \section{Collection Focus and Queue Selection}
@@ -34,9 +37,12 @@ The project uses two research datasets: \textit{flexset} consists of Ranked Flex
 
 The Riot API's constraints also shape the architecture. The collection layer gained explicit rate-limit handling, wait logic, and subtask splitting. The collector applies its own per-second wait, waits thirty seconds on HTTP 429 before retrying, and skips already-saved matches based on file existence.
 
+Table~\ref{tab:collector-reliability} summarises the collector's five main reliability mechanisms and their roles.
+
 \begin{table}[H]
 \centering
 \caption{Main reliability mechanisms of the collector}
+\label{tab:collector-reliability}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.4cm}|X|}
 \hline
 \textbf{Mechanism} & \textbf{Function} \\
@@ -50,7 +56,7 @@ Event-based stdout log & Supports status tracking on both backend and frontend \
 \end{tabularx}
 \end{table}
 
-These mechanisms are not mere technical details: collecting the full \textit{flexset} ($\approx$4981 matches) with a development API key took days, with interruptions. Without file-based skipping and restartability, the corpus could not have been assembled without a continuously running server. The collector's design decisions are therefore a direct response to the API constraints: iterated, stateful batch runs rather than a single-pass download. After each overnight run, collection resumed exactly where it left off.
+These mechanisms are not mere technical details: collecting the full \textit{flexset} (approximately 4980 matches) with a development API key took days, with interruptions. Without file-based skipping and restartability, the corpus could not have been assembled without a continuously running server. The collector's design decisions are therefore a direct response to the API constraints: iterated, stateful batch runs rather than a single-pass download. After each overnight run, collection resumed exactly where it left off.
 
 \section{Comparison of flexset and soloq Collection Strategies}
 
@@ -58,9 +64,12 @@ The \textit{flexset} dataset contains exclusively queue ID 440 (Ranked Flex) mat
 
 The \textit{soloq} dataset consists of queue ID 420 (Ranked Solo/Duo) matches from an EUNE Master$+$ Solo/Duo ladder seed population. The role of \textit{soloq} is to serve as a control baseline: a dataset in which recurring premade connections are systematically not favoured.
 
+Table~\ref{tab:dataset-strategy} compares the main features of the two dataset collection strategies.
+
 \begin{table}[H]
 \centering
 \caption{Comparison of the two dataset collection strategies}
+\label{tab:dataset-strategy}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.2cm}|X|X|}
 \hline
 \textbf{Dimension} & \textbf{flexset} & \textbf{soloq} \\

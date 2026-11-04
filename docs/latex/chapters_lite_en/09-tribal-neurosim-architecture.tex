@@ -14,9 +14,11 @@ Tribal NeuroSim is an agent-based model (ABM): each tribe is an independent deci
 
 The system is also interpretable as a multi-agent system (MAS) \cite{wooldridgejennings1995}: each tribe operates as an independent agent with its own internal state, its own local perception, and its own decision logic (neural network). There is no direct communication between agents: interaction occurs exclusively through the shared spatial substrate.
 
-The simulation consistently follows the same structural phases: early expansion (ticks 0--300), consolidation (ticks 300--1000), then imperial wars (tick 1000+).
+The simulation exhibits the same structural phases: early expansion (ticks 0--300), consolidation (ticks 300--1000), then imperial wars (tick 1000+).
 
 \section{System Architecture}
+
+Figure~\ref{fig:neurosim-architecture-graphviz} shows how responsibilities are divided between the three Tribal NeuroSim layers: the Rust engine (authoritative state), Node (intermediary), and MonoGame (display).
 
 \begin{figure}[H]
 \centering
@@ -29,11 +31,13 @@ The \textbf{Rust runtime} is the single source of authority: the tick cycle, wor
 
 This division is the direct lesson of the browser-based v2 prototype: when simulation state was coupled to the UI layer, ghost wars, memory leaks, and non-deterministic behaviour emerged.
 
-The ghost war specifically meant that wars belonging to finished and dead tribes never received a closed status: because no structured war-closing event existed, the system continued to track them as active, and their count accumulated in memory --- in the final state of the early prototype, a single living tribe faced more than a hundred active ghost wars. In the current architecture every decision is made in the Rust binary, and a tribe's elimination atomically closes all its active wars (\textit{WarCancelled}), so ghost wars cannot arise; the MonoGame client only renders the most recently received frame, and the simulation is reproducible from the same initial state at any point.
+The ghost-war issue specifically meant that completed wars and wars involving dead tribes never received a closed status: because no structured war-closing event existed, the system continued to track them as active, and their count accumulated in memory --- in the final state of the early prototype, a single living tribe faced more than a hundred active ghost wars. In the current architecture every decision is made in the Rust binary, and a tribe's elimination atomically closes all its active wars (\textit{WarCancelled}), so ghost wars cannot arise; the MonoGame client only renders the most recently received frame, and the simulation is reproducible from the same initial state at any point.
 
 \section{FrameV1 Binary Protocol}
 
 The Rust server and the MonoGame client communicate via binary WebSocket frames. Each frame begins with a 40-byte \textit{TNS3} envelope (little-endian):
+
+Table~\ref{tab:framev1-envelope} presents the fields of the 40-byte header of the FrameV1 binary WebSocket frame.
 
 \begin{table}[H]
 \centering
@@ -57,6 +61,6 @@ The Rust server and the MonoGame client communicate via binary WebSocket frames.
 \end{tabular}
 \end{table}
 
-The binary format decision is performance-driven: the Rust server handles 599 tribe states in under 40~ms while the MonoGame client decodes and renders asynchronously. Avoiding JSON serialisation saves approximately 150--200~kB of unnecessary text overhead per tick in a 599-tribe world.
+The binary format decision is performance-driven: the Rust server handles the state of 599 tribes in 40~ms while the MonoGame client decodes and renders asynchronously. Avoiding JSON serialisation saves approximately 150--200~kB of unnecessary text overhead per tick in a 599-tribe world.
 
-Details of event-driven observability and the determinism-bug fix (\textit{clusters.sort\_by(|a, b| a.id.cmp(\&b.id)})) can be found in chapter 13 of the extended version \cite{premadegraph-full}.
+Details of event-driven observability and the determinism-bug fix (\textit{clusters.sort\_by(|a, b| a.id.cmp(\&b.id))}) can be found in chapter 13 of the extended version \cite{premadegraph-full}.

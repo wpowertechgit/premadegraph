@@ -24,6 +24,8 @@ Every technology choice had alternatives; the following lists the main selection
 
 \textbf{React / Vite (frontend).} Component-based UI, large ecosystem (MUI, Three.js), fast hot reload. Alternative: Vue or Svelte would produce a smaller bundle, but the MUI and Three.js React integrations are more mature. Downside: overkill for a single-page demo; the project requires multiple visualisation pages, which justifies the framework.
 
+Table~\ref{tab:rejected-approaches} summarises the rejected architectural approaches and the reasons for rejecting them.
+
 \begin{table}[H]
 \centering
 \caption{Rejected approaches and rationale}
@@ -46,19 +48,25 @@ The implementation manages multiple independent datasets. Based on the \textit{b
 
 Dataset selection does not stop at the Node layer. The backend derives environment variables from the selected dataset for the Rust runtime (\textit{DATASET\_ID}, \textit{GRAPH\_DB\_PATH}, \textit{PATHFINDER\_MATCH\_DIR}, \textit{PATHFINDER\_BIRDSEYE\_CACHE\_DIR}).
 
+Figure~\ref{fig:dataset-lifecycle} shows the complete lifecycle of a dataset, from Riot API data sources to analytical outputs.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{dataset lifecycle riotapi to analytical output.pdf}
 \caption{Lifecycle diagram of a dataset from the Riot API to analytical output}
+\label{fig:dataset-lifecycle}
 \end{figure}
 
 \section{Current Data State}
 
-The active data state was verified directly from the current repository state on 28 April 2026.
+The data state was recorded on 28 April 2026 by directly inspecting the repository.
+
+Table~\ref{tab:data-state} records the active data state as of 28 April 2026; no dataset expansion took place after that date.
 
 \begin{table}[H]
 \centering
-\caption{Current data state of the two datasets (28 April 2026)}
+\caption{Current data state of the two datasets}
+\label{tab:data-state}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.5cm}|r|r|}
 \hline
 \textbf{Metric} & \textbf{flexset} & \textbf{soloq} \\
@@ -77,16 +85,22 @@ The soloq dataset clusters typically represent \emph{duo pairs}: since Solo/Duo 
 
 Clusters previously existed only in JSON export form; database integration made them first-class database objects. The schema is built around three central tables \cite{sqlite}: \textit{players}, \textit{clusters}, and \textit{cluster\_members}.
 
+Figure~\ref{fig:sqlite-er} shows the entity-relationship diagram of the main SQLite database, including the \textit{players}, \textit{clusters}, and \textit{cluster\_members} tables.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.76\textheight,keepaspectratio]{sqlite-project-er-diagram.png}
 \caption{Entity-relationship diagram of the main SQLite database}
+\label{fig:sqlite-er}
 \end{figure}
+
+Figure~\ref{fig:relational-model} shows the relational model, highlighting the relationships between the three tables.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.68\textwidth]{relational model diagram.pdf}
 \caption{Relational model for cluster and player persistence (\textit{players}, \textit{clusters}, \textit{cluster\_members})}
+\label{fig:relational-model}
 \end{figure}
 
-Two cluster families coexist in the system. \textit{python\_population} type clusters are the output of the Python graph-building pipeline: NetworkX-based modularity maximisation with a community-detection perspective. \textit{rust\_pathfinding} type clusters come from the Rust engine's runtime clustering: strongly connected segments based on ally connections, capped at 20 members. The aggregated performance metrics of the cluster profiles also form the genome sequence input for the Tribal NeuroSim simulation.
+Two cluster families coexist in the system. \textit{python\_population} type clusters are the output of the Python graph-building pipeline: NetworkX-based modularity maximisation with a community-detection perspective. \textit{rust\_pathfinding} type clusters come from the Rust engine's runtime clustering: tightly connected segments based on ally connections, capped at 20 members. The aggregated performance metrics of the cluster profiles also form the genome sequence input for the Tribal NeuroSim simulation.

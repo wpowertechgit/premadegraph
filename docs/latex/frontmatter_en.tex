@@ -1,0 +1,52 @@
+% ---- TITLE PAGE ----
+\begin{titlepage}
+    \noindent
+    \includegraphics[height=2cm]{assets/umf.png}
+    \par\vspace{0.6cm}
+    \centering
+    {\large\bfseries GEORGE EMIL PALADE UNIVERSITY OF MEDICINE, PHARMACY,\par}
+    {\large\bfseries SCIENCE, AND TECHNOLOGY OF TÂRGU MUREȘ\par}
+    \vspace{0.4cm}
+    {\normalsize\bfseries FACULTY OF ENGINEERING AND INFORMATION TECHNOLOGY\par}
+    \vspace{0.2cm}
+    {\normalsize\bfseries DEPARTMENT: Electrical Engineering and Information Technology\par}
+    {\normalsize\bfseries STUDY PROGRAMME: Computer Science\par}
+    \vspace{2.2cm}
+    {\LARGE\bfseries BACHELOR'S THESIS\par}
+    \vspace{1.2cm}
+    {\huge\bfseries Premade Graph Explorer\par}
+    \vspace{0.6cm}
+    {\large League of Legends Player Relationships, Performance Metrics, and Graph Analytics Extensions\par}
+    \vfill
+    \noindent
+    \begin{tabular*}{\textwidth}{@{}l@{\extracolsep{\fill}}r@{}}
+        \textbf{SUPERVISOR} & \textbf{GRADUATE} \\[0.4cm]
+        Prof. d. habil. Iantovics Barna-László & Tamási Krisztián-Erik \\
+    \end{tabular*}
+    \vspace{2.5cm}
+    {\large\bfseries CLASS OF 2026\par}
+\end{titlepage}
+
+% ---- ABSTRACT (English) ----
+\newpage
+\chapter*{Abstract}
+\thispagestyle{empty}
+
+This thesis presents a multi-component software system that constructs player-relationship
+graphs from real League of Legends match data and analyses them using graph-theoretic,
+statistical, and evolutionary methods. The system comprises a Riot API-based data-collection
+layer, a role-aware performance scoring pipeline (\textit{opscore}/\textit{feedscore}), a
+Rust-powered graph construction and analytics runtime, and a multi-page React/Vite frontend.
+
+The research component compares two datasets (a Flex Queue corpus, \textit{flexset}, and
+a Solo Queue corpus, \textit{soloq}) with respect to assortativity, betweenness centrality,
+and associative core-periphery structure. The implementation includes Dijkstra, bidirectional,
+and exact A* pathfinding algorithms, parallelised Brandes betweenness centrality, and 3D
+graph visualisation. As a closing experiment, the Tribal NeuroSim evolutionary simulation
+seeds initial agent behaviour from cluster profiles extracted from the player graph.
+
+\textbf{Keywords:} graph analysis, League of Legends, assortativity, betweenness centrality,
+Rust, React, neuroevolution.
+
+\tableofcontents
+\clearpage

@@ -19,6 +19,7 @@ This folder is the self-contained LaTeX workspace for the thesis.
 ## Entry Point
 
 - `main.tex` is the active modular build entry point.
+- `main_lite_en.tex` builds the English abridged thesis from `chapters_lite_en/`, using `preamble_en.tex`, `frontmatter_en.tex`, and `references_en.tex`. Its title page, abstract, generated headings, and bibliography wording are in English.
 - `mainraw-monolith-snapshot.tex` is a copied snapshot of the old monolithic `docs/mainraw.tex`.
 - The original `docs/mainraw.tex` is intentionally left in place.
 
@@ -39,6 +40,8 @@ Run from this directory:
 ```powershell
 tectonic main.tex
 ```
+
+For the English abridged thesis, run `tectonic main_lite_en.tex` from this directory.
 
 The active graphic path is:
 

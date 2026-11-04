@@ -12,7 +12,7 @@ The data-collection layer handles two different queue types in parallel. Keeping
 
 The \textit{opscore} and \textit{feedscore} metrics provide role-aware scores. They are not perfect truth measurements, but they allow performance indicators to be used as inputs to graph analytics.
 
-The \textit{flexset} graph has a core-periphery structure: there are denser, more strongly connected core regions and many looser, smaller peripheral groups. This follows from the queue mechanics.
+The \textit{flexset} graph has a core-periphery-like structure: there are denser, more strongly connected core regions and many looser, smaller peripheral groups. This follows from the queue mechanics.
 
 The assortativity analysis shows a positive association for \textit{opscore} in social-path mode (0.235): connected players carry more similar performance profiles than would be expected under random connections.
 
@@ -44,7 +44,7 @@ Temporal consistency and community cohesion analyses fell out of the current sco
 
 \section{Closing Remarks}
 
-The end result of the project can be stated simply: it is possible to build a system from competitive game data that holds up from a software engineering perspective and can also pose research questions. PremadeGraph is a data-collection, data-modelling, graph-analytic, and simulation chain.
+The end result of the project can be stated simply: it is possible to build a system from competitive game data that holds up from a software engineering perspective and can also pose research questions. The PremadeGraph data-collection, data-modelling, graph-analytic, and simulation chain demonstrates this.
 
 The connectivity between steps was not planned in advance. Raw match data became normalised player profiles, profiles became a relationship graph, the graph became clusters and analytic metrics, and clusters became simulation priors --- each step taking the previous step's output as its input.
 

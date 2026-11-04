@@ -1,6 +1,6 @@
 \chapter{The opscore Performance Metric}
 
-\noindent The foundation of graph-analytic analysis is a meaningful, role-aware performance score. The raw data from League of Legends matches (kills, deaths, gold, damage) carries insufficient semantics on its own: two deaths on a support are not the same as two deaths on an ADC. The data collection and PUUID normalisation mechanisms are described in chapter 4 of the extended version; this chapter focuses on the internal model and formulas of the opscore metric.
+\noindent The foundation of graph analytics is a meaningful, role-aware performance score. The raw data from League of Legends matches (kills, deaths, gold, damage) carries insufficient semantics on its own: a support's second death does not have the same significance as an ADC's second death. The data collection and PUUID normalisation mechanisms are described in chapter 4 of the extended version; this chapter focuses on the internal model and formulas of the opscore metric.
 
 \section{Metric Design}
 
@@ -22,14 +22,16 @@ The current \textit{opscore} model operates on the following design principles: 
 
 \section{The Five Artifacts and Their Subcategories}
 
+Figure~\ref{fig:opscore-artifacts} shows the complete structure of the five artifacts and ten subcategories, including the role-aware weighting.
+
 \begin{sidewaysfigure}[p]
 \centering
-\includegraphics[width=0.95\textheight,height=0.90\textwidth,keepaspectratio]{opscore-artifacts.pdf}
+\includegraphics[width=0.95\textheight,height=0.90\textwidth,keepaspectratio]{opscore-artifacts-en.pdf}
 \caption{The opscore artifact structure: five main dimensions, ten subcategories, role-aware weights}
 \label{fig:opscore-artifacts}
 \end{sidewaysfigure}
 
-The model is built from five artifacts. \textbf{Combat Impact} measures kill conversion and damage pressure; \textbf{Risk Discipline} captures the cost of deaths and survival quality. \textbf{Resource Tempo} tracks economic efficiency and early-game rhythm. The remaining two dimensions cover team-level impact: \textbf{Map and Objective Control} for map and objective control, and \textbf{Team Enablement} for value created for teammates.
+The model is built from five artifacts. \textbf{Combat Impact} measures combat conversion and damage pressure; \textbf{Risk Discipline} captures the cost of deaths and survival quality. \textbf{Resource Tempo} tracks economic efficiency and early-game rhythm. The remaining two dimensions cover team-level impact: \textbf{Map and Objective Control} for map and objective control, and \textbf{Team Enablement} for value created for teammates.
 
 \section{Mathematical Formalism}
 
@@ -79,6 +81,8 @@ A_i^{\text{base}} = 2\,(w_1 \cdot S_1 + w_2 \cdot S_2)
 A_i = \min\!\left(4{,}5,\; A_i^{\text{base}} + \alpha_i \cdot \gamma \cdot \max\!\left(0,\; A_i^{\text{base}} - 2\right)\right)
 \end{equation}
 
+Table~\ref{tab:overflow_params} contains the boost parameters ($\alpha_i$) for the five artifacts.
+
 \begin{table}[H]
 \centering
 \caption{Artifact-specific boost parameters ($\alpha_i$)}
@@ -107,7 +111,7 @@ A_i = \min\!\left(4{,}5,\; A_i^{\text{base}} + \alpha_i \cdot \gamma \cdot \max\
 The model is best illustrated through two characteristic edge cases.
 
 \paragraph{Elite carry match.}
-During development, a standout Quinn Top match was examined (exceptional kill count and high assists), where the earlier model had come under pressure from hard artifact ceilings and caps, resulting in an average, unremarkable score. In the current model, the logarithmic boost of the \textit{Combat Impact} and \textit{Map and Objective Control} artifacts allows these values to rise above the nominal 2-point ceiling; the aggregate \textit{opscore} runs up to the 10-point cap. The cost of deaths does not disappear: the \textit{Risk Discipline} artifact penalises them moderately, but the overall performance of an elite carry remains recognised.
+During development, a standout Quinn Top match was examined (exceptional kill count and high assists), where the earlier model could be constrained by hard artifact ceilings and caps, resulting in an average, unremarkable score. In the current model, the logarithmic boost of the \textit{Combat Impact} and \textit{Map and Objective Control} artifacts allows these values to rise above the nominal 2-point ceiling; the aggregate \textit{opscore} reached the 10-point cap. The cost of deaths does not disappear: the \textit{Risk Discipline} artifact penalises them moderately, but the overall performance of an elite carry remains recognised.
 
 \paragraph{Split-pusher and structure carry.}
 A player on \textit{Yorick} who deliberately avoids teamfights and wins by destroying towers typically has a low \textit{Team Enablement} score and an unremarkable KDA, since the strategy is built around split-pushing. The dynamic dominance re-weighting of the \textit{Map and Objective Control} artifact is calibrated precisely for this case: when Objective Conversion dramatically exceeds the Team Enablement value, the artifact shifts weight toward objective acquisition, and the low team-enablement number does not unduly distort the final result when the win condition has genuinely been delivered. Detailed edge cases and sample-size limitations can be found in the extended version \cite{premadegraph-full}.

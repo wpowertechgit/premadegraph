@@ -41,9 +41,12 @@ c(u,v)=\left\lceil \frac{1000}{w(u,v)} \right\rceil
 \end{equation}
 where $w(u,v)$ is the connection strength corresponding to the active path mode.
 
+Table~\ref{tab:pathfinder-algorithms} compares the characteristics of the four search algorithms in the Pathfinder Lab.
+
 \begin{table}[H]
 \centering
 \caption{Algorithm comparison in the Pathfinder Lab}
+\label{tab:pathfinder-algorithms}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{2.8cm}|>{\raggedright\arraybackslash}p{2.8cm}|X|}
 \hline
 \textbf{Algorithm} & \textbf{Natural fit} & \textbf{Notes in this project} \\
@@ -68,17 +71,19 @@ for every landmark $L$. Landmark distances are pre-computed during \textit{Graph
 
 The Pathfinder Lab is an interactive testing environment for the four search algorithms: results can be replayed step by step, and the two path modes (social-path, battle-path) can be compared directly.
 
+Figure~\ref{fig:pathfinder-replay} shows the Pathfinder Lab replay panel, including the path summary, step controls, and visited-node statistics.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{pathfinder-replay-panel.png}
 \caption{The Pathfinder Lab replay panel: the path summary, step controls, and visited-node statistics}
+\label{fig:pathfinder-replay}
 \end{figure}
-
-The following table shows the same player pair under two different search modes:
 
 \begin{table}[H]
 \centering
 \caption{BFS vs. weighted search: same player pair, different notions of proximity}
+\label{tab:bfs-weighted-compare}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{2cm}|X|}
 \hline
 \textbf{Algorithm} & \textbf{Metric} & \textbf{Result} & \textbf{Interpretation} \\
@@ -93,9 +98,12 @@ Bidirectional & Minimum hops & 3 & Matches BFS \\
 
 The 3-hop path found by BFS structurally exists but passes through weak or single-match connections. Dijkstra in weighted mode avoids these and finds an 8-hop path on which every edge is a recurring ally relationship.
 
+Table~\ref{tab:algo-comparison} compares the performance characteristics and main strengths of the four algorithms.
+
 \begin{table}[H]
 \centering
 \caption{Comparison of the four algorithms along the key dimensions}
+\label{tab:algo-comparison}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
 \hline
 \textbf{Algorithm} & \textbf{Optimal?} & \textbf{Memory} & \textbf{Key strength in this project} \\
@@ -112,9 +120,12 @@ A* & Yes (admissible heuristic) & $O(n)$ & Goal-directed traversal, exact result
 
 The \textit{bird's-eye sphere} provides a visual overview of the entire network. The Rust layer pre-exports all major artifacts, and the frontend only renders.
 
+Table~\ref{tab:birdseye-artifacts} presents the artifacts of the bird's-eye export and their roles.
+
 \begin{table}[H]
 \centering
 \caption{Main artifacts in the bird's-eye export}
+\label{tab:birdseye-artifacts}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{4.2cm}|X|}
 \hline
 \textbf{File} & \textbf{Role} \\
@@ -129,28 +140,40 @@ The \textit{bird's-eye sphere} provides a visual overview of the entire network.
 \end{tabularx}
 \end{table}
 
+Figure~\ref{fig:graph-artifact-dataflow} shows the complete data flow of the graph artifact package, from the Rust exporter to the Three.js renderer.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth,keepaspectratio]{graph artifact package dataflow.pdf}
 \caption{Data flow of the graph artifact package: the Rust exporter writes binary and JSON layers, Express serves them, and the frontend consumes them in a WebGL renderer}
+\label{fig:graph-artifact-dataflow}
 \end{figure}
+
+Figure~\ref{fig:graph-artifact-components} shows the structure of the binary and JSON files in the artifact package.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{graph artifact components.pdf}
+\includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{graph artifact components-en.pdf}
 \caption{Structure of the binary and JSON artifact files in the graph-export pipeline}
+\label{fig:graph-artifact-components}
 \end{figure}
+
+Figure~\ref{fig:birds-eye} shows the 3D bird's-eye view of the entire \textit{flexset} network, rendered from pre-generated Rust artifacts.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{birds-eye-current-state.png}
 \caption{3D bird's-eye view of the full network, built on pre-generated Rust artifacts}
+\label{fig:birds-eye}
 \end{figure}
+
+Figure~\ref{fig:flexset-clusters} shows the denser cluster regions of the \textit{flexset} graph and their spatial separation in the global view.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.72\textheight,keepaspectratio]{flexset_associative_graph_clusters.png}
 \caption{Denser cluster regions and spatial separation in the global view}
+\label{fig:flexset-clusters}
 \end{figure}
 
 \section{Assortativity}
@@ -173,9 +196,12 @@ w(u,v) = \begin{cases}
 
 \subsection{Assortativity Results: flexset}
 
+Table~\ref{tab:assort-flexset} contains the \textit{flexset} assortativity results for the two graph modes.
+
 \begin{table}[H]
 \centering
 \caption{Assortativity: \textit{flexset}}
+\label{tab:assort-flexset}
 \begin{tabular}{|l|l|r|r|}
 \hline
 \textbf{Graph mode} & \textbf{Metric} & \textbf{Correlation} & \textbf{Sample size} \\
@@ -188,17 +214,23 @@ w(u,v) = \begin{cases}
 \end{tabular}
 \end{table}
 
+Figure~\ref{fig:flexset-assortavity} visualises the \textit{flexset} social-path assortativity analysis for \textit{opscore} and \textit{feedscore}.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{f-assortavity-social-path-opfeedscore.png}
 \caption{\textit{flexset} social-path assortativity by \textit{opscore} and \textit{feedscore}. 15\,421 eligible nodes and 61\,938 analysed edges; global coefficient 0.235 for \textit{opscore} and 0.182 for \textit{feedscore}.}
+\label{fig:flexset-assortavity}
 \end{figure}
 
 \subsection{Assortativity Results: soloq}
 
+Table~\ref{tab:assort-soloq} contains the \textit{soloq} assortativity results, comparing the two graph modes.
+
 \begin{table}[H]
 \centering
 \caption{Assortativity: \textit{soloq}}
+\label{tab:assort-soloq}
 \begin{tabular}{|l|l|r|r|}
 \hline
 \textbf{Graph mode} & \textbf{Metric} & \textbf{Correlation} & \textbf{Sample size} \\
@@ -211,10 +243,13 @@ w(u,v) = \begin{cases}
 \end{tabular}
 \end{table}
 
+Figure~\ref{fig:soloq-assortavity} shows the \textit{soloq} social-path assortativity results.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.74\textheight,keepaspectratio]{sq-assortavity-social-path-opfeedscore.png}
 \caption{\textit{soloq} social-path assortativity by \textit{opscore} and \textit{feedscore}. 6\,768 eligible nodes and 37\,976 analysed edges; global coefficient 0.175 for \textit{opscore} and 0.101 for \textit{feedscore}.}
+\label{fig:soloq-assortavity}
 \end{figure}
 
 \subsection{Interpretation}
@@ -244,14 +279,20 @@ The Rust \textit{rayon} library enables automatic work-stealing parallelism. The
 
 \subsection{Result}
 
+Figure~\ref{fig:brandes-result} shows the Brandes algorithm result screen, including the comparison of parallel and serial runtimes.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.98\textwidth,height=0.68\textheight,keepaspectratio]{brandes-result.png}
 \caption{Brandes betweenness centrality result screen. 15\,421 runtime nodes; 1\,716 projected nodes and 2\,766 analysed edges. Parallel run: 6.38 ms; serial baseline: 60.85 ms; speedup: 9.54×; 16 Rayon threads; serial--parallel delta: 0.000000.}
+\label{fig:brandes-result}
 \end{figure}
+
+Figure~\ref{fig:brandes-brokers} shows the players with prominent brokerage roles according to centrality, highlighted in yellow in the graph.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{graph-brandes-brokerinyellow.png}
 \caption{Broker players identified by betweenness centrality, highlighted in yellow in the graph.}
+\label{fig:brandes-brokers}
 \end{figure}

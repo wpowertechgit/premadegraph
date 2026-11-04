@@ -1,16 +1,19 @@
 \chapter{Comparing the Two Datasets: flexset and soloq}
 
-The analysis is built on datasets collected from two different queue types: the different matchmaking mechanics of Flex Queue and Solo/Duo Queue produce inherently different graph structures. Running the same pipeline on both datasets means that any observed difference follows directly from the queue mechanics --- not from differences in model parameters.
+The analysis is built on datasets collected from two different queue types: the different matchmaking mechanics of Flex Queue and Solo/Duo Queue produce inherently different graph structures. When the same pipeline is run on both datasets, the difference is one of queue mechanics rather than model parameters.
 
 \section{Structural Differences Between the Two Datasets}
 
-Flex Queue (queue ID 440) allows team-up: players can form premade teams of 2 to 5. This means that some player pairs appearing repeatedly on the ally side represent \emph{intentional repetition}. The ally/enemy ratio (73.17\% ally in \textit{flexset}) is partly a consequence of this mechanism.
+Flex Queue (queue ID 440) allows team formation: players can form premade teams of 2 to 5. This means that some player pairs appearing repeatedly on the ally side represent \emph{intentional repetition}. The ally/enemy ratio (73.17\% ally in \textit{flexset}) is partly a consequence of this natural mechanism, since collecting premade connections was the goal in both cases.
 
 Solo/Duo Queue (queue ID 420) allows premades of at most two players. The ally/enemy ratio (65.24\% ally in \textit{soloq}) is lower, consistent with more randomly assigned matches producing fewer dominant ally connections. A third or even fourth player may appear in certain clusters, since a seeded player does not necessarily play exclusively with one partner throughout a climb.
+
+Table~\ref{tab:dataset-sizes} contains the basic size metrics of the two datasets.
 
 \begin{table}[H]
 \centering
 \caption{Basic sizes of the two datasets}
+\label{tab:dataset-sizes}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|r|r|}
 \hline
 \textbf{Metric} & \textbf{flexset} & \textbf{soloq} \\
@@ -31,13 +34,16 @@ Largest cluster size & 20 & 20 \\
 \end{tabularx}
 \end{table}
 
-The average cluster size in \textit{flexset} (3.750) is more than twice that of \textit{soloq} (1.768): the former is dominated by groups of 3--4, the latter by duos of 1--2. The queue mechanics directly explain this: Flex Queue allows premades of up to 5, while Solo/Duo Queue allows a maximum of 2.
+The average cluster size in \textit{flexset} (3.750) is more than twice that of \textit{soloq} (1.768): the former is dominated by groups of 3--4, the latter by groups of 1--2. The queue mechanics directly explain this: Flex Queue allows premades of up to 5, while Solo/Duo Queue mainly involves pairs.
 
 \section{Summary}
+
+Table~\ref{tab:dataset-summary} summarises the comparison of the two datasets along the main dimensions.
 
 \begin{table}[H]
 \centering
 \caption{Summary comparison of the two datasets}
+\label{tab:dataset-summary}
 \begin{tabularx}{\textwidth}{|>{\raggedright\arraybackslash}p{5cm}|X|X|}
 \hline
 \textbf{Dimension} & \textbf{flexset} & \textbf{soloq} \\
@@ -48,9 +54,9 @@ Ally ratio & 73.17\% & 65.24\% \\
 Average cluster size & 3.750 & 1.768 \\
 Triangles/node\textsuperscript{†} & 4.95 & 1.03 \\
 Core-periphery structure\textsuperscript{‡} & Bridge-rich associative core with many peripheral ally islands & Smaller, more randomly distributed local groups \\
-Social-path opscore ass. & 0.2346 & 0.1750 \\
-Battle-path opscore ass. & 0.1461 & 0.1625 \\
-Feedscore battle-path ass. & $-0.0108$ & $-0.0366$ \\
+Social-path opscore assortativity & 0.2346 & 0.1750 \\
+Battle-path opscore assortativity & 0.1461 & 0.1625 \\
+Feedscore battle-path assortativity & $-0.0108$ & $-0.0366$ \\
 Research role & Associative graph and performance relationship & Performance baseline, control \\
 \hline
 \end{tabularx}
@@ -59,4 +65,4 @@ Research role & Associative graph and performance relationship & Performance bas
 \noindent\small{†~\textit{Triangle structures} (triads): if player A knows B and C, and B also knows C, this forms a closed triangle in the network. More such closed triangles indicate stronger group cohesion. \quad ‡~\textit{Core-periphery}: the inner core of the graph is densely connected, while peripheral nodes have only a few connections.}\normalsize
 
 \medskip
-\textit{flexset} is the more natural setting for the associative player graph and recurring ally connections; \textit{soloq} serves as the performance baseline and control dataset. The \textit{battle-path opscore} value is higher in \textit{soloq} (0.1625) than in \textit{flexset} (0.1461). In \textit{social-path} mode \textit{flexset} is stronger (0.2346 vs. 0.1750), reflecting the premade-ally mechanism.
+\textit{flexset} is the more natural setting for the associative player graph and recurring ally connections; \textit{soloq} serves as the performance baseline and control dataset. The \textit{battle-path opscore} value is higher in \textit{soloq} (0.1625) than in \textit{flexset} (0.1461). In \textit{social-path} mode \textit{flexset} is stronger (0.2346 vs. 0.1750), reflecting the premade-ally mechanism. Further discussion can be found in chapter 6 of the extended thesis \cite{premadegraph-full}.
